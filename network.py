@@ -187,10 +187,8 @@ class UNet(nn.Module):
         # Create both as tensors so that they are getting stored
         # together with the model. This way we can load a trained
         # model and mean and std are correctly set without further ado.
-        self.mean = torch.Tensor(mean)
-        self.std = torch.Tensor(std)
-        self.register_buffer("mean", self.mean)
-        self.register_buffer("std", self.std)
+        self.mean = torch.tensor(np.float64(mean))
+        self.std = torch.tensor(np.float64(std))
 
         self.down_convs = []
         self.up_convs = []
@@ -261,16 +259,16 @@ class UNet(nn.Module):
         x = self.conv_final(x)
         return x
 
-    def training_predict(self, train_data, train_data_clean, data_counter, size, bs):
+    def training_predict(self, train_data, train_data_clean, data_counter, size, box_size, bs):
         """Performs a forward step during training.
-        
+
         Arguments:
             train_data {np.array} -- the normalized raw training data
             train_data_clean {np.array} -- the normalized ground-truth targets, if available
             data_counter {int} -- the counter when to shuffle the training data
             size {int} -- the patch size
             bs {int} -- the batch size
-        
+
         Returns:
             np.array, np.array, np.array, int -- outputs, labels, masks, data_counter
         """
@@ -282,7 +280,7 @@ class UNet(nn.Module):
         # Assemble mini batch
         for j in range(bs):
             im, l, m, data_counter = util.random_crop_fri(
-                train_data, size, size, counter=data_counter, dataClean=train_data_clean)
+                train_data, size, size, box_size, counter=data_counter, dataClean=train_data_clean)
             inputs[j, :, :, :] = util.img_to_tensor(im)
             labels[j, :, :] = util.img_to_tensor(l)
             masks[j, :, :] = util.img_to_tensor(m)
@@ -300,12 +298,12 @@ class UNet(nn.Module):
         specified parameters. The network expects the image to be normalized
         with its mean and std. Likewise, it denormalizes the output images
         using the same mean and std.
-        
+
         Arguments:
             im {np.array} -- the image to perform prediction on
             mean {int} -- the mean of the data the network was trained with
             std {int} -- the std of the data the network was trained with
-        
+
         Returns:
             np.array -- the denoised and denormalized image
         """

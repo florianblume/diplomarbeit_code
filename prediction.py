@@ -1,4 +1,4 @@
-import argparse   
+import argparse
 import torch
 import numpy as np
 
@@ -6,13 +6,15 @@ import network
 import dataloader
 import util
 
+
 def main(config):
     #from scipy import ndimage, misc
 
     results = []
 
     loader = dataloader.DataLoader(config['DATA_BASE_PATH'])
-    data_test, data_gt = loader.load_test_data(config['DATA_PRED_RAW_PATH'], config['DATA_PRED_GT_PATH'])
+    data_test, data_gt = loader.load_test_data(
+        config['DATA_PRED_RAW_PATH'], config['DATA_PRED_GT_PATH'])
 
     # Load saved network
     network_path = config['SAVED_NETWORK_PATH']
@@ -20,7 +22,7 @@ def main(config):
     net = torch.load(network_path)
 
     #device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    #device comes from network if not specified otherwise in its constructor
+    # device comes from network if not specified otherwise in its constructor
     #estimate = torch.tensor(25.0/net.std).to(net.device)
 
     print('Predicting on {} images.'.format(data_test.shape[0]))
@@ -45,7 +47,8 @@ def main(config):
             ovTop = 0
             while (ymin < im.shape[0]):
                 a = net.predict(im[ymin:ymax, xmin:xmax])
-                means[ymin:ymax, xmin:xmax][ovTop:, ovLeft:] = a[ovTop:, ovLeft:]
+                means[ymin:ymax, xmin:xmax][ovTop:,
+                                            ovLeft:] = a[ovTop:, ovLeft:]
                 ymin = ymin-overlap+ps
                 ymax = ymin+ps
                 ovTop = overlap//2
@@ -79,6 +82,7 @@ def main(config):
         """
 
     print("Avg Prior:", np.mean(np.array(results)))
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

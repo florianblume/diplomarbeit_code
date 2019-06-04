@@ -9,10 +9,12 @@ import network
 import dataloader
 import util
 
+
 def main(config):
     # data_c=np.concatenate((data.copy(),dataTest.copy()))
     loader = dataloader.DataLoader(config['DATA_BASE_PATH'])
-    data_raw, data_gt = loader.load_training_data(config['DATA_TRAIN_RAW_PATH'], config['DATA_TRAIN_GT_PATH'])
+    data_raw, data_gt = loader.load_training_data(
+        config['DATA_TRAIN_RAW_PATH'], config['DATA_TRAIN_GT_PATH'])
     data_raw, data_gt = util.joint_shuffle(data_raw, data_gt)
 
     data_train = data_raw.copy()
@@ -22,17 +24,19 @@ def main(config):
     data_train_gt = data_gt.copy()
     data_val_gt = data_gt.copy()
 
+    print(data_train.shape, data_train_gt.shape)
+
     #device = torch.device("cpu")
     # Device gets automatically created in constructor
     # Mean and std will be persisted by the network when it is saved
-    net = network.UNet(1, loader.mean, loader.std, depth=config['DEPTH'])
+    net = network.UNet(config['NUM_CLASSES'], loader.mean(), loader.std(), depth=config['DEPTH'])
 
     net.train(True)
     bs = config['BATCH_SIZE']
     size = config['TRAIN_PATCH_SIZE']
     num_pix = size * size / 32.0
     dataCounter = None
-    #box_size = np.round(np.sqrt(size * size / num_pix)).astype(np.int)
+    box_size = np.round(np.sqrt(size * size / num_pix)).astype(np.int)
 
     vbatch = config['VIRTUAL_BATCH_SIZE']  # Virtual batch size
     optimizer = optim.Adam(net.parameters(), lr=0.0001)
@@ -49,12 +53,13 @@ def main(config):
     # If tensorboard logs are requested create the writer
     if write_tensorboard_data:
         from torch.utils.tensorboard import SummaryWriter
-        writer = SummaryWriter(config['HISTORY_PATH'])
+        writer = SummaryWriter(os.path.join(config['HISTORY_PATH'], 'tensorboard'))
 
     trainHist = []
     valHist = []
 
-    for step in range(config['EPOCHS']):  # loop over the dataset multiple times
+    # loop over the dataset multiple times
+    for step in range(config['EPOCHS']):
         losses = []
         optimizer.zero_grad()
         stepCounter += 1
@@ -69,7 +74,7 @@ def main(config):
             takes place
             """
             outputs, labels, masks, dataCounter = net.training_predict(
-                data_train, data_train_gt, dataCounter, size, bs)
+                data_train, data_train_gt, dataCounter, size, box_size, bs)
 
             train_loss = net.loss_function(outputs, labels, masks)
             train_loss.backward()
@@ -80,11 +85,11 @@ def main(config):
 
         if stepCounter % stepsPerEpoch == stepsPerEpoch-1:
             running_loss = (np.mean(losses))
-            print("Step:", stepCounter, "| Avg. epoch loss:", running_loss)
+            print("Step:", stepCounter + 1, "| Avg. epoch loss:", running_loss)
             losses = np.array(losses)
             print("avg. loss: "+str(np.mean(losses))+"+-" +
-                str(np.std(losses)/np.sqrt(losses.size)))
-            
+                  str(np.std(losses)/np.sqrt(losses.size)))
+
             # Average loss for the current iteration
             avg_train_loss = np.mean(losses)
             trainHist.append(avg_train_loss)
@@ -97,13 +102,14 @@ def main(config):
             losses = []
             for _ in range(valSize):
                 outputs, labels, masks, valCounter = net.training_predict(
-                    data_val, data_val_gt, valCounter, size, bs)
+                    data_val, data_val_gt, valCounter, size, box_size, bs)
                 val_loss = net.loss_function(outputs, labels, masks)
                 losses.append(val_loss.item())
             net.train(True)
             avg_val_loss = np.mean(losses)
             if len(valHist) == 0 or avg_val_loss < np.min(valHist):
-                torch.save(net, os.path.join(config['BEST_NET_PATH'], 'best.net'))
+                torch.save(net, os.path.join(
+                    config['BEST_NET_PATH'], 'best.net'))
             valHist.append(avg_val_loss)
 
             epoch = (stepCounter / stepsPerEpoch)
@@ -116,14 +122,18 @@ def main(config):
             if write_tensorboard_data:
                 writer.add_scalar('train_loss', avg_train_loss, step)
                 writer.add_scalar('val_loss', avg_val_loss, step)
-                # Produce example image
-                samples = (outputs).permute(1, 0, 2, 3)
-                means = samples[0, ...]
-                # Get data from GPU
-                means = means.cpu().detach().numpy()
-                writer.add_image(means, step)
+                
+                net.train(False)
+                prediction = net.predict(data_raw[0])
+                net.train(True)
+                # Tensorboard expects the channel first but we 
+                # have a grey-scale image
+                prediction = np.expand_dims(prediction, axis=0)
+                writer.add_image('prediction', prediction, step)
+
                 for name, param in net.named_parameters():
-                    writer.add_histogram(name, param.clone().cpu().data.numpy(), step)
+                    writer.add_histogram(
+                        name, param.clone().cpu().data.numpy(), step)
 
             if stepCounter / stepsPerEpoch > 200:
                 break
@@ -132,6 +142,7 @@ def main(config):
         writer.add_graph(net)
         writer.close()
     print('Finished Training')
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

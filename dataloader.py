@@ -60,15 +60,15 @@ class DataLoader():
         data_raw_path = os.path.join(self.data_base_path, data_raw_path)
         data_raw = np.load(data_raw_path)
         print("Loaded " +
-              str(data_raw.shape[0] + " images from " + data_raw_path))
+              str(data_raw.shape[0]) + " images from " + data_raw_path)
 
         data_gt_path = os.path.join(self.data_base_path, data_gt_path)
         data_gt = np.load(data_gt_path)
         print("Loaded " +
-              str(data_gt.shape[0] + " images from " + data_gt_path))
+              str(data_gt.shape[0]) + " images from " + data_gt_path)
 
         img_factor = int(data_raw.shape[0]/data_gt.shape[0])
-        print("Raw - GT ratio: " + img_factor)
+        print("Raw - GT ratio: " + str(img_factor))
 
         # Normalize
         self._mean = np.mean(data_raw)

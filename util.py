@@ -56,7 +56,7 @@ def joint_shuffle(inA, inB):
     return dataTmp[..., 0], dataTmp[..., 1]
 
 
-def random_crop_fri(data, width, height, dataClean=None, counter=None):
+def random_crop_fri(data, width, height, box_size, dataClean=None, counter=None):
 
     if counter is None or counter >= data.shape[0]:
         counter = 0
@@ -72,7 +72,7 @@ def random_crop_fri(data, width, height, dataClean=None, counter=None):
         imgClean = dataClean[index]
     else:
         imgClean = None
-    imgOut, imgOutC, mask = random_crop(img, width, height, imgClean=imgClean)
+    imgOut, imgOutC, mask = random_crop(img, width, height, box_size, imgClean=imgClean)
     return imgOut, imgOutC, mask, counter
 
 
