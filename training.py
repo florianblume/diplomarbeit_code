@@ -1,4 +1,5 @@
 import torch
+import torchvision
 import torch.distributions as tdist
 import torch.optim as optim
 import numpy as np
@@ -13,23 +14,30 @@ import util
 def main(config):
     # data_c=np.concatenate((data.copy(),dataTest.copy()))
     loader = dataloader.DataLoader(config['DATA_BASE_PATH'])
+    # In case the ground truth data path was not set we pass '' to
+    # the loader which returns None to us
     data_raw, data_gt = loader.load_training_data(
-        config['DATA_TRAIN_RAW_PATH'], config['DATA_TRAIN_GT_PATH'])
-    data_raw, data_gt = util.joint_shuffle(data_raw, data_gt)
+        config['DATA_TRAIN_RAW_PATH'], config.get('DATA_TRAIN_GT_PATH', ''))
+    if data_gt is not None:
+        data_raw, data_gt = util.joint_shuffle(data_raw, data_gt)
+        # If loaded, the network is trained using clean targets, otherwise it performs N2V
+        data_train_gt = data_gt.copy()
+        data_val_gt = data_gt.copy()
+    else:
+        data_train_gt = None
+        data_val_gt = None
 
     data_train = data_raw.copy()
     data_val = data_raw.copy()
-
-    # If loaded, the network is trained using clean targets, otherwise it performs N2V
-    data_train_gt = data_gt.copy()
-    data_val_gt = data_gt.copy()
-
-    print(data_train.shape, data_train_gt.shape)
 
     #device = torch.device("cpu")
     # Device gets automatically created in constructor
     # Mean and std will be persisted by the network when it is saved
     net = network.UNet(config['NUM_CLASSES'], loader.mean(), loader.std(), depth=config['DEPTH'])
+
+    # Needed for prediction every X training runs
+    ps = config['PRED_PATCH_SIZE']
+    overlap = config['OVERLAP']
 
     net.train(True)
     bs = config['BATCH_SIZE']
@@ -65,7 +73,7 @@ def main(config):
         stepCounter += 1
 
         # Iterate over virtual batch
-        for a in range(vbatch):
+        for _ in range(vbatch):
 
             """
             training_predict performs cutting out appropriate regions and replaces
@@ -124,12 +132,18 @@ def main(config):
                 writer.add_scalar('val_loss', avg_val_loss, step)
                 
                 net.train(False)
-                prediction = net.predict(data_raw[0])
+                # Predict for one example image
+                # This is a normalized
+                im = data_raw[np.random.randint(0, data_raw.shape[0])]
+                prediction = net.predict(im, ps, overlap)
                 net.train(True)
                 # Tensorboard expects the channel first but we 
                 # have a grey-scale image
                 prediction = np.expand_dims(prediction, axis=0)
-                writer.add_image('prediction', prediction, step)
+                im = np.expand_dims(im, axis=0)
+                im = util.denormalize(im, loader.mean(), loader.std())
+                grid = np.concatenate([prediction, im], axis=0)
+                writer.add_image('prediction - gt', grid, step)
 
                 for name, param in net.named_parameters():
                     writer.add_histogram(

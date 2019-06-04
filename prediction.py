@@ -6,7 +6,6 @@ import network
 import dataloader
 import util
 
-
 def main(config):
     #from scipy import ndimage, misc
 
@@ -29,34 +28,13 @@ def main(config):
     for index in range(data_test.shape[0]):
 
         im = data_test[index]
+        # TODO data_gt[0]? Not [index]?
         l = data_gt[0]
         print("Predicting on image {}".format(index))
         print('Raw image shape {}, ground-truth image shape {}.'.format(im.shape, l.shape))
-        means = np.zeros(im.shape)
-        #mseEst = np.zeros(im.shape)
-
-        # We have to use tiling because of memory constraints on the GPU
         ps = config['PRED_PATCH_SIZE']
         overlap = config['OVERLAP']
-        xmin = 0
-        ymin = 0
-        xmax = ps
-        ymax = ps
-        ovLeft = 0
-        while (xmin < im.shape[1]):
-            ovTop = 0
-            while (ymin < im.shape[0]):
-                a = net.predict(im[ymin:ymax, xmin:xmax])
-                means[ymin:ymax, xmin:xmax][ovTop:,
-                                            ovLeft:] = a[ovTop:, ovLeft:]
-                ymin = ymin-overlap+ps
-                ymax = ymin+ps
-                ovTop = overlap//2
-            ymin = 0
-            ymax = ps
-            xmin = xmin-overlap+ps
-            xmax = xmin+ps
-            ovLeft = overlap//2
+        means = net.predict(im, ps, overlap)
 
         im = util.denormalize(im, net.mean, net.std)
         vmi = np.percentile(l, 0.05)
@@ -67,7 +45,7 @@ def main(config):
         results.append(psnrPrior)
 
         print("PSNR raw", util.PSNR(l, im, 255))
-        print("PSNR prior", psnrPrior)  # Without info from masked pixel
+        print("PSNR denoised", psnrPrior)  # Without info from masked pixel
         print("index", index)
 
         """
@@ -76,7 +54,6 @@ def main(config):
         plt.imshow(im[200:328, 200:328], cmap='gray', vmin=0, vmax=255)  # GT
         plt.show()
 
-        # MSE estimate using the masked pixel
         plt.imshow(means[200:328, 200:328], cmap='gray')
         plt.show()
         """

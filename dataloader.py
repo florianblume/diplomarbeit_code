@@ -62,13 +62,15 @@ class DataLoader():
         print("Loaded " +
               str(data_raw.shape[0]) + " images from " + data_raw_path)
 
-        data_gt_path = os.path.join(self.data_base_path, data_gt_path)
-        data_gt = np.load(data_gt_path)
-        print("Loaded " +
-              str(data_gt.shape[0]) + " images from " + data_gt_path)
-
-        img_factor = int(data_raw.shape[0]/data_gt.shape[0])
-        print("Raw - GT ratio: " + str(img_factor))
+        if data_gt_path != "":
+            data_gt_path = os.path.join(self.data_base_path, data_gt_path)
+            data_gt = np.load(data_gt_path)
+            print("Loaded " +
+                str(data_gt.shape[0]) + " images from " + data_gt_path)
+            img_factor = int(data_raw.shape[0]/data_gt.shape[0])
+            print("Raw - GT ratio: " + str(img_factor))
+        else:
+            data_gt = None
 
         # Normalize
         self._mean = np.mean(data_raw)
@@ -77,11 +79,13 @@ class DataLoader():
 
         print("Normalizing data...")
         data_raw = util.normalize(data_raw, self._mean, self._std)
-        data_gt = util.normalize(data_gt, self._mean, self._std)
-        # We need to repeat the gt data because we usually have one
-        # GT image for multiple raw images
-        print("Repeating ground-truth data {} times...".format(img_factor))
-        data_gt = np.repeat(data_gt, img_factor, axis=0)
+
+        if data_gt is not None:
+            data_gt = util.normalize(data_gt, self._mean, self._std)
+            # We need to repeat the gt data because we usually have one
+            # GT image for multiple raw images
+            print("Repeating ground-truth data {} times...".format(img_factor))
+            data_gt = np.repeat(data_gt, img_factor, axis=0)
 
         return data_raw, data_gt
 
@@ -104,8 +108,15 @@ class DataLoader():
         data_raw = np.load(os.path.join(self.data_base_path, data_raw_path))
         data_gt = np.load(os.path.join(self.data_base_path, data_gt_path))
         print("Normalizing data...")
-        data_raw = util.normalize(data_raw, self._mean, self._std)
-        data_gt = util.normalize(data_gt, self._mean, self._std)
+
+        ###########################################
+        ###########################################
+        # TODO Hardcoded mean and std don't forget!
+        ###########################################
+        ###########################################
+
+        data_raw = util.normalize(data_raw, 11.042194366455078, 23.338916778564453)
+        data_gt = util.normalize(data_gt, 11.042194366455078, 23.338916778564453)
 
         # TODO Unclear what this is for
         #dataTestGT = np.load(path+"../gt/test_gt.npy")
