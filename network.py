@@ -140,6 +140,8 @@ class UNet(nn.Module):
                  merge_mode='add',
                  device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")):
         """
+        NOTE: mean and std will be persisted by the model and restored on loading
+
         Arguments:
             mean: int, the mean of the raw data that this network was trained with. 
             std: int, the std of the raw data that this network was trained with.
@@ -182,8 +184,13 @@ class UNet(nn.Module):
         self.start_filts = start_filts
         self.depth = depth
         self.device = device
-        self.std = std
-        self.mean = mean
+        # Create both as tensors so that they are getting stored
+        # together with the model. This way we can load a trained
+        # model and mean and std are correctly set without further ado.
+        self.mean = torch.Tensor(mean)
+        self.std = torch.Tensor(std)
+        self.register_buffer("mean", self.mean)
+        self.register_buffer("std", self.std)
 
         self.down_convs = []
         self.up_convs = []
@@ -274,11 +281,11 @@ class UNet(nn.Module):
 
         # Assemble mini batch
         for j in range(bs):
-            im, l, m, data_counter = util.randomCropFRI(
+            im, l, m, data_counter = util.random_crop_fri(
                 train_data, size, size, counter=data_counter, dataClean=train_data_clean)
-            inputs[j, :, :, :] = util.imgToTensor(im)
-            labels[j, :, :] = util.imgToTensor(l)
-            masks[j, :, :] = util.imgToTensor(m)
+            inputs[j, :, :, :] = util.img_to_tensor(im)
+            labels[j, :, :] = util.img_to_tensor(l)
+            masks[j, :, :] = util.img_to_tensor(m)
 
         # Move to GPU
         inputs, labels, masks = inputs.to(
@@ -291,7 +298,8 @@ class UNet(nn.Module):
     def predict(self, im):
         """Performs network prediction on a single image using the
         specified parameters. The network expects the image to be normalized
-        with its mean and std.
+        with its mean and std. Likewise, it denormalizes the output images
+        using the same mean and std.
         
         Arguments:
             im {np.array} -- the image to perform prediction on
@@ -299,10 +307,10 @@ class UNet(nn.Module):
             std {int} -- the std of the data the network was trained with
         
         Returns:
-            np.array -- the denoised image
+            np.array -- the denoised and denormalized image
         """
         inputs = torch.zeros(1, 1, im.shape[0], im.shape[1])
-        inputs[0, :, :, :] = util.imgToTensor(im)
+        inputs[0, :, :, :] = util.img_to_tensor(im)
 
         # copy to GPU
         inputs = inputs.to(self.device)
@@ -311,7 +319,8 @@ class UNet(nn.Module):
 
         samples = (output).permute(1, 0, 2, 3)
 
-        means = samples[0, ...]  # Sum up over all samples
+        # In contrast to probabilistic N2V we only have one sample
+        means = samples[0, ...]
 
         # Get data from GPU
         means = means.cpu().detach().numpy()
@@ -320,5 +329,5 @@ class UNet(nn.Module):
         means.shape = (output.shape[2], output.shape[3])
 
         # Denormalize
-        means = util.denormalize(means, self.mean, self.std)
+        means = util.denormalize(means, self.mean.item(), self.std.item())
         return means

@@ -6,16 +6,16 @@ import network
 import dataloader
 import util
 
-def main(network_config, data_config):
+def main(config):
     #from scipy import ndimage, misc
 
     results = []
 
-    loader = dataloader.DataLoader(data_config['DATA_BASE_PATH'])
-    data_test, data_gt = loader.load_test_data(data_config['DATA_RAW_PATH'], data_config['DATA_GT_PATH'])
+    loader = dataloader.DataLoader(config['DATA_BASE_PATH'])
+    data_test, data_gt = loader.load_test_data(config['DATA_PRED_RAW_PATH'], config['DATA_PRED_GT_PATH'])
 
     # Load saved network
-    network_path = data_config['SAVED_NETWORK_PATH']
+    network_path = config['SAVED_NETWORK_PATH']
     print("Loading network from {}".format(network_path))
     net = torch.load(network_path)
 
@@ -28,13 +28,14 @@ def main(network_config, data_config):
 
         im = data_test[index]
         l = data_gt[0]
+        print("Predicting on image {}".format(index))
         print('Raw image shape {}, ground-truth image shape {}.'.format(im.shape, l.shape))
         means = np.zeros(im.shape)
-        mseEst = np.zeros(im.shape)
+        #mseEst = np.zeros(im.shape)
 
         # We have to use tiling because of memory constraints on the GPU
-        ps = data_config['PATCH_SIZE']
-        overlap = data_config['OVERLAP']
+        ps = config['PRED_PATCH_SIZE']
+        overlap = config['OVERLAP']
         xmin = 0
         ymin = 0
         xmax = ps
@@ -81,8 +82,7 @@ def main(network_config, data_config):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--network_config", "-nc", help="Path to the network config.")
-    parser.add_argument("--data_config", "-dc", help="Path to the data config.")
+    parser.add_argument("--config", "-c", help="Path to the config.")
     args = parser.parse_args()
-    #TODO load config
-    main(args.network_config, args.data_config)
+    config = util.load_config(args.config)
+    main(config)

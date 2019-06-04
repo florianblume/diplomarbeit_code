@@ -8,7 +8,7 @@ import torchvision
 #device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-def normalDens(x, m_=0.0, std_=None):
+def normal_dense(x, m_=0.0, std_=None):
     tmp = -((x-m_)**2)
     tmp = tmp / (2.0*std_*std_)
     tmp = torch.exp(tmp)
@@ -16,7 +16,7 @@ def normalDens(x, m_=0.0, std_=None):
     return tmp
 
 
-def imgToTensor(img):
+def img_to_tensor(img):
     img.shape = (img.shape[0], img.shape[1], 1)
     imgOut = torchvision.transforms.functional.to_tensor(img)
     return imgOut
@@ -37,7 +37,7 @@ def get_stratified_coords2D(box_size, shape):
     return coords
 
 
-def jointShuffle(inA, inB):
+def joint_shuffle(inA, inB):
     """Shuffles both numpy arrays consistently.
     This is useful to shuffle raw and ground-truth
     data together. Both arrays need to have the same
@@ -56,12 +56,12 @@ def jointShuffle(inA, inB):
     return dataTmp[..., 0], dataTmp[..., 1]
 
 
-def randomCropFRI(data, width, height, dataClean=None, counter=None):
+def random_crop_fri(data, width, height, dataClean=None, counter=None):
 
     if counter is None or counter >= data.shape[0]:
         counter = 0
         if dataClean is not None:
-            data, dataClean = jointShuffle(data, dataClean)
+            data, dataClean = joint_shuffle(data, dataClean)
         else:
             np.random.shuffle(data)
     index = counter
@@ -72,11 +72,11 @@ def randomCropFRI(data, width, height, dataClean=None, counter=None):
         imgClean = dataClean[index]
     else:
         imgClean = None
-    imgOut, imgOutC, mask = randomCrop(img, width, height, imgClean=imgClean)
+    imgOut, imgOutC, mask = random_crop(img, width, height, imgClean=imgClean)
     return imgOut, imgOutC, mask, counter
 
 
-def randomCrop(img, width, height, imgClean=None, hotPixels=64):
+def random_crop(img, width, height, box_size, imgClean=None, hotPixels=64):
     assert img.shape[0] >= height
     assert img.shape[1] >= width
 
@@ -145,3 +145,10 @@ def normalize(img, mean, std):
 
 def denormalize(x, mean, std):
     return x*std + mean
+
+def load_config(config_path):
+    import yaml
+    with open(config_path, 'r') as config_file:
+        config = yaml.safe_load(config_file)
+        return config
+    raise "Config could not be loaded."
