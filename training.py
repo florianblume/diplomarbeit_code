@@ -5,7 +5,11 @@ import torch.optim as optim
 import numpy as np
 import os
 import argparse
+import matplotlib.pyplot as plt
 
+from network import UpConv
+from network import DownConv
+from network import UNet
 import network
 import dataloader
 import util
@@ -33,7 +37,8 @@ def main(config):
     #device = torch.device("cpu")
     # Device gets automatically created in constructor
     # Mean and std will be persisted by the network when it is saved
-    net = network.UNet(config['NUM_CLASSES'], loader.mean(), loader.std(), depth=config['DEPTH'])
+    net = network.UNet(config['NUM_CLASSES'], loader.mean(),
+                       loader.std(), depth=config['DEPTH'])
 
     # Needed for prediction every X training runs
     ps = config['PRED_PATCH_SIZE']
@@ -61,7 +66,8 @@ def main(config):
     # If tensorboard logs are requested create the writer
     if write_tensorboard_data:
         from torch.utils.tensorboard import SummaryWriter
-        writer = SummaryWriter(os.path.join(config['HISTORY_PATH'], 'tensorboard'))
+        writer = SummaryWriter(os.path.join(
+            config['HISTORY_PATH'], 'tensorboard'))
 
     trainHist = []
     valHist = []
@@ -92,8 +98,9 @@ def main(config):
         optimizer.step()
 
         if stepCounter % stepsPerEpoch == stepsPerEpoch-1:
+            print_step = step + 1
             running_loss = (np.mean(losses))
-            print("Step:", stepCounter + 1, "| Avg. epoch loss:", running_loss)
+            print("Step:", print_step, "| Avg. epoch loss:", running_loss)
             losses = np.array(losses)
             print("avg. loss: "+str(np.mean(losses))+"+-" +
                   str(np.std(losses)/np.sqrt(losses.size)))
@@ -118,6 +125,8 @@ def main(config):
             if len(valHist) == 0 or avg_val_loss < np.min(valHist):
                 torch.save(net, os.path.join(
                     config['BEST_NET_PATH'], 'best.net'))
+                #torch.save(net.state_dict(), os.path.join(
+                #    config['BEST_NET_PATH'], 'best.net'))
             valHist.append(avg_val_loss)
 
             epoch = (stepCounter / stepsPerEpoch)
@@ -128,33 +137,37 @@ def main(config):
             scheduler.step(avg_val_loss)
 
             if write_tensorboard_data:
-                writer.add_scalar('train_loss', avg_train_loss, step)
-                writer.add_scalar('val_loss', avg_val_loss, step)
-                
+                writer.add_scalar('train_loss', avg_train_loss, print_step)
+                writer.add_scalar('val_loss', avg_val_loss, print_step)
+
                 net.train(False)
                 # Predict for one example image
-                # This is a normalized
-                im = data_raw[np.random.randint(0, data_raw.shape[0])]
+                im = data_raw[0]
                 prediction = net.predict(im, ps, overlap)
                 net.train(True)
-                # Tensorboard expects the channel first but we 
-                # have a grey-scale image
-                prediction = np.expand_dims(prediction, axis=0)
-                im = np.expand_dims(im, axis=0)
                 im = util.denormalize(im, loader.mean(), loader.std())
-                grid = np.concatenate([prediction, im], axis=0)
-                writer.add_image('prediction - gt', grid, step)
+                # So ugly but it works
+                plt.imsave('pred.png', prediction)
+                pred = plt.imread('pred.png')
+                plt.imsave('im.png', im)
+                im = plt.imread('im.png')
+                example = np.concatenate([pred, im], axis=1)
+                writer.add_image('Prediction - Ground Truth', example, print_step, dataformats='HWC')
 
                 for name, param in net.named_parameters():
                     writer.add_histogram(
-                        name, param.clone().cpu().data.numpy(), step)
+                        name, param.clone().cpu().data.numpy(), print_step)
 
             if stepCounter / stepsPerEpoch > 200:
                 break
 
     if write_tensorboard_data:
-        writer.add_graph(net)
+        # Remove temp images
+        os.remove('pred.png')
+        os.remove('im.png')
+        writer.add_graph(net, outputs)
         writer.close()
+
     print('Finished Training')
 
 

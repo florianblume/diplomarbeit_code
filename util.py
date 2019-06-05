@@ -132,16 +132,13 @@ def random_crop(img, width, height, box_size, imgClean=None, hotPixels=64):
 
     return imgOut, imgOutC, mask
 
-
-def PSNR(gt, pred, range_=255.0):
+def PSNR(gt, pred, range_=255.0 ):
     mse = np.mean((gt - pred)**2)
     return 20 * np.log10((range_)/np.sqrt(mse))
-
 
 def normalize(img, mean, std):
     zero_mean = img - mean
     return zero_mean/std
-
 
 def denormalize(x, mean, std):
     return x*std + mean

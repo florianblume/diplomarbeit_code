@@ -115,10 +115,6 @@ class DataLoader():
         ###########################################
         ###########################################
 
-        data_raw = util.normalize(data_raw, 11.042194366455078, 23.338916778564453)
-        data_gt = util.normalize(data_gt, 11.042194366455078, 23.338916778564453)
-
-        # TODO Unclear what this is for
-        #dataTestGT = np.load(path+"../gt/test_gt.npy")
+        data_raw = util.normalize(data_raw, 11.042194, 23.338917)
 
         return data_raw, data_gt
