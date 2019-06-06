@@ -66,7 +66,7 @@ class DataLoader():
             data_gt_path = os.path.join(self.data_base_path, data_gt_path)
             data_gt = np.load(data_gt_path)
             print("Loaded " +
-                str(data_gt.shape[0]) + " images from " + data_gt_path)
+                  str(data_gt.shape[0]) + " images from " + data_gt_path)
             img_factor = int(data_raw.shape[0]/data_gt.shape[0])
             print("Raw - GT ratio: " + str(img_factor))
         else:
@@ -89,7 +89,7 @@ class DataLoader():
 
         return data_raw, data_gt
 
-    def load_test_data(self, data_raw_path: str, data_gt_path: str):
+    def load_test_data(self, data_raw_path: str, data_gt_path: str, mean: int, std: int):
         """Loads the the data for prediction at the specified path
         and normalizes it using the mean and std from the raw training
         data loaded via the load_training_data function.
@@ -98,23 +98,23 @@ class DataLoader():
             raw_data_path {str} -- path to the saved numpy array of raw
                                    data relative to the base path
             gt_data_path {str} -- path to the saved numpy array of ground-truth
-                                   data relative to the base path
+                                   data relative to the base path, can be "" to return None
+            mean {int} -- the mean to normalize the raw data with
+            std {int} -- the std to normalize the raw data with
 
         Returns:
-            np.array -- the normalized prediction data
+            np.array         -- the normalized prediction data
+            np.array or None -- the ground-truth data, if specified (None if path is "")
         """
 
         print("Loading prediction data...")
         data_raw = np.load(os.path.join(self.data_base_path, data_raw_path))
-        data_gt = np.load(os.path.join(self.data_base_path, data_gt_path))
-        print("Normalizing data...")
+        if data_gt_path != "":
+            data_gt = np.load(os.path.join(self.data_base_path, data_gt_path))
+        else:
+            None
+        print("Normalizing RAW data with mean {} and std {}...".format(mean, std))
 
-        ###########################################
-        ###########################################
-        # TODO Hardcoded mean and std don't forget!
-        ###########################################
-        ###########################################
-
-        data_raw = util.normalize(data_raw, 11.042194, 23.338917)
+        data_raw = util.normalize(data_raw, mean, std)
 
         return data_raw, data_gt

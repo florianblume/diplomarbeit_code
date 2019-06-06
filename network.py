@@ -184,18 +184,8 @@ class UNet(nn.Module):
         self.start_filts = start_filts
         self.depth = depth
         self.device = device
-        # Create both as tensors so that they are getting stored
-        # together with the model. This way we can load a trained
-        # model and mean and std are correctly set without further ado.
-
-        ###########################################
-        ###########################################
-        # TODO Hardcoded mean and std don't forget!
-        ###########################################
-        ###########################################
-
-        self.mean = 11.042194366455078
-        self.std = 23.338916778564453
+        self.mean = mean
+        self.std = std
 
         self.down_convs = []
         self.up_convs = []
