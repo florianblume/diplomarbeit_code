@@ -43,12 +43,12 @@ def main(config):
     for index in range(num_images):
 
         im = data_test[index]
-        print("Predicting on image {}:".format(index))
-        print('Raw image shape {}, ground-truth image shape {}.'.format(im.shape, l.shape))
+        print("Predicting on image {} with shape {}:".format(index, im.shape))
         means = net.predict(im, ps, overlap)
 
         if pred_output_path != "":
-            plt.imsave('pred_' + str(index).zfill(num_images) + '.png', means)
+            # zfill(4) is enough, probably never going to pedict on more images than 9999
+            plt.imsave(os.path.join(pred_output_path, 'pred_' + str(index).zfill(4) + '.png'), means)
 
         im = util.denormalize(im, net.mean, net.std)
         #vmi = np.percentile(l, 0.05)
