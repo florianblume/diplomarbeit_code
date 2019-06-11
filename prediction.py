@@ -2,6 +2,7 @@ import argparse
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
 from network import DownConv
 from network import UpConv
@@ -35,6 +36,8 @@ def main(config):
     ps = config['PRED_PATCH_SIZE']
     overlap = config['OVERLAP']
     pred_output_path = config['PRED_OUTPUT_PATH']
+    if not os.path.exists(pred_output_path):
+        os.mkdir(pred_output_path)
     
     results = []
     num_images = data_test.shape[0]
