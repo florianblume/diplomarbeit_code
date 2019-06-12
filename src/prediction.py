@@ -18,7 +18,8 @@ def main(config):
         raise 'No checkpoint path specified. Please specify the path to ' \
                 'a checkpoint of a model that you want to use for prediction.'
 
-    network_path = config['PRED_NETWORK_PATH']
+    experiment_base_path = config['EXPERIMENT_BASE_PATH']
+    network_path = os.path.join(experiment_base_path, config['PRED_NETWORK_PATH'])
     print("Loading network from {}".format(network_path))
     # mean and std will be set by state dict appropriately
     checkpoint = torch.load(network_path)
@@ -39,7 +40,8 @@ def main(config):
 
     ps = config['PRED_PATCH_SIZE']
     overlap = config['OVERLAP']
-    pred_output_path = config['PRED_OUTPUT_PATH']
+    print(experiment_base_path)
+    pred_output_path = os.path.join(experiment_base_path, config['PRED_OUTPUT_PATH'])
     if not os.path.exists(pred_output_path):
         os.mkdir(pred_output_path)
     

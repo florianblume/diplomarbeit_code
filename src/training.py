@@ -47,7 +47,7 @@ def create_checkpoint(model, optimizer, epoch, mean, std, train_loss, val_loss):
 
 def on_end_epoch(net, stepsPerEpoch, stepCounter, losses, trainHist, valHist,
                  valSize, data_val, data_val_gt, size, box_size, bs, data_raw, data_gt,
-                 optimizer, scheduler, training_output_path, train_loss,
+                 optimizer, scheduler, experiment_base_path, train_loss,
                  write_tensorboard_data, writer, loader, ps, overlap):
     print_step = stepCounter + 1
     epoch = (stepCounter / stepsPerEpoch)
@@ -77,16 +77,16 @@ def on_end_epoch(net, stepsPerEpoch, stepCounter, losses, trainHist, valHist,
     # Save the current best network
     if len(valHist) == 0 or avg_val_loss < np.min(valHist):
         torch.save(create_checkpoint(net, optimizer, epoch, net.mean, net.std, train_loss, val_loss),
-                   os.path.join(training_output_path, 'best.net'))
+                   os.path.join(experiment_base_path, 'best.net'))
     valHist.append(avg_val_loss)
 
-    np.save(os.path.join(training_output_path, 'history.npy'),
+    np.save(os.path.join(experiment_base_path, 'history.npy'),
             (np.array([np.arange(epoch), trainHist, valHist])))
 
     scheduler.step(avg_val_loss)
 
     torch.save(create_checkpoint(net, optimizer, epoch, net.mean, net.std, train_loss, val_loss),
-               os.path.join(training_output_path, 'last.net'))
+               os.path.join(experiment_base_path, 'last.net'))
 
     if write_tensorboard_data:
         tensorboard_data(writer, avg_train_loss, avg_val_loss,
@@ -129,7 +129,7 @@ def main(config):
     net = network.UNet(config['NUM_CLASSES'], loader.mean(),
                        loader.std(), depth=config['DEPTH'])
 
-    training_output_path = config['TRAINING_OUTPUT_PATH']
+    experiment_base_path = config['EXPERIMENT_BASE_PATH']
 
     # Needed for prediction every X training runs
     ps = config['PRED_PATCH_SIZE']
@@ -158,7 +158,7 @@ def main(config):
     if write_tensorboard_data:
         from torch.utils.tensorboard import SummaryWriter
         writer = SummaryWriter(os.path.join(
-            training_output_path, 'tensorboard'))
+            experiment_base_path, 'tensorboard'))
 
     trainHist = []
     valHist = []
@@ -191,7 +191,7 @@ def main(config):
         if stepCounter % stepsPerEpoch == stepsPerEpoch-1:
             on_end_epoch(net, stepsPerEpoch, stepCounter, losses, trainHist, valHist,
                     valSize, data_val, data_val_gt, size, box_size, bs, data_raw, data_gt,
-                    optimizer, scheduler, training_output_path, train_loss,
+                    optimizer, scheduler, experiment_base_path, train_loss,
                     write_tensorboard_data, writer, loader, ps, overlap)
 
             if stepCounter / stepsPerEpoch > 200:
