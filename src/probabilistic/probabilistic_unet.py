@@ -115,7 +115,7 @@ class UpConv(nn.Module):
         return x
 
 
-class UNet(nn.Module):
+class ProbabilisticUNet(nn.Module):
     """ `UNet` class is based on https://arxiv.org/abs/1505.04597
     The U-Net is a convolutional encoder-decoder neural network.
     Contextual spatial information (from the decoding,
@@ -134,6 +134,12 @@ class UNet(nn.Module):
         to reduce channel dimensionality by a factor of 2.
         This channel halving happens with the convolution in
         the tranpose convolution (specified by upmode='transpose')
+
+    This UNet predicts the mean and standard deviation of the
+    probability density of the clean pixels. We assume the noise
+    to be i.i.d. This means the probability of the output image
+    given the input image is the product of the single probabilities
+    of the output pixels conditioned on the input pixels.
     """
 
     def __init__(self, num_classes, mean, std, in_channels=1, depth=5,

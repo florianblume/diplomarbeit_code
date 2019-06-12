@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 import torchvision
+import os
 
 #device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -42,11 +43,11 @@ def joint_shuffle(inA, inB):
     This is useful to shuffle raw and ground-truth
     data together. Both arrays need to have the same
     dimensions.
-    
+
     Arguments:
         inA {np.array} -- first array to shuffle
         inB {np.array} -- second array to shuffle
-    
+
     Returns:
         np.array, np.array -- the shuffled arrays
     """
@@ -72,7 +73,8 @@ def random_crop_fri(data, width, height, box_size, dataClean=None, counter=None)
         imgClean = dataClean[index]
     else:
         imgClean = None
-    imgOut, imgOutC, mask = random_crop(img, width, height, box_size, imgClean=imgClean)
+    imgOut, imgOutC, mask = random_crop(
+        img, width, height, box_size, imgClean=imgClean)
     return imgOut, imgOutC, mask, counter
 
 
@@ -132,16 +134,20 @@ def random_crop(img, width, height, box_size, imgClean=None, hotPixels=64):
 
     return imgOut, imgOutC, mask
 
-def PSNR(gt, pred, range_=255.0 ):
+
+def PSNR(gt, pred, range_=255.0):
     mse = np.mean((gt - pred)**2)
     return 20 * np.log10((range_)/np.sqrt(mse))
+
 
 def normalize(img, mean, std):
     zero_mean = img - mean
     return zero_mean/std
 
+
 def denormalize(x, mean, std):
     return x*std + mean
+
 
 def load_config(config_path):
     import yaml
@@ -149,3 +155,30 @@ def load_config(config_path):
         config = yaml.safe_load(config_file)
         return config
     raise "Config could not be loaded."
+
+
+def add_shot_noise_to_images(images, defect_ratio):
+    result = []
+    for image in images:
+        out = np.copy(image)
+        num_salt = np.ceil(image.size * defect_ratio)
+        coords = [np.random.randint(0, i - 1, int(num_salt))
+                for i in image.shape]
+        out[coords] = np.random.randint(255, size=len(coords[0]))
+        result.append(out)
+    return result
+
+
+def add_gauss_noise_to_images(images, mean, std):
+    result = []
+    for image in images:
+        noisy = image + np.random.normal(mean, std, image.shape)
+        noisy = np.clip(noisy, 0, 255) 
+        result.append(noisy)
+    return result
+
+def numpy_array_to_images(array_path, output_path):
+    import matplotlib.pyplot as plt
+    data = np.load(array_path)
+    for i, image in enumerate(data):
+        plt.imsave(os.path.join(str(i).zfill(4) + '.png'), image)

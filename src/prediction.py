@@ -40,6 +40,8 @@ def main(config):
     ps = config['PRED_PATCH_SIZE']
     overlap = config['OVERLAP']
     pred_output_path = config['PRED_OUTPUT_PATH']
+    if not os.path.exists(pred_output_path):
+        os.mkdir(pred_output_path)
     
     results = {}
     num_images = data_test.shape[0]
@@ -63,15 +65,16 @@ def main(config):
 
         # Can be None, if no ground-truth data has been specified
         if data_gt is not None:
-            #TODO we always compare against the first GT image?
-            l = data_gt[0]
+            # X images get 1 GT image together (due to creation of data set)
+            factor = int(data_test.shape[0] / data_gt.shape[0])
+            l = data_gt[int(index / factor)]
             psnr = util.PSNR(l, means, 255)
             print("PSNR raw", util.PSNR(l, im, 255))
             results[pred_image_filename] = psnr
             print("PSNR denoised", psnr)  # Without info from masked pixel
 
     if data_gt is not None:
-        average = np.mean(np.array(results.values))
+        average = np.mean(np.array(list(results.values())))
         print("Average PSNR:", average)
         with open(os.path.join(pred_output_path, 'results.json'), 'w') as json_output:
             results['average'] = average
