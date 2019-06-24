@@ -5,8 +5,9 @@ from torch.autograd import Variable
 from collections import OrderedDict
 from torch.nn import init
 import numpy as np
-import util
+import math
 
+import util
 
 
 def conv3x3(in_channels, out_channels, stride=1,
@@ -217,7 +218,8 @@ class ProbabilisticUNet(nn.Module):
                              merge_mode=merge_mode)
             self.up_convs.append(up_conv)
 
-        self.conv_final = conv1x1(outs, self.num_classes)
+        self.conv_final_mean = conv1x1(outs, self.num_classes)
+        self.conv_final_std = conv1x1(outs, self.num_classes)
 
         # add the list of modules to current module
         self.down_convs = nn.ModuleList(self.down_convs)
@@ -235,10 +237,24 @@ class ProbabilisticUNet(nn.Module):
             init.constant(m.bias, 0)
 
     @staticmethod
-    def loss_function(outputs, labels, masks):
-        outs = outputs[:, 0, ...]
-        # print(outs.shape,labels.shape,masks.shape)
-        loss = torch.sum(masks*(labels-outs)**2)/torch.sum(masks)
+    def loss_function(mean, std, labels, masks):
+        # Mean and std for all pixel that the network pred
+        mean = mean[:, 0, ...]
+        std = std[:, 0, ...]
+        ###################
+        # We have pixel-wise independent probabilities of the noise. This means
+        # the probability of the output image is the product over the probabilities
+        # of the individual pixels. To get rid of the product we take the log.
+        # This way we get a sum of logs of gaussians. The gaussians can be split
+        # (due to the log rule) into the constant based only on std and the exponential
+        # which vaniches due to the log.
+        ###################
+        # c is the factor of a gauss prob density based on the standard deviation in
+        # front of the exponential
+        c = torch.log(1 / (torch.sqrt(2 * math.pi * std**2)))
+        # exp is no exponential here because we take the log of the loss
+        exp = (-(labels - mean)**2)/(2 * std**2))
+        loss = torch.sum(masks * (c + exp)/torch.sum(masks)
         return loss
 
     def reset_params(self):
@@ -260,8 +276,9 @@ class ProbabilisticUNet(nn.Module):
         # No softmax is used. This means you need to use
         # nn.CrossEntropyLoss is your training script,
         # as this module includes a softmax already.
-        x = self.conv_final(x)
-        return x
+        mean = self.conv_final_mean(x)
+        std = self.conv_final_std(x)
+        return mean, std
 
     def training_predict(self, train_data, train_data_clean, data_counter, size, box_size, bs):
         """Performs a forward step during training.
@@ -294,8 +311,9 @@ class ProbabilisticUNet(nn.Module):
             self.device), labels.to(self.device), masks.to(self.device)
 
         # Forward step
-        outputs = self(inputs)
-        return outputs, labels, masks, data_counter
+        # We do not need std
+        mean, std = self(inputs)
+        return mean, std, labels, masks, data_counter
 
     def predict(self, image, patch_size, overlap):
         means = np.zeros(image.shape)
@@ -316,8 +334,8 @@ class ProbabilisticUNet(nn.Module):
                 ovTop = overlap//2
             ymin = 0
             ymax = patch_size
-            xmin = xmin-overlap+patch_size
-            xmax = xmin+patch_size
+            xmin = xmin - overlap + patch_size
+            xmax = xmin + patch_size
             ovLeft = overlap//2
         return means
 
@@ -341,19 +359,24 @@ class ProbabilisticUNet(nn.Module):
         # copy to GPU
         inputs = inputs.to(self.device)
 
-        output = self(inputs)
+        mean, std = self(inputs)
 
-        samples = (output).permute(1, 0, 2, 3)
+        mean_samples = (mean).permute(1, 0, 2, 3)
+        std_samples = (std).permute(1, 0, 2, 3)
 
         # In contrast to probabilistic N2V we only have one sample
-        means = samples[0, ...]
+        means = mean_samples[0, ...]
+        stds = std_samples[0, ...]
 
         # Get data from GPU
         means = means.cpu().detach().numpy()
+        stds = stds.cpu().detach().numpy()
 
         # Reshape to 2D images and remove padding
-        means.shape = (output.shape[2], output.shape[3])
+        means.shape = (mean.shape[2], mean.shape[3])
+        stds.shape = (std.shape[2], std.shape[3])
 
         # Denormalize
         means = util.denormalize(means, self.mean, self.std)
-        return means
+        stds = util.denormalize(stds, self.mean, self.std)
+        return means, std
