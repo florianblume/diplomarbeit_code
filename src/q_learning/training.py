@@ -44,7 +44,7 @@ def create_checkpoint(model, optimizer, epoch, mean, std, train_loss, val_loss):
             'val_loss': val_loss}
 
 
-def on_end_epoch(net, stepsPerEpoch, stepCounter, losses, trainHist, valHist, std,
+def on_end_epoch(net, stepsPerEpoch, stepCounter, losses, trainHist, valHist,
                  valSize, data_val, data_val_gt, size, box_size, bs, data_raw, data_gt,
                  optimizer, scheduler, experiment_base_path, train_loss,
                  write_tensorboard_data, writer, loader, ps, overlap):
@@ -88,11 +88,11 @@ def on_end_epoch(net, stepsPerEpoch, stepCounter, losses, trainHist, valHist, st
                os.path.join(experiment_base_path, 'last.net'))
 
     if write_tensorboard_data:
-        tensorboard_data(writer, avg_train_loss, avg_val_loss, std,
+        tensorboard_data(writer, avg_train_loss, avg_val_loss,
                          print_step, net, data_raw, data_gt, loader, ps, overlap)
 
 
-def tensorboard_data(writer, avg_train_loss, avg_val_loss, std,
+def tensorboard_data(writer, avg_train_loss, avg_val_loss,
                      print_step, net, data_raw, data_gt, loader, ps, overlap):
     writer.add_scalar('train_loss', avg_train_loss, print_step)
     writer.add_scalar('val_loss', avg_val_loss, print_step)
@@ -107,16 +107,11 @@ def tensorboard_data(writer, avg_train_loss, avg_val_loss, std,
     psnr = util.PSNR(gt, prediction, 255)
     writer.add_scalar('psnr', psnr, print_step)
 
-    # So ugly but it works
+    # Ugly but it works
     plt.imsave('pred.png', prediction)
     pred = plt.imread('pred.png')
     writer.add_image('pred', pred, print_step, dataformats='HWC')
     os.remove('pred.png')
-
-    plt.imsave('std.png', std)
-    pred = plt.imread('std.png')
-    writer.add_image('std', std, print_step, dataformats='HWC')
-    os.remove('std.png')
 
     for name, param in net.named_parameters():
         writer.add_histogram(
@@ -182,10 +177,10 @@ def train(config):
             (i.e. we perform N2V), if clean targets are specified, no such replacement
             takes place
             """
-            mean, std, labels, masks, dataCounter = net.training_predict(
+            outputs, labels, masks, dataCounter = net.training_predict(
                 data_train, data_train_gt, dataCounter, size, box_size, bs)
 
-            train_loss = net.loss_function(mean, labels, masks)
+            train_loss = net.loss_function(outputs, labels, masks)
             train_loss.backward()
             running_loss += train_loss.item()
             losses.append(train_loss.item())
@@ -193,7 +188,7 @@ def train(config):
         optimizer.step()
 
         if stepCounter % stepsPerEpoch == stepsPerEpoch-1:
-            on_end_epoch(net, stepsPerEpoch, stepCounter, losses, trainHist, valHist, std,
+            on_end_epoch(net, stepsPerEpoch, stepCounter, losses, trainHist, valHist,
                     valSize, data_val, data_val_gt, size, box_size, bs, data_raw, data_gt,
                     optimizer, scheduler, experiment_base_path, train_loss,
                     write_tensorboard_data, writer, loader, ps, overlap)
@@ -203,7 +198,7 @@ def train(config):
 
     if write_tensorboard_data:
         # Remove temp images
-        writer.add_graph(net, mean)
+        writer.add_graph(net, outputs)
         writer.close()
 
     print('Finished Training')

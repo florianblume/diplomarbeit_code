@@ -231,6 +231,7 @@ class UNet(nn.Module):
     def loss_function(outputs, labels, masks):
         outs = outputs[:, 0, ...]
         # print(outs.shape,labels.shape,masks.shape)
+        # Simple L2 loss
         loss = torch.sum(masks*(labels-outs)**2)/torch.sum(masks)
         return loss
 

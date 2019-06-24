@@ -249,11 +249,13 @@ class ProbabilisticUNet(nn.Module):
         # (due to the log rule) into the constant based only on std and the exponential
         # which vaniches due to the log.
         ###################
+        # N(x; mean, std) = 1 / sqrt(2 * pi * std^2) * e^(-(x - mean)^2 / 2 * std^2)
+        # log(a * b) = log(a) + log(b)
         # c is the factor of a gauss prob density based on the standard deviation in
         # front of the exponential
-        c = torch.log(1 / (torch.sqrt(2 * math.pi * std**2)))
+        c = 1 / (torch.sqrt(2 * math.pi * std**2))
         # exp is no exponential here because we take the log of the loss
-        exp = (-(labels - mean)**2)/(2 * std**2))
+        exp = torch.exp(-(labels - mean)**2)/(2 * std**2))
         loss = torch.sum(masks * (c + exp)/torch.sum(masks)
         return loss
 
@@ -311,12 +313,25 @@ class ProbabilisticUNet(nn.Module):
             self.device), labels.to(self.device), masks.to(self.device)
 
         # Forward step
-        # We do not need std
+        # We just need the mean (=^ gray color) but the std gives interesting insights
         mean, std = self(inputs)
         return mean, std, labels, masks, data_counter
 
     def predict(self, image, patch_size, overlap):
-        means = np.zeros(image.shape)
+        """Performs denoising on the given image using the specified patch size and overlap.
+        
+        Arguments:
+            image {(H, W)} -- the image to denoise
+            patch_size {int} -- the patch size to use for prediction on individual pixels
+            overlap {int} -- overlap between patches
+        
+        Returns:
+            mean -- the predicted pixel values 
+                    (mean because the network actually estimates a normal distribution)
+            std  -- the standard deviation for each pixel
+        """
+        mean = np.zeros(image.shape)
+        std = np.zeros(image.shape)
         # We have to use tiling because of memory constraints on the GPU
         xmin = 0
         ymin = 0
@@ -326,18 +341,18 @@ class ProbabilisticUNet(nn.Module):
         while (xmin < image.shape[1]):
             ovTop = 0
             while (ymin < image.shape[0]):
-                a = self.predict_patch(image[ymin:ymax, xmin:xmax])
-                means[ymin:ymax, xmin:xmax][ovTop:,
-                                            ovLeft:] = a[ovTop:, ovLeft:]
-                ymin = ymin-overlap+patch_size
-                ymax = ymin+patch_size
+                _mean, _std = self.predict_patch(image[ymin:ymax, xmin:xmax])
+                mean[ymin:ymax, xmin:xmax][ovTop:, ovLeft:] = _mean[ovTop:, ovLeft:]
+                std[ymin:ymax, xmin:xmax][ovTop:, ovLeft:] = _std[ovTop:, ovLeft:]
+                ymin = ymin - overlap + patch_size
+                ymax = ymin + patch_size
                 ovTop = overlap//2
             ymin = 0
             ymax = patch_size
             xmin = xmin - overlap + patch_size
             xmax = xmin + patch_size
             ovLeft = overlap//2
-        return means
+        return mean, std
 
     def predict_patch(self, patch):
         """Performs network prediction on a patch of an image using the
