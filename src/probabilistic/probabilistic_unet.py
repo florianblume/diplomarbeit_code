@@ -279,7 +279,8 @@ class ProbabilisticUNet(nn.Module):
         # nn.CrossEntropyLoss is your training script,
         # as this module includes a softmax already.
         mean = self.conv_final_mean(x)
-        std = self.conv_final_std(x)
+        # exp makes std positive (which it always is)
+        std = torch.exp(self.conv_final_std(x))
         return mean, std
 
     def training_predict(self, train_data, train_data_clean, data_counter, size, box_size, bs):

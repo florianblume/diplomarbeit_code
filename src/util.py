@@ -181,4 +181,4 @@ def numpy_array_to_images(array_path, output_path):
     import matplotlib.pyplot as plt
     data = np.load(array_path)
     for i, image in enumerate(data):
-        plt.imsave(os.path.join(str(i).zfill(4) + '.png'), image)
+        plt.imsave(os.path.join(output_path, str(i).zfill(4) + '.png'), image)

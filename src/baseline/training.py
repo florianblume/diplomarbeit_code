@@ -12,28 +12,6 @@ import importlib
 import dataloader
 import util
 
-
-def load_data(config):
-    # data_c=np.concatenate((data.copy(),dataTest.copy()))
-    loader = dataloader.DataLoader(config['DATA_BASE_PATH'])
-    # In case the ground truth data path was not set we pass '' to
-    # the loader which returns None to us
-    data_raw, data_gt = loader.load_training_data(
-        config['DATA_TRAIN_RAW_PATH'], config.get('DATA_TRAIN_GT_PATH', ''))
-    if data_gt is not None:
-        data_raw, data_gt = util.joint_shuffle(data_raw, data_gt)
-        # If loaded, the network is trained using clean targets, otherwise it performs N2V
-        data_train_gt = data_gt.copy()
-        data_val_gt = data_gt.copy()
-    else:
-        data_train_gt = None
-        data_val_gt = None
-
-    data_train = data_raw.copy()
-    data_val = data_raw.copy()
-    return loader, data_raw, data_gt, data_train, data_train_gt, data_val, data_val_gt
-
-
 def create_checkpoint(model, optimizer, epoch, mean, std, train_loss, val_loss):
     return {'model_state_dict': model.state_dict(),
             'optimizier_state_dict': optimizer.state_dict(),
@@ -42,7 +20,6 @@ def create_checkpoint(model, optimizer, epoch, mean, std, train_loss, val_loss):
             'std': std,
             'train_loss': train_loss,
             'val_loss': val_loss}
-
 
 def on_end_epoch(net, stepsPerEpoch, stepCounter, losses, trainHist, valHist,
                  valSize, data_val, data_val_gt, size, box_size, bs, data_raw, data_gt,

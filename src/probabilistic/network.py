@@ -225,7 +225,7 @@ class UNet(nn.Module):
             # create the probability weights, this can be seen as p(z|x), i.e. the probability
             # of a decision given the input image. To obtain a weighted "average" of the
             # predictions of the subnets, we multiply this weight to their output.
-            self.weight_probabilities.append(conv1x1(outs, self.num_classes), conv1x1(outs, self.num_classes))
+            self.weight_probabilities.append(conv1x1(outs, self.num_classes))
 
         self.reset_params()
 
@@ -262,7 +262,8 @@ class UNet(nn.Module):
 
         # Compute the individual weight probabilities
         # One probability (weight) for each subnet
-        outs = [prob(x) for prob in weight_probabilities]
+        outs = [prob(x) for prob in self.weight_probabilities]
+        outs = F.softmax(outs, dim=0)
         return outs
 
     def training_predict(self, train_data, train_data_clean, data_counter, size, box_size, bs):
