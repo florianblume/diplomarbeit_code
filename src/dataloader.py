@@ -1,7 +1,7 @@
 import os
 import numpy as np
-import util
 
+import util
 
 class DataLoader():
     """Helper class to load trainind and prediction data. The data loader

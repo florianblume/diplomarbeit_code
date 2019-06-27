@@ -116,7 +116,7 @@ class UpConv(nn.Module):
         return x
 
 
-class ProbabilisticUNet(nn.Module):
+class SubUNet(nn.Module):
     """ `UNet` class is based on https://arxiv.org/abs/1505.04597
     The U-Net is a convolutional encoder-decoder neural network.
     Contextual spatial information (from the decoding,

@@ -9,7 +9,7 @@ from reinforce import training as reinf
 trainings = {'base' : base,
              'prob' : prob,
              'q'    : q,
-             'reinf':reinf}
+             'reinf': reinf}
 
 def main(net_type, config):
     training = trainings[net_type]
