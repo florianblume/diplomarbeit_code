@@ -15,37 +15,6 @@ class Trainer():
     def __init__(self, config):
         self.config = config
 
-    def _load_data(self):
-        # The actual loading of the images is performed by the util on demand
-        # here we only load the filenames
-        self.loader = DataLoader(self.config['DATA_BASE_PATH'])
-        # In case the ground truth data path was not set we pass '' to
-        # the loader which returns None to us
-        self.data_raw, self.data_gt = self.loader.load_training_data(
-            self.config['DATA_TRAIN_RAW_PATH'], self.config.get('DATA_TRAIN_GT_PATH', ''))
-
-        if self.data_gt is not None:
-            data_raw, data_gt = util.joint_shuffle(self.data_raw, self.data_gt)
-            # If loaded, the network is trained using clean targets, otherwise it performs N2V
-            val_gt_index = (1 - self.val_ratio) * data_gt.shape[0]
-            self.data_train_gt = data_gt.copy()[:val_gt_index]
-            self.data_val_gt = data_gt.copy()[val_gt_index:]
-        else:
-            self.data_train_gt = None
-            self.data_val_gt = None
-            data_raw = np.random.shuffle(data_raw)
-
-        val_raw_index = (1 - self.val_ratio) * data_raw.shape[0]
-        self.data_train = data_raw.copy()[:val_raw_index]
-        self.data_val = data_raw.copy()[val_raw_index:]
-        print('Using {} raw images for training and {} raw images for validation'\
-                    .format(self.data_train.shape[0], self.data_val.shape[0]))
-        if self.data_train_gt.shape[0] > 0:
-            print('Using {} gt images for training and {} gt images for validation'\
-                .format(self.data_train_gt.shape[0], self.data_val_gt.shape[0]))
-        else:
-            print('No ground-truth images available for training.')
-
     def _load_config_parameters(self):
         # Set all parameters from the config
         self.epochs = self.config['EPOCHS']
@@ -66,6 +35,37 @@ class Trainer():
             np.sqrt(
                 self.size * self.size / self.num_pix)).astype(np.int)
         self.write_tensorboard_data = self.config['WRITE_TENSORBOARD_DATA']
+
+    def _load_data(self):
+        # The actual loading of the images is performed by the util on demand
+        # here we only load the filenames
+        self.loader = DataLoader(self.config['DATA_BASE_PATH'])
+        # In case the ground truth data path was not set we pass '' to
+        # the loader which returns None to us
+        self.data_raw, self.data_gt = self.loader.load_training_data(
+            self.config['DATA_TRAIN_RAW_PATH'], self.config.get('DATA_TRAIN_GT_PATH', ''))
+
+        if self.data_gt is not None:
+            data_raw, data_gt = util.joint_shuffle(self.data_raw, self.data_gt)
+            # If loaded, the network is trained using clean targets, otherwise it performs N2V
+            val_gt_index = int((1 - self.val_ratio) * data_gt.shape[0])
+            self.data_train_gt = data_gt[:val_gt_index].copy()
+            self.data_val_gt = data_gt[val_gt_index:].copy()
+        else:
+            self.data_train_gt = None
+            self.data_val_gt = None
+            data_raw = np.random.shuffle(data_raw)
+
+        val_raw_index = int((1 - self.val_ratio) * data_raw.shape[0])
+        self.data_train = data_raw[:val_raw_index].copy()
+        self.data_val = data_raw[val_raw_index:].copy()
+        print('Using {} raw images for training and {} raw images for validation.'\
+                    .format(self.data_train.shape[0], self.data_val.shape[0]))
+        if self.data_train_gt.shape[0] > 0:
+            print('Using {} gt images for training and {} gt images for validation.'\
+                .format(self.data_train_gt.shape[0], self.data_val_gt.shape[0]))
+        else:
+            print('No ground-truth images available for training.')
 
     def _load_network(self):
         raise 'This function needs to be implemented by the subclasses.'
@@ -128,8 +128,8 @@ class Trainer():
         raise 'This function needs to be implemented by the subclasses.'
 
     def train(self):
-        self._load_data()
         self._load_config_parameters()
+        self._load_data()
         self._load_network()
         self.net.train(True)
 

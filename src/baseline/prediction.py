@@ -40,7 +40,6 @@ def main(config):
 
     ps = config['PRED_PATCH_SIZE']
     overlap = config['OVERLAP']
-    print(experiment_base_path)
     pred_output_path = os.path.join(experiment_base_path, config['PRED_OUTPUT_PATH'])
     if not os.path.exists(pred_output_path):
         os.mkdir(pred_output_path)

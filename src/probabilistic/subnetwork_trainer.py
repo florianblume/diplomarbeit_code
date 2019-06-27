@@ -7,11 +7,11 @@ import os
 import matplotlib.pyplot as plt
 import importlib
 
-import subnetwork
+from . import subnetwork
 import trainer
 import util
 
-class SubnetworkTrainer(trainer.Trainer):
+class Trainer(trainer.Trainer):
 
     def _load_network(self):
         # Device gets automatically created in constructor
@@ -20,7 +20,7 @@ class SubnetworkTrainer(trainer.Trainer):
                         self.loader.std(), depth=self.config['DEPTH'])
 
     def _create_checkpoint(self):
-        return {'model_state_dict': self.model.state_dict(),
+        return {'model_state_dict': self.net.state_dict(),
                 'optimizier_state_dict': self.optimizer.state_dict(),
                 'epoch': self.epoch,
                 'mean': self.loader.mean(),

@@ -59,12 +59,14 @@ class DataLoader():
 
         data_raw_path = os.path.join(self.data_base_path, data_raw_path)
         data_raw = np.load(data_raw_path)
+        data_raw = data_raw.astype(np.uint8)
         print("Loaded " +
               str(data_raw.shape[0]) + " images from " + data_raw_path)
 
         if data_gt_path != "":
             data_gt_path = os.path.join(self.data_base_path, data_gt_path)
             data_gt = np.load(data_gt_path)
+            data_gt = data_gt.astype(np.uint8)
             print("Loaded " +
                   str(data_gt.shape[0]) + " images from " + data_gt_path)
             img_factor = int(data_raw.shape[0]/data_gt.shape[0])
@@ -109,8 +111,10 @@ class DataLoader():
 
         print("Loading prediction data...")
         data_raw = np.load(os.path.join(self.data_base_path, data_raw_path))
+        data_raw = data_raw.astype(np.uint8)
         if data_gt_path != "":
             data_gt = np.load(os.path.join(self.data_base_path, data_gt_path))
+            data_gt = data_gt.astype(np.uint8)
         else:
             None
         print("Normalizing RAW data with mean {} and std {}...".format(mean, std))

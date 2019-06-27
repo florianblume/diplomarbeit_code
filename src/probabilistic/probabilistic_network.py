@@ -305,7 +305,6 @@ class ProbabilisticUNet(nn.Module):
         #TODO this might be wrong
         means_out = np.sum(means_out, axis=0)
         stds_out = np.sum(stds_out, axis=0)
-        print(means_out.shape)
         return means_out, stds_out, labels, masks, data_counter
 
     def predict(self, image, patch_size, overlap):
