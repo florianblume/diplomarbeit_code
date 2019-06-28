@@ -5,6 +5,8 @@ from torch.autograd import Variable
 from collections import OrderedDict
 from torch.nn import init
 import numpy as np
+import math
+
 import util
 
 
@@ -114,7 +116,7 @@ class UpConv(nn.Module):
         return x
 
 
-class UNet(nn.Module):
+class SubUNet(nn.Module):
     """ `UNet` class is based on https://arxiv.org/abs/1505.04597
     The U-Net is a convolutional encoder-decoder neural network.
     Contextual spatial information (from the decoding,
@@ -133,6 +135,12 @@ class UNet(nn.Module):
         to reduce channel dimensionality by a factor of 2.
         This channel halving happens with the convolution in
         the tranpose convolution (specified by upmode='transpose')
+
+    This UNet predicts the mean and standard deviation of the
+    probability density of the clean pixels. We assume the noise
+    to be i.i.d. This means the probability of the output image
+    given the input image is the product of the single probabilities
+    of the output pixels conditioned on the input pixels.
     """
 
     def __init__(self, num_classes, mean, std, in_channels=1, depth=5,
@@ -210,7 +218,8 @@ class UNet(nn.Module):
                              merge_mode=merge_mode)
             self.up_convs.append(up_conv)
 
-        self.conv_final = conv1x1(outs, self.num_classes)
+        self.conv_final_mean = conv1x1(outs, self.num_classes)
+        self.conv_final_std = conv1x1(outs, self.num_classes)
 
         # add the list of modules to current module
         self.down_convs = nn.ModuleList(self.down_convs)
@@ -228,10 +237,26 @@ class UNet(nn.Module):
             init.constant(m.bias, 0)
 
     @staticmethod
-    def loss_function(outputs, labels, masks):
-        outs = outputs[:, 0, ...]
-        # print(outs.shape,labels.shape,masks.shape)
-        loss = torch.sum(masks*(labels-outs)**2)/torch.sum(masks)
+    def loss_function(mean, std, labels, masks):
+        # Mean and std for all pixel that the network pred
+        mean = mean[:, 0, ...]
+        std = std[:, 0, ...]
+        ###################
+        # We have pixel-wise independent probabilities of the noise. This means
+        # the probability of the output image is the product over the probabilities
+        # of the individual pixels. To get rid of the product we take the log.
+        # This way we get a sum of logs of gaussians. The gaussians can be split
+        # (due to the log rule) into the constant based only on std and the exponential
+        # which vaniches due to the log.
+        ###################
+        # N(x; mean, std) = 1 / sqrt(2 * pi * std^2) * e^(-(x - mean)^2 / 2 * std^2)
+        # log(a * b) = log(a) + log(b)
+        # c is the factor of a gauss prob density based on the standard deviation in
+        # front of the exponential
+        c = 1 / (torch.sqrt(2 * math.pi * std**2))
+        # exp is no exponential here because we take the log of the loss
+        exp = torch.exp(-(labels - mean)**2)/(2 * std**2))
+        loss = torch.sum(masks * (c + exp)/torch.sum(masks)
         return loss
 
     def reset_params(self):
@@ -253,8 +278,10 @@ class UNet(nn.Module):
         # No softmax is used. This means you need to use
         # nn.CrossEntropyLoss is your training script,
         # as this module includes a softmax already.
-        x = self.conv_final(x)
-        return x
+        mean = self.conv_final_mean(x)
+        # exp makes std positive (which it always is)
+        std = torch.exp(self.conv_final_std(x))
+        return mean, std
 
     def training_predict(self, train_data, train_data_clean, data_counter, size, box_size, bs):
         """Performs a forward step during training.
@@ -287,11 +314,25 @@ class UNet(nn.Module):
             self.device), labels.to(self.device), masks.to(self.device)
 
         # Forward step
-        outputs = self(inputs)
-        return outputs, labels, masks, data_counter
+        # We just need the mean (=^ gray color) but the std gives interesting insights
+        mean, std = self(inputs)
+        return mean, std, labels, masks, data_counter
 
     def predict(self, image, patch_size, overlap):
-        means = np.zeros(image.shape)
+        """Performs denoising on the given image using the specified patch size and overlap.
+        
+        Arguments:
+            image {(H, W)} -- the image to denoise
+            patch_size {int} -- the patch size to use for prediction on individual pixels
+            overlap {int} -- overlap between patches
+        
+        Returns:
+            mean -- the predicted pixel values 
+                    (mean because the network actually estimates a normal distribution)
+            std  -- the standard deviation for each pixel
+        """
+        mean = np.zeros(image.shape)
+        std = np.zeros(image.shape)
         # We have to use tiling because of memory constraints on the GPU
         xmin = 0
         ymin = 0
@@ -301,18 +342,18 @@ class UNet(nn.Module):
         while (xmin < image.shape[1]):
             ovTop = 0
             while (ymin < image.shape[0]):
-                a = self.predict_patch(image[ymin:ymax, xmin:xmax])
-                means[ymin:ymax, xmin:xmax][ovTop:,
-                                            ovLeft:] = a[ovTop:, ovLeft:]
-                ymin = ymin-overlap+patch_size
-                ymax = ymin+patch_size
+                _mean, _std = self.predict_patch(image[ymin:ymax, xmin:xmax])
+                mean[ymin:ymax, xmin:xmax][ovTop:, ovLeft:] = _mean[ovTop:, ovLeft:]
+                std[ymin:ymax, xmin:xmax][ovTop:, ovLeft:] = _std[ovTop:, ovLeft:]
+                ymin = ymin - overlap + patch_size
+                ymax = ymin + patch_size
                 ovTop = overlap//2
             ymin = 0
             ymax = patch_size
-            xmin = xmin-overlap+patch_size
-            xmax = xmin+patch_size
+            xmin = xmin - overlap + patch_size
+            xmax = xmin + patch_size
             ovLeft = overlap//2
-        return means
+        return mean, std
 
     def predict_patch(self, patch):
         """Performs network prediction on a patch of an image using the
@@ -334,19 +375,24 @@ class UNet(nn.Module):
         # copy to GPU
         inputs = inputs.to(self.device)
 
-        output = self(inputs)
+        mean, std = self(inputs)
 
-        samples = (output).permute(1, 0, 2, 3)
+        mean_samples = (mean).permute(1, 0, 2, 3)
+        std_samples = (std).permute(1, 0, 2, 3)
 
         # In contrast to probabilistic N2V we only have one sample
-        means = samples[0, ...]
+        means = mean_samples[0, ...]
+        stds = std_samples[0, ...]
 
         # Get data from GPU
         means = means.cpu().detach().numpy()
+        stds = stds.cpu().detach().numpy()
 
         # Reshape to 2D images and remove padding
-        means.shape = (output.shape[2], output.shape[3])
+        means.shape = (mean.shape[2], mean.shape[3])
+        stds.shape = (std.shape[2], std.shape[3])
 
         # Denormalize
         means = util.denormalize(means, self.mean, self.std)
-        return means
+        stds = util.denormalize(stds, self.mean, self.std)
+        return means, std

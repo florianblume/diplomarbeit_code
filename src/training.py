@@ -1,24 +1,18 @@
 import argparse
+import importlib
 
 import util
-from baseline import training as base
-from probabilistic import training as prob
-from q_learning import training as q
-from reinforce import training as reinf
 
-trainings = {'base' : base,
-             'prob' : prob,
-             'q'    : q,
-             'reinf':reinf}
-
-def main(net_type, config):
-    training = trainings[net_type]
-    training.train(config)
+def main(trainer, config):
+    trainer_module = importlib.import_module(trainer)
+    trainer = trainer_module.Trainer(config)
+    trainer.train()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", "-c", help="Path to the config.")
-    parser.add_argument("--net_type", "-t", help="The network type to execute [base, prob, reinf, q].")
+    parser.add_argument("--trainer", "-t", 
+        help="The trainer to use [packapge.pyfile(without extension)].")
     args = parser.parse_args()
     config = util.load_config(args.config)
-    main(args.net_type, config)
+    main(args.trainer, config)

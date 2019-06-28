@@ -6,8 +6,8 @@ from collections import OrderedDict
 from torch.nn import init
 import numpy as np
 
-from .. import util.ProbabilisticUNet
-import probabilistic_unet
+# Slightly irritating name as the subnets perform the actual denoising
+from subnetwork import SubUNet
 
 def conv3x3(in_channels, out_channels, stride=1,
             padding=1, bias=True, groups=1):
@@ -115,7 +115,7 @@ class UpConv(nn.Module):
         return x
 
 
-class UNet(nn.Module):
+class ProbabilisticUNet(nn.Module):
     """ `UNet` class is based on https://arxiv.org/abs/1505.04597
     The U-Net is a convolutional encoder-decoder neural network.
     Contextual spatial information (from the decoding,
@@ -216,12 +216,12 @@ class UNet(nn.Module):
         self.down_convs = nn.ModuleList(self.down_convs)
         self.up_convs = nn.ModuleList(self.up_convs)
 
-        self.subnets = []
-        self.weight_probabilities = []
+        self.subnets = nn.ModuleList()
+        self.weight_probabilities = nn.ModuleList()
 
         for i in range(num_subnets):
             # create the two subnets
-            self.subnets.append(ProbabilisticUNet(num_classes, mean, std, depth=sub_net_depth))
+            self.subnets.append(SubUNet(num_classes, mean, std, depth=sub_net_depth))
             # create the probability weights, this can be seen as p(z|x), i.e. the probability
             # of a decision given the input image. To obtain a weighted "average" of the
             # predictions of the subnets, we multiply this weight to their output.
@@ -242,7 +242,6 @@ class UNet(nn.Module):
     def loss_function(outputs, labels, masks):
         outs = outputs[:, 0, ...]
         raise 'Need to implement!'
-        return None
 
     def reset_params(self):
         for i, m in enumerate(self.modules()):
@@ -262,7 +261,7 @@ class UNet(nn.Module):
 
         # Compute the individual weight probabilities
         # One probability (weight) for each subnet
-        outs = [prob(x) for prob in self.weight_probabilities]
+        outs = torch.stack([prob(x) for prob in self.weight_probabilities])
         outs = F.softmax(outs, dim=0)
         return outs
 
@@ -299,19 +298,25 @@ class UNet(nn.Module):
         # Forward step
         weights = self(inputs)
         means, stds = [subnet(inputs) for subnet in self.subnets]
-        # Weight the predictions
+
+        # TODO THIS IS NOT CORRECT!!!
+        # The correct formula is w_i = 1/sigma_i^2
+        # bar(x) = sum(x_i sigma_i^(-2))/sum(sigma_i^(-2)) (mean)
+        # sigma_bar(x) = sqrt(1 / sum(sigma_i^(-2)))
+        # See also https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Variance_weights
         means_out = np.array([w * m for w in weights for m in means])
         stds_out = np.array([w * m for w in weights for m in stds])
         #TODO this might be wrong
         means_out = np.sum(means_out, axis=0)
         stds_out = np.sum(stds_out, axis=0)
-        print(means_out.shape)
         return means_out, stds_out, labels, masks, data_counter
 
     def predict(self, image, patch_size, overlap):
         weights = self(image)
         # Obtain prediction from each subnet
         means, stds = [subnet(image) for subnet in self.subnets]
+
+        # TODO THIS IS NOT CORRECT!!!
         # Multiply predictions by weights
         means_out = np.array([w * m for w in weights for m in means])
         stds_out = np.array([w * m for w in weights for m in stds])

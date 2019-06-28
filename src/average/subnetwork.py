@@ -114,7 +114,7 @@ class UpConv(nn.Module):
         return x
 
 
-class UNet(nn.Module):
+class SubUNet(nn.Module):
     """ `UNet` class is based on https://arxiv.org/abs/1505.04597
     The U-Net is a convolutional encoder-decoder neural network.
     Contextual spatial information (from the decoding,
@@ -231,6 +231,7 @@ class UNet(nn.Module):
     def loss_function(outputs, labels, masks):
         outs = outputs[:, 0, ...]
         # print(outs.shape,labels.shape,masks.shape)
+        # Simple L2 loss
         loss = torch.sum(masks*(labels-outs)**2)/torch.sum(masks)
         return loss
 
