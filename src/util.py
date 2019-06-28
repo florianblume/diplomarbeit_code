@@ -141,6 +141,18 @@ def PSNR(gt, pred, range_=255.0):
     return 20 * np.log10((range_)/np.sqrt(mse))
 
 
+def average_PSNR_of_stored_numpy_array(path_to_array, path_to_gt_array):
+    data = np.load(path_to_array)
+    gt = np.load(path_to_gt_array)
+    img_factor = int(data.shape[0]/gt.shape[0])
+    gt = np.repeat(gt, img_factor, axis=0)
+    psnr = 0
+    for index in range(data.shape[0]):
+        psnr += PSNR(gt[index], data[index])
+    psnr /= data.shape[0]
+    return psnr
+
+
 def normalize(img, mean, std):
     zero_mean = img - mean
     return zero_mean/std
@@ -164,15 +176,16 @@ def add_shot_noise_to_images(images, defect_ratio):
         out = np.copy(image)
         num_salt = np.ceil(image.size * defect_ratio)
         coords = [np.random.randint(0, i - 1, int(num_salt))
-                for i in image.shape]
+                  for i in image.shape]
         out[coords] = np.random.randint(255, size=len(coords[0]))
         result.append(out)
     return result
 
+
 def numpy_array_to_images(array_path, output_path):
     """To be able to visualize the numpy arrays that the networks handle this
     function can convert a dedicated numpy array file to images.
-    
+
     Arguments:
         array_path {[type]} -- [description]
         output_path {[type]} -- [description]
@@ -187,15 +200,16 @@ def add_gauss_noise_to_images(images, mean, std):
     result = []
     for image in images:
         noisy = image + np.random.normal(mean, std, image.shape)
-        noisy = np.clip(noisy, 0, 255) 
+        noisy = np.clip(noisy, 0, 255)
         result.append(noisy)
     return result
+
 
 def merge_two_npy_datasets(dataset_path_1, dataset_path_2, output_path):
     """Merges two datasets stored as numpy arrays. Only matching entries are
     matched. E.g. if at both paths there is a ./gt/gt_0.npy then this will be
     concatenated.
-    
+
     Arguments:
         dataset_path_1 {str} -- path to first dataset
         dataset_path_2 {str} -- path to second dataset

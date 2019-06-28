@@ -5,9 +5,8 @@ from torch.autograd import Variable
 from collections import OrderedDict
 from torch.nn import init
 import numpy as np
+import util
 
-# Slightly irritating name as the subnets perform the actual denoising
-from subnetwork import SubUNet
 
 def conv3x3(in_channels, out_channels, stride=1,
             padding=1, bias=True, groups=1):
@@ -115,7 +114,7 @@ class UpConv(nn.Module):
         return x
 
 
-class ProbabilisticUNet(nn.Module):
+class SubUNet(nn.Module):
     """ `UNet` class is based on https://arxiv.org/abs/1505.04597
     The U-Net is a convolutional encoder-decoder neural network.
     Contextual spatial information (from the decoding,
@@ -136,8 +135,7 @@ class ProbabilisticUNet(nn.Module):
         the tranpose convolution (specified by upmode='transpose')
     """
 
-    def __init__(self, num_classes, mean, std, in_channels=1, 
-                 main_net_depth=1, sub_net_depth=3, num_subnets=2,
+    def __init__(self, num_classes, mean, std, in_channels=1, depth=5,
                  start_filts=64, up_mode='transpose',
                  merge_mode='add',
                  device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")):
@@ -212,20 +210,11 @@ class ProbabilisticUNet(nn.Module):
                              merge_mode=merge_mode)
             self.up_convs.append(up_conv)
 
+        self.conv_final = conv1x1(outs, self.num_classes)
+
         # add the list of modules to current module
         self.down_convs = nn.ModuleList(self.down_convs)
         self.up_convs = nn.ModuleList(self.up_convs)
-
-        self.subnets = nn.ModuleList()
-        self.weight_probabilities = nn.ModuleList()
-
-        for i in range(num_subnets):
-            # create the two subnets
-            self.subnets.append(SubUNet(num_classes, mean, std, depth=sub_net_depth))
-            # create the probability weights, this can be seen as p(z|x), i.e. the probability
-            # of a decision given the input image. To obtain a weighted "average" of the
-            # predictions of the subnets, we multiply this weight to their output.
-            self.weight_probabilities.append(conv1x1(outs, self.num_classes))
 
         self.reset_params()
 
@@ -241,7 +230,10 @@ class ProbabilisticUNet(nn.Module):
     @staticmethod
     def loss_function(outputs, labels, masks):
         outs = outputs[:, 0, ...]
-        raise 'Need to implement!'
+        # print(outs.shape,labels.shape,masks.shape)
+        # Simple L2 loss
+        loss = torch.sum(masks*(labels-outs)**2)/torch.sum(masks)
+        return loss
 
     def reset_params(self):
         for i, m in enumerate(self.modules()):
@@ -259,11 +251,11 @@ class ProbabilisticUNet(nn.Module):
             before_pool = encoder_outs[-(i+2)]
             x = module(before_pool, x)
 
-        # Compute the individual weight probabilities
-        # One probability (weight) for each subnet
-        outs = torch.stack([prob(x) for prob in self.weight_probabilities])
-        outs = F.softmax(outs, dim=0)
-        return outs
+        # No softmax is used. This means you need to use
+        # nn.CrossEntropyLoss is your training script,
+        # as this module includes a softmax already.
+        x = self.conv_final(x)
+        return x
 
     def training_predict(self, train_data, train_data_clean, data_counter, size, box_size, bs):
         """Performs a forward step during training.
@@ -296,37 +288,32 @@ class ProbabilisticUNet(nn.Module):
             self.device), labels.to(self.device), masks.to(self.device)
 
         # Forward step
-        weights = self(inputs)
-        means, stds = [subnet(inputs) for subnet in self.subnets]
-
-        # TODO THIS IS NOT CORRECT!!!
-        # The correct formula is w_i = 1/sigma_i^2
-        # bar(x) = sum(x_i sigma_i^(-2))/sum(sigma_i^(-2)) (mean)
-        # sigma_bar(x) = sqrt(1 / sum(sigma_i^(-2)))
-        # See also https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Variance_weights
-        means_out = np.array([w * m for w in weights for m in means])
-        stds_out = np.array([w * m for w in weights for m in stds])
-        #TODO this might be wrong
-        means_out = np.sum(means_out, axis=0)
-        stds_out = np.sum(stds_out, axis=0)
-        return means_out, stds_out, labels, masks, data_counter
+        outputs = self(inputs)
+        return outputs, labels, masks, data_counter
 
     def predict(self, image, patch_size, overlap):
-        weights = self(image)
-        # Obtain prediction from each subnet
-        means, stds = [subnet(image) for subnet in self.subnets]
-
-        # TODO THIS IS NOT CORRECT!!!
-        # Multiply predictions by weights
-        means_out = np.array([w * m for w in weights for m in means])
-        stds_out = np.array([w * m for w in weights for m in stds])
-        # Sum up the weighted predictions to obtain the final prediction
-        means_out = np.sum(means_out, axis=0)
-        stds_out = np.sum(stds_out, axis=0)
-        return means, stds
-
-'''  
-In case that we want to predict weights on a pixel basis we still need this function.
+        means = np.zeros(image.shape)
+        # We have to use tiling because of memory constraints on the GPU
+        xmin = 0
+        ymin = 0
+        xmax = patch_size
+        ymax = patch_size
+        ovLeft = 0
+        while (xmin < image.shape[1]):
+            ovTop = 0
+            while (ymin < image.shape[0]):
+                a = self.predict_patch(image[ymin:ymax, xmin:xmax])
+                means[ymin:ymax, xmin:xmax][ovTop:,
+                                            ovLeft:] = a[ovTop:, ovLeft:]
+                ymin = ymin-overlap+patch_size
+                ymax = ymin+patch_size
+                ovTop = overlap//2
+            ymin = 0
+            ymax = patch_size
+            xmin = xmin-overlap+patch_size
+            xmax = xmin+patch_size
+            ovLeft = overlap//2
+        return means
 
     def predict_patch(self, patch):
         """Performs network prediction on a patch of an image using the
@@ -364,4 +351,3 @@ In case that we want to predict weights on a pixel basis we still need this func
         # Denormalize
         means = util.denormalize(means, self.mean, self.std)
         return means
-'''
