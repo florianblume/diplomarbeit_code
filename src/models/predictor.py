@@ -10,6 +10,10 @@ import matplotlib.pyplot as plt
 from data import dataloader
 import util
 
+import sys
+main_path = os.getcwd()
+sys.path.append(os.path.join(main_path, 'src/models'))
+
 class Predictor():
 
     def __init__(self, config):

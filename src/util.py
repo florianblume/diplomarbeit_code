@@ -11,6 +11,7 @@ def normal_dense(x, m_=0.0, std_=None):
 
 
 def img_to_tensor(img):
+    import torchvision
     img.shape = (img.shape[0], img.shape[1], 1)
     imgOut = torchvision.transforms.functional.to_tensor(img)
     return imgOut

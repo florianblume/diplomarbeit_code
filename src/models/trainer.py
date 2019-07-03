@@ -9,6 +9,9 @@ import importlib
 from dataloader import DataLoader
 import util
 
+import sys
+main_path = os.getcwd()
+sys.path.append(os.path.join(main_path, 'src/models'))
 
 class Trainer():
 

@@ -6,7 +6,7 @@ import importlib
 import json
 import os
 
-import predictor
+from models import predictor
 
 class Predictor(predictor.Predictor):
 
