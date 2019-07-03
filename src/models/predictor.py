@@ -7,19 +7,24 @@ import importlib
 import numpy as np
 import matplotlib.pyplot as plt
 
-import dataloader
+from data import dataloader
 import util
 
 class Predictor():
 
     def __init__(self, config):
-        self.config = config
+        self.config_path = os.path.dirname(config)
+        self.config = util.load_config(config)
 
     def _load_config_parameters(self):
         if 'PRED_NETWORK_PATH' not in self.config:
             raise 'No checkpoint path specified. Please specify the path to ' \
                     'a checkpoint of a model that you want to use for prediction.'
-        self.experiment_base_path = self.config['EXPERIMENT_BASE_PATH']
+        self.experiment_base_path = self.config.get('EXPERIMENT_BASE_PATH', self.config_path)
+        if self.experiment_base_path == "":
+            self.experiment_base_path = self.config_path
+        # don't need config path anymore
+        del self.config_path
         self.network_path = os.path.join(self.experiment_base_path, self.config['PRED_NETWORK_PATH'])
         self.ps = self.config['PRED_PATCH_SIZE']
         self.overlap = self.config['OVERLAP']

@@ -138,7 +138,6 @@ class UNet(nn.Module):
 
     def __init__(self, num_classes, mean, std, in_channels=1, depth=5,
                  main_net_depth=1, sub_net_depth=3, num_subnets=2,
-                 weight_mode='image',
                  start_filts=64, up_mode='transpose', merge_mode='add',
                  device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")):
         """
@@ -150,9 +149,6 @@ class UNet(nn.Module):
             in_channels: int, number of channels in the input tensor.
                 Default is 3 for RGB images.
             depth: int, number of MaxPools in the U-Net.
-            weight_mode: ['image', 'pixel'], defines whether the weights
-                will be computed on a per-image-basis, i.e. one value for an image,
-                or individually for each pixel
             start_filts: int, number of convolutional filters for the
                 first conv.
             up_mode: string, type of upconvolution. Choices: 'transpose'
@@ -160,13 +156,6 @@ class UNet(nn.Module):
                 upsampling.
         """
         super(UNet, self).__init__()
-
-        if weight_mode in ['image', 'pixel']:
-            self.weight_mode = weight_mode
-        else:
-            raise ValueError("\"{}\" is not a valid mode for "
-                             "weight_mode. Only \"image\" and "
-                             "\"pixel\" are allowed.".format(weight_mode))
 
         if up_mode in ('transpose', 'upsample'):
             self.up_mode = up_mode
@@ -228,15 +217,7 @@ class UNet(nn.Module):
 
         for i in range(self.num_subnets):
             self.subnets.append(SubUNet(num_classes, mean, std, depth=sub_net_depth))
-            if self.weight_mode == 'pixel':
-                # The network produces a feature map as large as the input
-                # by default. If the user requested pixel-wise weights then
-                # we do not have to reduce the output feature maps to a single value.
-                self.final_op.append(conv1x1(outs, self.num_classes))
-            else:
-                # The user requested the weights to be computed on a per-image-basis
-                # which means that we have to reduce the output to two values
-                self.final_op.append(torch.sum(conv1x1(outs, self.num_classes)))
+            self.final_op.append(conv1x1(outs, self.num_classes))
 
 
         # add the list of modules to current module
@@ -313,22 +294,16 @@ class UNet(nn.Module):
         # Move to GPU
         inputs, labels, masks = inputs.to(
             self.device), labels.to(self.device), masks.to(self.device)
-
+        
         # Forward step
+        # [batch, subnets]
         weights = self(inputs)
+        # [subnets, batch, H, W]
         sub_outputs = [sub(inputs) for sub in self.subnets]
+        # [batch, subnets, H, W]
+        sub_outputs = np.transpose(sub_outputs, axes=(1, 0, 2, 3))
 
-        # Weights are [num_subnets, batch] (image-wise case) or
-        # [num_subnets, batch, H, W]
-
-        # This notation is a remainder of Probabilistic N2V which outputs 800
-        # estimates instead of only 1: [sub_net, batch, class, H, W]
-        outputs = np.zeros_like(sub_outputs)
-        # TODO might need to apply np.squeeze to get rid of class dimension
-
-        for i in outs.shape[0]:
-            # NOTE it should not matter whether weights are pixel based or not here
-            outputs += weights[i] * sub_outputs[i]
+        outputs = np.sum(weights * sub_outputs, axis=1)
         
         # TODO check if this actually works correctly
         # This works in pixel-wise and image-wise case
@@ -337,7 +312,10 @@ class UNet(nn.Module):
         return sub_outputs, weights, labels, masks, data_counter
 
     def predict(self, image, patch_size, overlap):
+        # pixel weighted average
         weighted_average = np.zeros(image.shape)
+        # sub_images = [subnets, H, W]
+        sub_images = np.zeros((self.subnets.shape[0], image.shape))
         # We have to use tiling because of memory constraints on the GPU
         xmin = 0
         ymin = 0
@@ -347,9 +325,13 @@ class UNet(nn.Module):
         while (xmin < image.shape[1]):
             ovTop = 0
             while (ymin < image.shape[0]):
-                a = self.predict_patch(image[ymin:ymax, xmin:xmax])
-                weighted_average[ymin:ymax, xmin:xmax][ovTop:,
-                                            ovLeft:] = a[ovTop:, ovLeft:]
+                patch = image[ymin:ymax, xmin:xmax]
+                weights = self.predict_patch(patch)
+                sub_images[:, ymin:ymax, xmin:xmax][ovTop:, ovLeft:] 
+                    = [subnet.predict_patch(patch) for subnet in self.subnets][:, ovTop:, ovLeft:] 
+                weighted_average[ymin:ymax, xmin:xmax][ovTop:, ovLeft:] = 
+                    np.sum(weights[ovTop:, ovLeft:] * predicted_images[ovTop:, ovLeft:], axis=0) / 
+                                            np.sum(weights, axis=0)
                 ymin = ymin-overlap+patch_size
                 ymax = ymin+patch_size
                 ovTop = overlap//2
@@ -358,6 +340,7 @@ class UNet(nn.Module):
             xmin = xmin-overlap+patch_size
             xmax = xmin+patch_size
             ovLeft = overlap//2
+
         return weighted_average
 
     def predict_patch(self, patch):

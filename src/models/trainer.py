@@ -13,7 +13,8 @@ import util
 class Trainer():
 
     def __init__(self, config):
-        self.config = config
+        self.config_path = os.path.dirname(config)
+        self.config = util.load_config(config)
 
     def _load_config_parameters(self):
         # Set all parameters from the config
@@ -23,7 +24,11 @@ class Trainer():
         # Virtual batch size
         self.vbatch = self.config['VIRTUAL_BATCH_SIZE']
         self.steps_per_epoch = self.config['STEPS_PER_EPOCH']
-        self.experiment_base_path = self.config['EXPERIMENT_BASE_PATH']
+        self.experiment_base_path = self.config.get('EXPERIMENT_BASE_PATH', self.config_path)
+        if self.experiment_base_path == "":
+            self.experiment_base_path = self.config_path
+        # don't need config path anymore
+        del self.config_path
         # Needed for prediction every X training runs
         self.ps = self.config['PRED_PATCH_SIZE']
         self.overlap = self.config['OVERLAP']

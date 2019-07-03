@@ -1,16 +1,8 @@
-import matplotlib.pyplot as plt
 import numpy as np
-import torch.nn as nn
-import torch.nn.functional as F
-import torch
-import torchvision
-import os
-import glob
-
-#device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
+import os   
 
 def normal_dense(x, m_=0.0, std_=None):
+    import torch
     tmp = -((x-m_)**2)
     tmp = tmp / (2.0*std_*std_)
     tmp = torch.exp(tmp)
@@ -216,6 +208,8 @@ def merge_two_npy_datasets(dataset_path_1, dataset_path_2, output_path):
         output_path {str} -- where to store the results, same folder structure
                              as the original datasets
     """
+    import glob
+
     wd = os.getcwd()
     os.chdir(dataset_path_1)
     files_1 = glob.glob('**/*.npy', recursive=True)
@@ -238,5 +232,5 @@ def merge_two_npy_datasets(dataset_path_1, dataset_path_2, output_path):
         output_file = os.path.join(output_path, _file)
         output_dir = os.path.dirname(output_file)
         if not os.path.exists(output_dir):
-            os.mkdir(output_dir)
+            os.makedirs(output_dir)
         np.save(os.path.join(output_path, _file), result)

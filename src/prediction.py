@@ -1,10 +1,9 @@
 import argparse
 import importlib
-
-import util
+import os
 
 def main(predictor, config):
-    predictor_module = importlib.import_module(predictor)
+    predictor_module = importlib.import_module('models.' + predictor)
     predictor = predictor_module.Predictor(config)
     predictor.predict()
 
@@ -14,5 +13,4 @@ if __name__ == "__main__":
     parser.add_argument("--predictor", "-p", 
         help="The predictor to use [packapge.pyfile(without extension)].")
     args = parser.parse_args()
-    config = util.load_config(args.config)
-    main(args.predictor, config)
+    main(args.predictor, args.config)

@@ -7,7 +7,8 @@ import os
 import matplotlib.pyplot as plt
 import importlib
 
-from . import network
+# Weight network depends on config
+#from . import weight_network
 from . import subnetwork
 import util
 import trainer
@@ -17,8 +18,17 @@ class Trainer(trainer.Trainer):
     def _load_network(self):
         # Device gets automatically created in constructor
         # We persist mean and std when saving the network
-        self.net = network.UNet(self.config['NUM_CLASSES'], self.loader.mean(),
+        if self.config['weight_mode'] == 'pixel':
+            from . import pixel_weight_network
+            self.net = pixel_weight_network.UNet(self.config['NUM_CLASSES'], self.loader.mean(),
                         self.loader.std(), depth=self.config['DEPTH'])
+        else if self.config['weight_mode'] == 'image':
+            from . import image_weight_network
+            self.net = image_weight_network.UNet(self.config['NUM_CLASSES'], self.loader.mean(),
+                        self.loader.std(), depth=self.config['DEPTH'])
+        else:
+            raise 'Invalid config value for \"weight_mode\".'
+                        
         #TODO load pre-trained weights of network, if available
 
     def _create_checkpoint(self):
