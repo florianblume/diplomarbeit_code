@@ -6,7 +6,7 @@ import numpy as np
 import os
 import importlib
 
-from dataloader import DataLoader
+from data import dataloader
 import util
 
 import sys
@@ -47,7 +47,7 @@ class Trainer():
     def _load_data(self):
         # The actual loading of the images is performed by the util on demand
         # here we only load the filenames
-        self.loader = DataLoader(self.config['DATA_BASE_PATH'])
+        self.loader = dataloader.DataLoader(self.config['DATA_BASE_PATH'])
         # In case the ground truth data path was not set we pass '' to
         # the loader which returns None to us
         self.data_raw, self.data_gt = self.loader.load_training_data(

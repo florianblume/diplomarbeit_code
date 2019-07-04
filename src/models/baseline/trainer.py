@@ -9,7 +9,7 @@ import importlib
 
 from . import network
 import util
-import trainer
+from models import trainer
 
 class Trainer(trainer.Trainer):
 
