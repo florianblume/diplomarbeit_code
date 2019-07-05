@@ -16,18 +16,20 @@ import trainer
 class Trainer(trainer.Trainer):
 
     def _load_network(self):
-        # Device gets automatically created in constructor
-        # We persist mean and std when saving the network
         if self.config['weight_mode'] == 'pixel':
             from . import pixel_weight_network
-            self.net = pixel_weight_network.UNet(self.config['NUM_CLASSES'], self.loader.mean(),
-                        self.loader.std(), depth=self.config['DEPTH'])
+            net_module = pixel_weight_network
         else if self.config['weight_mode'] == 'image':
             from . import image_weight_network
-            self.net = image_weight_network.UNet(self.config['NUM_CLASSES'], self.loader.mean(),
-                        self.loader.std(), depth=self.config['DEPTH'])
+            net_module = image_weight_network
         else:
             raise 'Invalid config value for \"weight_mode\".'
+
+        self.net = net_module.UNet(self.config['NUM_CLASSES'], self.loader.mean(),
+                    self.loader.std(), depth=self.config['DEPTH'],
+                    main_net_depth=config['MAIN_NET_DEPTH'],
+                    sub_net_depth=config['SUB_NET_DEPTH'],
+                    num_subnets=config['NUM_SUBNETS'])
                         
         #TODO load pre-trained weights of network, if available
 
@@ -54,11 +56,8 @@ class Trainer(trainer.Trainer):
         psnr = util.PSNR(gt, prediction, 255)
         self.writer.add_scalar('psnr', psnr, self.print_step)
 
-        # Ugly but it works
-        plt.imsave('pred.png', prediction)
-        pred = plt.imread('pred.png')
-        self.writer.add_image('pred', pred, self.print_step, dataformats='HWC')
-        os.remove('pred.png')
+        prediction = prediction.astype(np.uint8)
+        self.writer.add_image('pred', prediction, self.print_step, dataformats='HW')
 
         for name, param in self.net.named_parameters():
             self.writer.add_histogram(

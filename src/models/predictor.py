@@ -77,7 +77,7 @@ class Predictor():
             pred_image_filename = 'pred_' + str(index).zfill(4) + '.png'
             if self.pred_output_path != "":
                 # zfill(4) is enough, probably never going to pedict on more images than 9999
-                plt.imsave(os.path.join(self.pred_output_path, pred_image_filename), prediction)
+                plt.imsave(os.path.join(self.pred_output_path, pred_image_filename), prediction, cmap='gray')
 
             im = util.denormalize(im, self.net.mean, self.net.std)
 

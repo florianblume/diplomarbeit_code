@@ -2,6 +2,7 @@ import os
 import numpy as np
 import sys
 import shutil
+import skimage
 from skimage import io
 
 main_path = os.getcwd()
@@ -22,7 +23,7 @@ Script to create the datasets as they were used in the experiments.
 """
 
 ### Remove old data
-"""
+
 print('Removing old generated data.')
 shutil.rmtree(os.path.join(main_path, 'data/processed'))
 
@@ -159,54 +160,41 @@ util.merge_two_npy_datasets('data/processed/fish/gauss30',
                             'data/processed/mouse/gauss30',
                             'data/processed/joined/fish_mouse/gauss30_gauss30/')
 
-"""
+
 print('Processing SimSim dataset...')
 
-raw = io.imread('data/raw/simsim/camsim_ccd_phot300_rn8_bgrd0.tif')
-gt = io.imread('data/raw/simsim/noise_free_32b.tif')
-assert raw.shape[0] == gt.shape[0]
+train_raw = io.imread('data/raw/simsim/camsim_ccd_phot300_rn8_bgrd0.tif')
+train_gt = io.imread('data/raw/simsim/noise_free_32b.tif')
+assert train_raw.shape[0] == train_raw.shape[0]
 
-factor = int(raw.shape[0] / 3)
-
-train_raws = []
-train_gts = []
-
-for i in range(3):
-    train_raws.append(raw[i * factor:(i + 1) * factor])
-    train_gts.append(gt[i * factor:(i + 1) * factor])
-
-# NOTE this is the actual test set, not the validation set
-test_size = 10
-
-test_raws = []
-test_gts = []
-
-from skimage import io
-
-# Take away test_size many images from raws and gts and create the test sets
-for i in range(3):
-    indices = np.random.choice(train_raws[i].shape[0], test_size, replace=False)
-    test_raws.append(train_raws[i][indices])
-    train_raws[i] = np.delete(train_raws[i], indices, axis=0)
-    test_gts.append(train_gts[i][indices])
-    train_gts[i] = np.delete(train_gts[i], indices, axis=0)
+factor = int(train_raw.shape[0] / 3)
 
 os.makedirs('data/processed/simsim/raw/')
 os.makedirs('data/processed/simsim/gt/')
-os.makedirs('data/processed/joined/simsim/')
+os.makedirs('data/processed/joined/simsim/raw')
+os.makedirs('data/processed/joined/simsim/gt')
 
 for i in range(3):
-    np.save('data/processed/simsim/raw/train_part_{}.npy'.format(str(i)), raw[i * factor:(i + 1) * factor])
-    np.save('data/processed/simsim/gt/train_part_{}.npy'.format(str(i)), gt[i * factor:(i + 1) * factor])
+    np.save('data/processed/simsim/raw/train_part_{}.npy'.format(str(i)), train_raw[i * factor:(i + 1) * factor])
+    np.save('data/processed/simsim/gt/train_part_{}.npy'.format(str(i)), train_gt[i * factor:(i + 1) * factor])
 
-train_raw = np.concatenate(train_raws, axis=0)
-test_raw = np.concatenate(test_raws, axis=0)
-np.save('data/processed/joined/simsim/train_raw.npy', train_raw)
-np.save('data/processed/joined/simsim/test_raw.npy', test_raw)
+np.save('data/processed/joined/simsim/raw/train_raw.npy', train_raw)
+np.save('data/processed/joined/simsim/gt/train_gt.npy', train_gt)
 
-train_gt = np.concatenate(train_gts, axis=0)
-test_gt = np.concatenate(test_gts, axis=0)
-np.save('data/processed/joined/simsim/train_gt.npy', train_gt)
-np.save('data/processed/joined/simsim/test_gt.npy', test_gt)
+# Create the test set
+
+test_raw = []
+test_gt = []
+
+for i in range(train_raw.shape[0]):
+    test_raw.append(skimage.transform.rotate(train_raw[i], 180))
+    test_gt.append(skimage.transform.rotate(train_gt[i], 180))
+
+for i in range(3):
+    np.save('data/processed/simsim/raw/test_part_{}.npy'.format(str(i)), test_raw[i * factor:(i + 1) * factor])
+    np.save('data/processed/simsim/gt/test_part_{}.npy'.format(str(i)), test_gt[i * factor:(i + 1) * factor])
+
+np.save('data/processed/joined/simsim/raw/test_raw.npy', test_raw)
+np.save('data/processed/joined/simsim/gt/test_gt.npy', test_gt)
 
 print('Done.')

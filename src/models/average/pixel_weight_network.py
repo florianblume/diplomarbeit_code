@@ -216,7 +216,9 @@ class UNet(nn.Module):
         self.final_op = nn.ModuleList()
 
         for i in range(self.num_subnets):
+            # We create each requested subnet
             self.subnets.append(SubUNet(num_classes, mean, std, depth=sub_net_depth))
+            # And for each pixel we output a weight for each subnet
             self.final_op.append(conv1x1(outs, self.num_classes))
 
 
@@ -296,26 +298,26 @@ class UNet(nn.Module):
             self.device), labels.to(self.device), masks.to(self.device)
         
         # Forward step
-        # [batch, subnets]
+        # Each pixel has its individual weight
+        # [batch, subnets, H, W]
         weights = self(inputs)
         # [subnets, batch, H, W]
         sub_outputs = [sub(inputs) for sub in self.subnets]
         # [batch, subnets, H, W]
         sub_outputs = np.transpose(sub_outputs, axes=(1, 0, 2, 3))
-
+        # [batch, subnets, H, W] x [batch, subnets, H, W]
         outputs = np.sum(weights * sub_outputs, axis=1)
-        
         # TODO check if this actually works correctly
         # This works in pixel-wise and image-wise case
-        outputs /= np.sum(weights, axis=0)
+        outputs /= np.sum(weights, axis=1)
         
         return sub_outputs, weights, labels, masks, data_counter
 
     def predict(self, image, patch_size, overlap):
-        # pixel weighted average
-        weighted_average = np.zeros(image.shape)
+        # weights for each subnet per pixel
+        weights = np.zeros((self.num_subnets, image.shape))
         # sub_images = [subnets, H, W]
-        sub_images = np.zeros((self.subnets.shape[0], image.shape))
+        sub_images = np.zeros((self.num_subnets, image.shape))
         # We have to use tiling because of memory constraints on the GPU
         xmin = 0
         ymin = 0
@@ -326,12 +328,12 @@ class UNet(nn.Module):
             ovTop = 0
             while (ymin < image.shape[0]):
                 patch = image[ymin:ymax, xmin:xmax]
-                weights = self.predict_patch(patch)
+                # self.predict_patch(patch) returns [num_subnets, H, W]
+                # i.e. one weight for each pixel
+                weights[:, ymin:ymax, xmin:xmax][ovTop:, ovLeft:]  
+                    = self.predict_patch(patch)
                 sub_images[:, ymin:ymax, xmin:xmax][ovTop:, ovLeft:] 
                     = [subnet.predict_patch(patch) for subnet in self.subnets][:, ovTop:, ovLeft:] 
-                weighted_average[ymin:ymax, xmin:xmax][ovTop:, ovLeft:] = 
-                    np.sum(weights[ovTop:, ovLeft:] * predicted_images[ovTop:, ovLeft:], axis=0) / 
-                                            np.sum(weights, axis=0)
                 ymin = ymin-overlap+patch_size
                 ymax = ymin+patch_size
                 ovTop = overlap//2
@@ -341,7 +343,10 @@ class UNet(nn.Module):
             xmax = xmin+patch_size
             ovLeft = overlap//2
 
-        return weighted_average
+        # weights * sub_images = [num_subnets, H, W] x [num_subnets, H, W]
+        weighted_average = np.sum(weights * sub_images, axis=0) / np.sum(weights, axis=0)
+
+        return weighted_average, weights
 
     def predict_patch(self, patch):
         """Performs network prediction on a patch of an image using the
@@ -368,14 +373,13 @@ class UNet(nn.Module):
         samples = (output).permute(1, 0, 2, 3)
 
         # In contrast to probabilistic N2V we only have one sample
-        means = samples[0, ...]
+        weights = samples[0, ...]
 
         # Get data from GPU
-        means = means.cpu().detach().numpy()
+        weights = weights.cpu().detach().numpy()
 
         # Reshape to 2D images and remove padding
-        means.shape = (output.shape[2], output.shape[3])
+        weights.shape = (output.shape[2], output.shape[3])
 
-        # Denormalize
-        means = util.denormalize(means, self.mean, self.std)
-        return means
+        # No denormalizing here as we output the weights
+        return weights

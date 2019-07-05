@@ -42,16 +42,10 @@ class Trainer(trainer.Trainer):
         psnr = util.PSNR(gt, prediction, 255)
         self.writer.add_scalar('psnr', psnr, self.print_step)
 
-        # So ugly but it works
-        plt.imsave('pred.png', prediction)
-        pred = plt.imread('pred.png')
-        self.writer.add_image('pred', pred, self.print_step, dataformats='HWC')
-        os.remove('pred.png')
+        prediction = prediction.astype(np.uint8)
+        self.writer.add_image('pred', prediction, self.print_step, dataformats='HW')
 
-        plt.imsave('std.png', self.std)
-        pred = plt.imread('std.png')
-        self.writer.add_image('std', self.std, self.print_step, dataformats='HWC')
-        os.remove('std.png')
+        self.writer.add_image('std', self.std.astype(np.uint8), self.print_step, dataformats='HW')
 
         for name, param in self.net.named_parameters():
             self.writer.add_histogram(

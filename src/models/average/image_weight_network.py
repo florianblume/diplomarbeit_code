@@ -216,7 +216,10 @@ class UNet(nn.Module):
         self.final_op = nn.ModuleList()
 
         for i in range(self.num_subnets):
+            # We create each requested subnet
             self.subnets.append(SubUNet(num_classes, mean, std, depth=sub_net_depth))
+            # And we output a weight for each subnet based on the whole image
+            # That's why we employ torch.sum
             self.final_op.append(torch.sum(conv1x1(outs, self.num_classes)))
 
 
@@ -296,24 +299,33 @@ class UNet(nn.Module):
             self.device), labels.to(self.device), masks.to(self.device)
 
         # Forward step
-        # [batch, subnets, H, W]
+        # Actually we compute the weights for only one patch here, not the whole
+        # image. We could compute the weights for one image if we ran the network
+        # on all images that are fused in the batch that has been created above.
+        # This could fail if the images are too large. Also, we would have to
+        # obtain the indices of the images used in the batch to retrieve them.
+        # We assume that training the network on patches and during prediction
+        # averaging the weights works just as well since the network performs
+        # some kind of averaging already but only on the patch-level.
+        # [batch, subnets]
         weights = self(inputs)
         # [subnets, batch, H, W]
         sub_outputs = [sub(inputs) for sub in self.subnets]
         # [batch, subnets, H, W]
         sub_outputs = np.transpose(sub_outputs, axes=(1, 0, 2, 3))
-
+        # All pixels in each sub_output get multiplied by the same weight
+        # sum([batch, subnets] x [batch, subnets, H, W]) = [batch, H, W]
         outputs = np.sum(weights * sub_outputs, axis=1)
-        
+        # [batch, H, W] / [batch]
         outputs /= np.sum(weights, axis=1)
         
         return sub_outputs, weights, labels, masks, data_counter
 
     def predict(self, image, patch_size, overlap):
-        # pixel weighted average
-        weighted_average = np.zeros(image.shape)
+        # weights for each subnet for the whole imagess
+        weights = []
         # sub_images = [subnets, H, W]
-        sub_images = np.zeros((self.subnets.shape[0], image.shape))
+        sub_images = np.zeros((self.num_subnets, image.shape))
         # We have to use tiling because of memory constraints on the GPU
         xmin = 0
         ymin = 0
@@ -324,12 +336,10 @@ class UNet(nn.Module):
             ovTop = 0
             while (ymin < image.shape[0]):
                 patch = image[ymin:ymax, xmin:xmax]
-                weights = self.predict_patch(patch)
+                # We save all weights for all patches and average later
+                weights.append(self.predict_patch(patch))
                 sub_images[:, ymin:ymax, xmin:xmax][ovTop:, ovLeft:] 
                     = [subnet.predict_patch(patch) for subnet in self.subnets][:, ovTop:, ovLeft:] 
-                weighted_average[ymin:ymax, xmin:xmax][ovTop:, ovLeft:] = 
-                    np.sum(weights[ovTop:, ovLeft:] * predicted_images[ovTop:, ovLeft:], axis=0) / 
-                                            np.sum(weights, axis=0)
                 ymin = ymin-overlap+patch_size
                 ymax = ymin+patch_size
                 ovTop = overlap//2
@@ -339,7 +349,14 @@ class UNet(nn.Module):
             xmax = xmin+patch_size
             ovLeft = overlap//2
 
-        return weighted_average
+        # [image.shape[0] x image.shape[1] = num_patches, num_subnets]
+        weights = np.array(weights)
+        # [num_subnets] = weights for the whole image for each subnet
+        weights = np.mean(weights, axis=0)
+        # sub_images * weights = [num_subnets, H, W] * [num_subnets]
+        weighted_average = np.sum(sub_images * weights, axis=0) / np.sum(weights)
+
+        return weighted_average, weights
 
     def predict_patch(self, patch):
         """Performs network prediction on a patch of an image using the
@@ -363,17 +380,15 @@ class UNet(nn.Module):
 
         output = self(inputs)
 
-        samples = (output).permute(1, 0, 2, 3)
+        # In contrast to the other networks we only have a single output number
+        # per patch and not an output of shape [H, W] that's why we need to
+        # write (1, 0, 2) instead of (1, 0, 2, 3)
+        samples = (output).permute(1, 0, 2)
 
         # In contrast to probabilistic N2V we only have one sample
-        means = samples[0, ...]
+        weights = samples[0, ...]
 
         # Get data from GPU
-        means = means.cpu().detach().numpy()
+        weights = weights.cpu().detach().numpy()
 
-        # Reshape to 2D images and remove padding
-        means.shape = (output.shape[2], output.shape[3])
-
-        # Denormalize
-        means = util.denormalize(means, self.mean, self.std)
-        return means
+        return weights
