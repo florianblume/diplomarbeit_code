@@ -175,20 +175,6 @@ def add_shot_noise_to_images(images, defect_ratio):
     return result
 
 
-def numpy_array_to_images(array_path, output_path):
-    """To be able to visualize the numpy arrays that the networks handle this
-    function can convert a dedicated numpy array file to images.
-
-    Arguments:
-        array_path {[type]} -- [description]
-        output_path {[type]} -- [description]
-    """
-    import matplotlib.pyplot as plt
-    data = np.load(array_path)
-    for i, image in enumerate(data):
-        plt.imsave(os.path.join(output_path, str(i).zfill(4) + '.png'), image)
-
-
 def add_gauss_noise_to_images(images, mean, std):
     result = []
     for image in images:

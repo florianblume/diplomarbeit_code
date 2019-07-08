@@ -2,7 +2,7 @@ import os
 import numpy as np
 import sys
 import shutil
-import skimage
+import tifffile as tif
 from skimage import io
 
 main_path = os.getcwd()
@@ -161,10 +161,11 @@ util.merge_two_npy_datasets('data/processed/fish/gauss30',
                             'data/processed/joined/fish_mouse/gauss30_gauss30/')
 
 
+
 print('Processing SimSim dataset...')
 
-train_raw = io.imread('data/raw/simsim/camsim_ccd_phot300_rn8_bgrd0.tif')
-train_gt = io.imread('data/raw/simsim/noise_free_32b.tif')
+train_raw = tif.imread('data/raw/simsim/camsim_ccd_phot300_rn8_bgrd0.tif')
+train_gt = tif.imread('data/raw/simsim/noise_free_32b.tif')
 assert train_raw.shape[0] == train_raw.shape[0]
 
 factor = int(train_raw.shape[0] / 3)
@@ -187,8 +188,11 @@ test_raw = []
 test_gt = []
 
 for i in range(train_raw.shape[0]):
-    test_raw.append(skimage.transform.rotate(train_raw[i], 180))
-    test_gt.append(skimage.transform.rotate(train_gt[i], 180))
+    # We rotate all images by 180 degrees to obtain our test set
+    # The stripes of the light are in the same direction but the
+    # image is different
+    test_raw.append(np.rot90(train_raw[i], k=2))
+    test_gt.append(np.rot90(train_gt[i], k=2))
 
 for i in range(3):
     np.save('data/processed/simsim/raw/test_part_{}.npy'.format(str(i)), test_raw[i * factor:(i + 1) * factor])

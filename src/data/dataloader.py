@@ -42,7 +42,7 @@ class DataLoader():
         """
         return self._std
 
-    def load_training_data(self, data_raw_path, data_gt_path):
+    def load_training_data(self, data_raw_path: str, data_gt_path: str, convert_to=None):
         """Loads the raw and ground truth data from the given paths for
         training. The data also gets normalized by the mean and std of
         the raw data. These values are also saved in this DataLoader and
@@ -54,6 +54,10 @@ class DataLoader():
             gt_data_path {str}   -- path to the saved numpy array of
                                     ground truth data relative to the
                                     base path
+            convert_to {str}     -- if specified, the loaded data is converted
+                                    to the desired numpy dtype - for more
+                                    information on types see 
+                                    https://docs.scipy.org/doc/numpy/reference/arrays.dtypes.html
 
         Returns:
             np.array -- normalized raw data array
@@ -63,14 +67,18 @@ class DataLoader():
 
         data_raw_path = os.path.join(self.data_base_path, data_raw_path)
         data_raw = np.load(data_raw_path)
-        data_raw = data_raw.astype(np.uint8)
+        if convert_to is not None:
+            data_raw = data_raw.astype(np.dtype(convert_to))
+        print(data_raw.dtype)
+
         print("Loaded " +
               str(data_raw.shape[0]) + " images from " + data_raw_path)
 
         if data_gt_path != "":
             data_gt_path = os.path.join(self.data_base_path, data_gt_path)
             data_gt = np.load(data_gt_path)
-            data_gt = data_gt.astype(np.uint8)
+            if convert_to is not None:
+                data_gt = data_gt.astype(np.dtype(convert_to))
             print("Loaded " +
                   str(data_gt.shape[0]) + " images from " + data_gt_path)
             img_factor = int(data_raw.shape[0]/data_gt.shape[0])
@@ -95,7 +103,8 @@ class DataLoader():
 
         return data_raw, data_gt
 
-    def load_test_data(self, data_raw_path: str, data_gt_path: str, mean: int, std: int):
+    def load_test_data(self, data_raw_path: str, data_gt_path: str, 
+                            mean: int, std: int, convert_to=None):
         """Loads the the data for prediction at the specified path
         and normalizes it using the mean and std from the raw training
         data loaded via the load_training_data function.
@@ -103,10 +112,14 @@ class DataLoader():
         Arguments:
             raw_data_path {str} -- path to the saved numpy array of raw
                                    data relative to the base path
-            gt_data_path {str} -- path to the saved numpy array of ground-truth
+            gt_data_path {str}  -- path to the saved numpy array of ground-truth
                                    data relative to the base path, can be "" to return None
-            mean {int} -- the mean to normalize the raw data with
-            std {int} -- the std to normalize the raw data with
+            mean {int}          -- the mean to normalize the raw data with
+            std {int}           -- the std to normalize the raw data with
+            convert_to {str}    -- if specified, the loaded data is converted
+                                    to the desired numpy dtype - for more
+                                    information on types see 
+                                    https://docs.scipy.org/doc/numpy/reference/arrays.dtypes.html
 
         Returns:
             np.array         -- the normalized prediction data
@@ -115,10 +128,12 @@ class DataLoader():
 
         print("Loading prediction data...")
         data_raw = np.load(os.path.join(self.data_base_path, data_raw_path))
-        data_raw = data_raw.astype(np.uint8)
+        if convert_to is not None:
+            data_raw = data_raw.astype(np.dtype(convert_to))
         if data_gt_path != "":
             data_gt = np.load(os.path.join(self.data_base_path, data_gt_path))
-            data_gt = data_gt.astype(np.uint8)
+            if convert_to is not None:
+                data_gt = data_gt.astype(np.dtype(convert_to))
         else:
             None
         print("Normalizing RAW data with mean {} and std {}...".format(mean, std))

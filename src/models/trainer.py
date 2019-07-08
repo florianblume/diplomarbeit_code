@@ -51,7 +51,9 @@ class Trainer():
         # In case the ground truth data path was not set we pass '' to
         # the loader which returns None to us
         self.data_raw, self.data_gt = self.loader.load_training_data(
-            self.config['DATA_TRAIN_RAW_PATH'], self.config.get('DATA_TRAIN_GT_PATH', ''))
+            self.config['DATA_TRAIN_RAW_PATH'], 
+            self.config.get('DATA_TRAIN_GT_PATH', ''),
+            self.config.get('CONVERT_DATA_TO', None))
 
         if self.data_gt is not None:
             data_raw, data_gt = util.joint_shuffle(self.data_raw, self.data_gt)

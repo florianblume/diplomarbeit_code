@@ -55,7 +55,7 @@ class Predictor():
         self.loader = dataloader.DataLoader(self.config['DATA_BASE_PATH'])
         self.data_test, self.data_gt = self.loader.load_test_data(
             self.config['DATA_PRED_RAW_PATH'], self.config['DATA_PRED_GT_PATH'],
-            self.net.mean, self.net.std)
+            self.net.mean, self.net.std, self.config.get('CONVERT_DATA_TO', None))
 
         if self.data_gt is None:
             print('No ground-truth data provided. Images will be denoised but PSNR is not computable.')
@@ -75,9 +75,11 @@ class Predictor():
             prediction = self._predict(im)
 
             pred_image_filename = 'pred_' + str(index).zfill(4) + '.png'
+            im_filename = 'im_' + str(index).zfill(4) + '.png'
             if self.pred_output_path != "":
                 # zfill(4) is enough, probably never going to pedict on more images than 9999
                 plt.imsave(os.path.join(self.pred_output_path, pred_image_filename), prediction, cmap='gray')
+                plt.imsave(os.path.join(self.pred_output_path, im_filename), im, cmap='gray')
 
             im = util.denormalize(im, self.net.mean, self.net.std)
 
