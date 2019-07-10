@@ -13,7 +13,7 @@ import sys
 main_path = os.getcwd()
 sys.path.append(os.path.join(main_path, 'src/models'))
 
-class Trainer():
+class AbstractTrainer():
 
     def __init__(self, config):
         self.config_path = os.path.dirname(config)
@@ -80,6 +80,9 @@ class Trainer():
     def _load_network(self):
         raise 'This function needs to be implemented by the subclasses.'
 
+    def _load_network_weights(self):
+        raise 'This function needs to be implemented by the subclasses.'
+
     def _create_checkpoint(self):
         raise 'This function needs to be implemented by the subclasses.'
 
@@ -97,7 +100,7 @@ class Trainer():
         # Average loss for the current iteration
         # Need to store on class because subclasses need the loss
         self.avg_train_loss = np.mean(train_losses)
-        self.trainHist.append(self.avg_train_loss)
+        self.train_hist.append(self.avg_train_loss)
 
         self.net.train(False)
         val_losses = []
@@ -107,7 +110,7 @@ class Trainer():
             outputs, labels, masks, valCounter = self.net.training_predict(
                     self.data_val, self.data_val_gt, valCounter, 
                     self.size, self.box_size, self.bs)
-            # Needed by subclasses
+            # Needed by subclasses that's why we store val_loss on self
             self.val_loss = self.net.loss_function(outputs, labels, masks)
             val_losses.append(self.val_loss.item())
 
@@ -116,14 +119,14 @@ class Trainer():
         self.net.train(True)
 
         # Save the current best network
-        if len(self.valHist) == 0 or self.avg_val_loss < np.min(self.valHist):
+        if len(self.val_hist) == 0 or self.avg_val_loss < np.min(self.val_hist):
             torch.save(
                 self._create_checkpoint(), 
                 os.path.join(self.experiment_base_path, 'best.net'))
-        self.valHist.append(self.avg_val_loss)
+        self.val_hist.append(self.avg_val_loss)
 
         np.save(os.path.join(self.experiment_base_path, 'history.npy'),
-                (np.array([np.arange(self.epoch), self.trainHist, self.valHist])))
+                (np.array([np.arange(self.epoch), self.train_hist, self.val_hist])))
 
         self.scheduler.step(self.avg_val_loss)
 
@@ -138,9 +141,22 @@ class Trainer():
         raise 'This function needs to be implemented by the subclasses.'
 
     def train(self):
+        # Need to set here because those values might get overwritten by
+        # subclasses when loading a saved net for further training
+        self.train_hist = []
+        self.val_hist = []
+        self.epoch = 0
+        self.running_loss = 0.0
+        self.net = None
+
         self._load_config_parameters()
         self._load_data()
         self._load_network()
+        # Optimizer is needed to load network weights that's why we create it first
+        self.optimizer = optim.Adam(self.net.parameters(), lr=0.0001)
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, 'min', patience=10, factor=0.5, verbose=True)
+        self._load_network_weights()
         self.net.train(True)
 
         # If tensorboard logs are requested create the writer
@@ -148,15 +164,6 @@ class Trainer():
             from torch.utils.tensorboard import SummaryWriter
             self.writer = SummaryWriter(os.path.join(
                 self.experiment_base_path, 'tensorboard'))
-
-        self.optimizer = optim.Adam(self.net.parameters(), lr=0.0001)
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, 'min', patience=10, factor=0.5, verbose=True)
-
-        self.trainHist = []
-        self.valHist = []
-        self.epoch = 0
-        self.running_loss = 0.0
 
         # loop over the dataset multiple times
         for step in range(self.epochs):
@@ -175,8 +182,8 @@ class Trainer():
                 self.epoch = step / self.steps_per_epoch
                 self._on_epoch_end(step, self.train_losses)
 
-                if step / self.steps_per_epoch > 200:
-                    break
+                #if step / self.steps_per_epoch > 200:
+                    #break
 
         if self.write_tensorboard_data:
             # The graph is nonsense and otherwise we have to

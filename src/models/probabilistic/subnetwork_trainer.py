@@ -7,7 +7,7 @@ import os
 import matplotlib.pyplot as plt
 import importlib
 
-from . import subnetwork
+from . import subnetwork_standalone as subnetwork
 import trainer
 import util
 

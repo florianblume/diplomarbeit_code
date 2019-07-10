@@ -6,9 +6,9 @@ import importlib
 import json
 import os
 
-from models import predictor
+from models import abstract_predictor
 
-class Predictor(predictor.Predictor):
+class Predictor(abstract_predictor.AbstractPredictor):
 
     def _predict(self, image):
         image = self.net.predict(image, self.ps, self.overlap)

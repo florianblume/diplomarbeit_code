@@ -51,7 +51,8 @@ def joint_shuffle(inA, inB):
     return inA[indices], inB[indices]
 
 
-def random_crop_fri(data, width, height, box_size, dataClean=None, counter=None):
+def random_crop_fri(data, width, height, box_size, dataClean=None, counter=None,
+                        augment_data=True):
 
     if counter is None or counter >= data.shape[0]:
         counter = 0
@@ -68,11 +69,12 @@ def random_crop_fri(data, width, height, box_size, dataClean=None, counter=None)
     else:
         imgClean = None
     imgOut, imgOutC, mask = random_crop(
-        img, width, height, box_size, imgClean=imgClean)
+        img, width, height, box_size, imgClean=imgClean, augment_data=augment_data)
     return imgOut, imgOutC, mask, counter
 
 
-def random_crop(img, width, height, box_size, imgClean=None, hotPixels=64):
+def random_crop(img, width, height, box_size, imgClean=None, 
+                    hotPixels=64, augment_data=True):
     assert img.shape[0] >= height
     assert img.shape[1] >= width
 
@@ -117,11 +119,13 @@ def random_crop(img, width, height, box_size, imgClean=None, hotPixels=64):
         # Noise2Clean
         mask[:] = 1.0
 
-    rot = np.random.randint(0, 4)
+    rot = 0
+    if augment_data:
+        rot = np.random.randint(0, 4)
     imgOut = np.array(np.rot90(imgOut, rot))
     imgOutC = np.array(np.rot90(imgOutC, rot))
     mask = np.array(np.rot90(mask, rot))
-    if np.random.choice((True, False)):
+    if augment_data and np.random.choice((True, False)):
         imgOut = np.array(np.flip(imgOut))
         imgOutC = np.array(np.flip(imgOutC))
         mask = np.array(np.flip(mask))

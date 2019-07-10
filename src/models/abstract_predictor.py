@@ -14,7 +14,7 @@ import sys
 main_path = os.getcwd()
 sys.path.append(os.path.join(main_path, 'src/models'))
 
-class Predictor():
+class AbstractPredictor():
 
     def __init__(self, config):
         self.config_path = os.path.dirname(config)

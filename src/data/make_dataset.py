@@ -5,10 +5,11 @@ import shutil
 import tifffile as tif
 from skimage import io
 
+# Needs to be in this order otherwise util won't get found
 main_path = os.getcwd()
 sys.path.append(os.path.join(main_path, 'src'))
-
 import util
+
 
 def load_add_gauss_store(src_path, dest_path, mean, std):
     data = np.load(os.path.join(main_path, src_path))
@@ -17,6 +18,7 @@ def load_add_gauss_store(src_path, dest_path, mean, std):
     if not os.path.exists(path):
         os.makedirs(path)
     np.save(os.path.join(main_path, dest_path), data)
+
 
 """
 Script to create the datasets as they were used in the experiments.
@@ -160,8 +162,6 @@ util.merge_two_npy_datasets('data/processed/fish/gauss30',
                             'data/processed/mouse/gauss30',
                             'data/processed/joined/fish_mouse/gauss30_gauss30/')
 
-
-
 print('Processing SimSim dataset...')
 
 train_raw = tif.imread('data/raw/simsim/camsim_ccd_phot300_rn8_bgrd0.tif')
@@ -172,15 +172,40 @@ factor = int(train_raw.shape[0] / 3)
 
 os.makedirs('data/processed/simsim/raw/')
 os.makedirs('data/processed/simsim/gt/')
-os.makedirs('data/processed/joined/simsim/raw')
-os.makedirs('data/processed/joined/simsim/gt')
+os.makedirs('data/processed/joined/simsim/all/raw')
+os.makedirs('data/processed/joined/simsim/all/gt')
+os.makedirs('data/processed/joined/simsim/part_0_1/raw')
+os.makedirs('data/processed/joined/simsim/part_0_1/gt')
+os.makedirs('data/processed/joined/simsim/part_1_2/raw')
+os.makedirs('data/processed/joined/simsim/part_1_2/gt')
+os.makedirs('data/processed/joined/simsim/part_0_2/raw')
+os.makedirs('data/processed/joined/simsim/part_0_2/gt')
+
+train_raws = []
+train_gts = []
+test_raws = []
+test_gts = []
+sub_indices = [(0, 1), (1, 2), (0, 2)]
 
 for i in range(3):
-    np.save('data/processed/simsim/raw/train_part_{}.npy'.format(str(i)), train_raw[i * factor:(i + 1) * factor])
-    np.save('data/processed/simsim/gt/train_part_{}.npy'.format(str(i)), train_gt[i * factor:(i + 1) * factor])
+    train_raws.append(train_raw[i * factor:(i + 1) * factor])
+    train_gts.append(train_gt[i * factor:(i + 1) * factor])
+    np.save(
+        'data/processed/simsim/raw/train_part_{}.npy'.format(str(i)), train_raws[i])
+    np.save(
+        'data/processed/simsim/gt/train_part_{}.npy'.format(str(i)), train_gts[i])
 
-np.save('data/processed/joined/simsim/raw/train_raw.npy', train_raw)
-np.save('data/processed/joined/simsim/gt/train_gt.npy', train_gt)
+np.save('data/processed/joined/simsim/all/raw/train.npy', train_raw)
+np.save('data/processed/joined/simsim/all/gt/train.npy', train_gt)
+
+# Create combination of subsets
+for sub_index in sub_indices:
+    np.save(
+        'data/processed/joined/simsim/part_{}_{}/raw/train.npy'.format(sub_index[0], sub_index[1]),
+        np.concatenate([train_raws[sub_index[0]], train_raws[sub_index[1]]], axis=0))
+    np.save(
+        'data/processed/joined/simsim/part_{}_{}/gt/train.npy'.format(sub_index[0], sub_index[1]),
+        np.concatenate([train_gts[sub_index[0]], train_gts[sub_index[1]]], axis=0))
 
 # Create the test set
 
@@ -195,10 +220,23 @@ for i in range(train_raw.shape[0]):
     test_gt.append(np.rot90(train_gt[i], k=2))
 
 for i in range(3):
-    np.save('data/processed/simsim/raw/test_part_{}.npy'.format(str(i)), test_raw[i * factor:(i + 1) * factor])
-    np.save('data/processed/simsim/gt/test_part_{}.npy'.format(str(i)), test_gt[i * factor:(i + 1) * factor])
+    test_raws.append(test_raw[i * factor:(i + 1) * factor])
+    test_gts.append(test_gt[i * factor:(i + 1) * factor])
+    np.save(
+        'data/processed/simsim/raw/test_part_{}.npy'.format(str(i)), test_raws[i])
+    np.save('data/processed/simsim/gt/test_part_{}.npy'.format(str(i)),
+            test_gts[i])
 
-np.save('data/processed/joined/simsim/raw/test_raw.npy', test_raw)
-np.save('data/processed/joined/simsim/gt/test_gt.npy', test_gt)
+np.save('data/processed/joined/simsim/all/raw/test.npy', test_raw)
+np.save('data/processed/joined/simsim/all/gt/test.npy', test_gt)
+
+# Create combination of subsets
+for sub_index in sub_indices:
+    np.save(
+        'data/processed/joined/simsim/part_{}_{}/raw/test.npy'.format(sub_index[0], sub_index[1]),
+        np.concatenate([test_raws[sub_index[0]], test_raws[sub_index[1]]], axis=0))
+    np.save(
+        'data/processed/joined/simsim/part_{}_{}/gt/test.npy'.format(sub_index[0], sub_index[1]),
+        np.concatenate([test_gts[sub_index[0]], test_gts[sub_index[1]]], axis=0))
 
 print('Done.')
