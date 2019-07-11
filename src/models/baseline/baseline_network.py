@@ -16,8 +16,8 @@ from abstract_network import conv1x1
 
 class UNet(abstract_network.AbstractUNet):
     
-    def build_network_head(self, outs):
-        return conv1x1(outs, self.num_classes)
+    def _build_network_head(self, outs):
+        self.network_head = conv1x1(outs, self.num_classes)
 
     @staticmethod
     def loss_function(outputs, labels, masks):
@@ -26,6 +26,24 @@ class UNet(abstract_network.AbstractUNet):
         # Simple L2 loss
         loss = torch.sum(masks*(labels-outs)**2)/torch.sum(masks)
         return loss
+
+    def forward(self, x):
+        encoder_outs = []
+
+        # encoder pathway, save outputs for merging
+        for i, module in enumerate(self.down_convs):
+            x, before_pool = module(x)
+            encoder_outs.append(before_pool)
+
+        for i, module in enumerate(self.up_convs):
+            before_pool = encoder_outs[-(i+2)]
+            x = module(before_pool, x)
+
+        # No softmax is used. This means you need to use
+        # nn.CrossEntropyLoss is your training script,
+        # as this module includes a softmax already.
+        x = self.network_head(x)
+        return x
 
     def training_predict(self, train_data, train_data_clean, data_counter, size, box_size, bs):
         """Performs a forward step during training.

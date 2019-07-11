@@ -15,9 +15,9 @@ class Predictor(abstract_predictor.AbstractPredictor):
         assert weight_mode in ['image', 'pixel']
         checkpoint = torch.load(self.network_path)
         if weight_mode == 'image':
-            from weight_network import ImageWeightUNet as Network
+            from probabilistic_network import ImageProbabilisticUNet as Network
         else:
-            from weight_network import PixelWeightUNet as Network
+            from probabilistic_network import PixelProbabilisticUNet as Network
         net = Network(self.config['NUM_CLASSES'], checkpoint['mean'], 
                         checkpoint['std'], depth=self.config['DEPTH'])
         net.load_state_dict(checkpoint['model_state_dict'])

@@ -33,6 +33,9 @@ class AbstractPredictor():
         self.ps = self.config['PRED_PATCH_SIZE']
         self.overlap = self.config['OVERLAP']
 
+    def _load_net(self):
+        raise 'This function needs to be implemented by the subclasses.'
+
     def _predict(self, image):
         raise 'This function needs to be implemented by the subclasses.'
         # Keep statement so that it is clear to IDEs that the method is going
@@ -43,11 +46,8 @@ class AbstractPredictor():
         self._load_config_parameters()
         # Load saved network
         print("Loading network from {}".format(self.network_path))
-        # mean and std will be set by state dict appropriately
-        checkpoint = torch.load(self.network_path)
-        network = importlib.import_module(self.config['NETWORK'] + ".network")
-        self.net = network.UNet(1, checkpoint['mean'], checkpoint['std'], depth=self.config['DEPTH'])
-        self.net.load_state_dict(checkpoint['model_state_dict'])
+        self.net = None
+        self._load_net()
         # To set dropout and batchnormalization (which we don't have but maybe in the future)
         # to inference mode.
         self.net.eval()
@@ -66,6 +66,8 @@ class AbstractPredictor():
         
         results = {}
         num_images = self.data_test.shape[0]
+        # To compute standard deviation of PSNR, if available
+        psnr_values = []
 
         print('Predicting on {} images.'.format(num_images))
         for index in range(num_images):
@@ -89,13 +91,17 @@ class AbstractPredictor():
                 factor = int(self.data_test.shape[0] / self.data_gt.shape[0])
                 l = self.data_gt[int(index / factor)]
                 psnr = util.PSNR(l, prediction, 255)
+                psnr_values.append(psnr)
                 print("PSNR raw", util.PSNR(l, im, 255))
                 results[pred_image_filename] = psnr
                 print("PSNR denoised", psnr)  # Without info from masked pixel
 
         if self.data_gt is not None:
             average = np.mean(np.array(list(results.values())))
+            std = np.std(psnr_values)
             print("Average PSNR:", average)
+            print("Standard deviation:", std)
             with open(os.path.join(self.pred_output_path, 'results.json'), 'w') as json_output:
                 results['average'] = average
+                results['std'] = std
                 json.dump(results, json_output)

@@ -8,16 +8,19 @@ import matplotlib.pyplot as plt
 import importlib
 
 from . import subnetwork_standalone as subnetwork
-import trainer
+import abstract_trainer
 import util
 
-class Trainer(trainer.Trainer):
+class Trainer(abstract_trainer.AbstractTrainer):
 
     def _load_network(self):
         # Device gets automatically created in constructor
         # We persist mean and std when saving the network
-        self.net = subnetwork.SubUNet(self.config['NUM_CLASSES'], self.loader.mean(),
+        self.net = subnetwork.ProbabilisticSubUNet(self.config['NUM_CLASSES'], self.loader.mean(),
                         self.loader.std(), depth=self.config['DEPTH'])
+
+    def _load_network_weights(self):
+        pass
 
     def _create_checkpoint(self):
         return {'model_state_dict': self.net.state_dict(),

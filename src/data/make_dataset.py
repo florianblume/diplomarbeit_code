@@ -23,7 +23,7 @@ def load_add_gauss_store(src_path, dest_path, mean, std):
 """
 Script to create the datasets as they were used in the experiments.
 """
-
+"""
 ### Remove old data
 
 print('Removing old generated data.')
@@ -161,7 +161,7 @@ print('Joining Gauss 30 images.')
 util.merge_two_npy_datasets('data/processed/fish/gauss30',
                             'data/processed/mouse/gauss30',
                             'data/processed/joined/fish_mouse/gauss30_gauss30/')
-
+"""
 print('Processing SimSim dataset...')
 
 train_raw = tif.imread('data/raw/simsim/camsim_ccd_phot300_rn8_bgrd0.tif')
@@ -169,7 +169,7 @@ train_gt = tif.imread('data/raw/simsim/noise_free_32b.tif')
 assert train_raw.shape[0] == train_raw.shape[0]
 
 factor = int(train_raw.shape[0] / 3)
-
+"""
 os.makedirs('data/processed/simsim/raw/')
 os.makedirs('data/processed/simsim/gt/')
 os.makedirs('data/processed/joined/simsim/all/raw')
@@ -180,13 +180,13 @@ os.makedirs('data/processed/joined/simsim/part_1_2/raw')
 os.makedirs('data/processed/joined/simsim/part_1_2/gt')
 os.makedirs('data/processed/joined/simsim/part_0_2/raw')
 os.makedirs('data/processed/joined/simsim/part_0_2/gt')
-
+"""
 train_raws = []
 train_gts = []
 test_raws = []
 test_gts = []
 sub_indices = [(0, 1), (1, 2), (0, 2)]
-
+"""
 for i in range(3):
     train_raws.append(train_raw[i * factor:(i + 1) * factor])
     train_gts.append(train_gt[i * factor:(i + 1) * factor])
@@ -238,5 +238,16 @@ for sub_index in sub_indices:
     np.save(
         'data/processed/joined/simsim/part_{}_{}/gt/test.npy'.format(sub_index[0], sub_index[1]),
         np.concatenate([test_gts[sub_index[0]], test_gts[sub_index[1]]], axis=0))
+
+# Create mixed datasets
+"""
+fish_training_big_raw = np.load('data/raw/fish/raw/training_big_raw.npy')
+fish_training_big_gt = np.load('data/raw/fish/gt/training_big_GT.npy')
+
+fish_test_noisy = np.load('data/raw/fish/raw/test_noisy.npy')
+fish_test_gt = np.load('data/raw/fish/gt/test_gt.npy')
+
+print(fish_training_big_raw.shape)
+print(train_raw.shape)
 
 print('Done.')

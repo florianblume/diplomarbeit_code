@@ -8,21 +8,27 @@ import matplotlib.pyplot as plt
 import importlib
 
 from . import probabilistic_network
-import trainer
+import abstract_trainer
 import util
 
-class Trainer(trainer.Trainer):
+class Trainer(abstract_trainer.AbstractTrainer):
 
     def _load_network(self):
         # Device gets automatically created in constructor
         # We persist mean and std when saving the network
         # The probabilistic network creates its subnetworks automatically
-        self.net = probabilistic_network.ProbabilisticUNet(
-                self.config['NUM_CLASSES'], self.loader.mean(),
-                self.loader.std(), main_net_depth=self.config['MAIN_NET_DEPTH'],
-                sub_net_depth=self.config['SUB_NET_DEPTH'])
+        weight_mode = self.config['WEIGHT_MODE']
+        assert weight_mode in ['image', 'pixel']
+        if weight_mode == 'image':
+            Network = probabilistic_network.ImageProbabilisticUNet
+        else:
+            Network = probabilistic_network.PixelProbabilisticUNet
+        self.net = Network(self.config['NUM_CLASSES'], self.loader.mean(),
+            self.loader.std(), main_net_depth=self.config['MAIN_NET_DEPTH'],
+            sub_net_depth=self.config['SUB_NET_DEPTH'])
 
     def _create_checkpoint(self):
+        #TODO save state of subnets
         return {'model_state_dict': self.net.state_dict(),
                 'optimizier_state_dict': self.optimizer.state_dict(),
                 'epoch': self.epoch,

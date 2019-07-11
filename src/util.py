@@ -225,3 +225,20 @@ def merge_two_npy_datasets(dataset_path_1, dataset_path_2, output_path):
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         np.save(os.path.join(output_path, _file), result)
+
+def compute_variance_in_existing_experiments():
+    import glob
+    import json
+    results_files = glob.glob('**/results.json', recursive=True)
+    for results_file in results_files:
+        with open(results_file, 'r') as loaded_results_file:
+            results = json.load(loaded_results_file)
+            psnr_values = []
+            for key in results:
+                if 'average' not in key:
+                    psnr_values.append(results[key])
+            psnr_std = np.std(psnr_values)
+            results['std'] = psnr_std
+            print(results_file)
+            print(psnr_std)
+            print('\n')

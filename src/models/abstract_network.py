@@ -213,17 +213,15 @@ class AbstractUNet(nn.Module):
         self.down_convs = nn.ModuleList(self.down_convs)
         self.up_convs = nn.ModuleList(self.up_convs)
 
-        self.network_head = self.build_network_head(outs)
+        self._build_network_head(outs)
 
         self.reset_params()
 
         # Push network to respective device
         self.to(self.device)
 
-    def build_network_head(self):
+    def _build_network_head(self, outs):
         raise 'This function needs to be implemented by the subclasses.'
-        # Return statement to make warnings not appear
-        return 0
 
     @staticmethod
     def weight_init(m):
@@ -236,26 +234,11 @@ class AbstractUNet(nn.Module):
         raise 'This function needs to be implemented by the subclasses.'
 
     def reset_params(self):
-        for i, m in enumerate(self.modules()):
+        for _, m in enumerate(self.modules()):
             self.weight_init(m)
 
     def forward(self, x):
-        encoder_outs = []
-
-        # encoder pathway, save outputs for merging
-        for i, module in enumerate(self.down_convs):
-            x, before_pool = module(x)
-            encoder_outs.append(before_pool)
-
-        for i, module in enumerate(self.up_convs):
-            before_pool = encoder_outs[-(i+2)]
-            x = module(before_pool, x)
-
-        # No softmax is used. This means you need to use
-        # nn.CrossEntropyLoss is your training script,
-        # as this module includes a softmax already.
-        x = self.network_head(x)
-        return x
+        raise 'This function needs to be implemented by the subclasses.'
 
     def training_predict(self, train_data, train_data_clean, 
                             data_counter, size, box_size, bs):
