@@ -36,7 +36,7 @@ def adjust_raw_and_scaled_shifted_gt(gts, raws):
 """
 Script to create the datasets as they were used in the experiments.
 """
-
+"""
 ### Remove old data
 
 print('Removing old generated data.')
@@ -175,7 +175,7 @@ print('..........Joining Gauss 30 images.')
 util.merge_two_npy_datasets('data/processed/fish/gauss30',
                             'data/processed/mouse/gauss30',
                             'data/processed/joined/fish_mouse/gauss30_gauss30/')
-
+"""
 print('Processing SimSim dataset.')
 
 print('.....Creating SimSim-only datasets.')
@@ -190,12 +190,12 @@ train_gt, train_raw, range_ = adjust_raw_and_scaled_shifted_gt(
                                             train_gt, train_raw)
 
 factor = int(train_raw.shape[0] / 3)
-
+"""
 os.makedirs('data/processed/simsim/raw/')
 os.makedirs('data/processed/simsim/gt/')
 os.makedirs('data/processed/joined/simsim/all/raw')
 os.makedirs('data/processed/joined/simsim/all/gt')
-
+"""
 print('..........Creating dataset containing all parts.')
 
 np.save('data/processed/joined/simsim/all/raw/train.npy', train_raw)
@@ -218,10 +218,12 @@ for i in range(3):
 
 # Create combination of subsets
 for sub_index in sub_indices:
+    """
     os.makedirs('data/processed/joined/simsim/part_{}_{}/raw'.format(
                                                     sub_index[0], sub_index[1]))
     os.makedirs('data/processed/joined/simsim/part_{}_{}/gt'.format(
                                                     sub_index[0], sub_index[1]))
+    """
     np.save(
         'data/processed/joined/simsim/part_{}_{}/raw/train.npy'.format(sub_index[0], sub_index[1]),
         np.concatenate([train_raws[sub_index[0]], train_raws[sub_index[1]]], axis=0))
@@ -284,6 +286,13 @@ paths = ['raw_all/raw', 'raw_all/gt', 'raw_part0/raw', 'raw_part0/gt',
     #os.makedirs(os.path.join('data/processed/joined/fish_simsim', path))
 
 def fuse_fish_and_simsim(data):
+    # The network automatically repeats the ground-truth images so that they
+    # fit the number of raw images. This can be down because a ground-truth
+    # image is usually obtained by averaging multiple images. When we fuse
+    # these two different datasets then this is not possible anymore, as the
+    # factors do not match. That's why we repeat the images here before.
+    repeat_fish = data[3]
+
     fish_path = data[0]
     fish_data = np.load(fish_path)
     sim_im_size = train_raw[0].shape
@@ -300,6 +309,8 @@ def fuse_fish_and_simsim(data):
             fish_data[i][rect_origin[0]:rect_origin[0] + sim_im_size[0],
                         rect_origin[1]:rect_origin[1] + sim_im_size[1]])
     fish_data_cut = np.array(fish_data_cut)
+    fish_data_cut = np.repeat(fish_data_cut, repeat_fish, axis=0)
+
     np.save(
         'data/processed/joined/fish_simsim/raw_all/' + data[1] + '/' + data[2] + '.npy',
         np.concatenate([fish_data_cut, train_raw], axis=0))
@@ -313,10 +324,12 @@ def fuse_fish_and_simsim(data):
         'data/processed/joined/fish_simsim/raw_part2/' + data[1] + '/' + data[2] + '.npy',
         np.concatenate([fish_data_cut, train_raws[2]], axis=0))
     
-data_to_fuse = [('data/raw/fish/raw/training_big_raw.npy', 'raw', 'train'),
-                ('data/raw/fish/gt/training_big_GT.npy', 'gt', 'train'),
-                ('data/raw/fish/raw/test_noisy.npy', 'raw', 'test'),
-                ('data/raw/fish/gt/test_gt.npy', 'gt', 'test')]
+# We know the factors of the gt to raw from experience
+# We only need to repeat gt data as those are fewer images
+data_to_fuse = [('data/raw/fish/raw/training_big_raw.npy', 'raw', 'train', 1),
+                ('data/raw/fish/gt/training_big_GT.npy', 'gt', 'train', 50),
+                ('data/raw/fish/raw/test_noisy.npy', 'raw', 'test', 1),
+                ('data/raw/fish/gt/test_gt.npy', 'gt', 'test', 50)]
 
 for data in data_to_fuse:
     fuse_fish_and_simsim(data)

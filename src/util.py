@@ -216,7 +216,7 @@ def merge_two_npy_datasets(dataset_path_1, dataset_path_2, output_path):
     files_1 -= differences
     files_1 = list(files_1)
     for _file in files_1:
-        print('Processing {}.'.format(_file))
+        #print('Processing {}.'.format(_file))
         first = np.load(os.path.join(dataset_path_1, _file))
         second = np.load(os.path.join(dataset_path_2, _file))
         result = np.concatenate([first, second], axis=0)
