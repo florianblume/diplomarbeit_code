@@ -237,8 +237,5 @@ def compute_variance_in_existing_experiments():
             for key in results:
                 if 'average' not in key:
                     psnr_values.append(results[key])
-            psnr_std = np.std(psnr_values)
+            psnr_std = np.std(psnr_values) / float(np.sqrt(len(psnr_values)))
             results['std'] = psnr_std
-            print(results_file)
-            print(psnr_std)
-            print('\n')
