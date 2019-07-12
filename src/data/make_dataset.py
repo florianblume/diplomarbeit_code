@@ -5,6 +5,10 @@ import shutil
 import tifffile as tif
 from skimage import io
 
+"""
+Script to create the datasets as they were used in the experiments.
+"""
+
 # Needs to be in this order otherwise util won't get found
 main_path = os.getcwd()
 sys.path.append(os.path.join(main_path, 'src'))
@@ -32,11 +36,6 @@ def adjust_raw_and_scaled_shifted_gt(gts, raws):
     zero_raws *= std
     return zero_gts, zero_raws, range_
 
-
-"""
-Script to create the datasets as they were used in the experiments.
-"""
-"""
 ### Remove old data
 
 print('Removing old generated data.')
@@ -175,7 +174,7 @@ print('..........Joining Gauss 30 images.')
 util.merge_two_npy_datasets('data/processed/fish/gauss30',
                             'data/processed/mouse/gauss30',
                             'data/processed/joined/fish_mouse/gauss30_gauss30/')
-"""
+
 print('Processing SimSim dataset.')
 
 print('.....Creating SimSim-only datasets.')
@@ -190,12 +189,12 @@ train_gt, train_raw, range_ = adjust_raw_and_scaled_shifted_gt(
                                             train_gt, train_raw)
 
 factor = int(train_raw.shape[0] / 3)
-"""
+
 os.makedirs('data/processed/simsim/raw/')
 os.makedirs('data/processed/simsim/gt/')
 os.makedirs('data/processed/joined/simsim/all/raw')
 os.makedirs('data/processed/joined/simsim/all/gt')
-"""
+
 print('..........Creating dataset containing all parts.')
 
 np.save('data/processed/joined/simsim/all/raw/train.npy', train_raw)
@@ -218,12 +217,10 @@ for i in range(3):
 
 # Create combination of subsets
 for sub_index in sub_indices:
-    """
     os.makedirs('data/processed/joined/simsim/part_{}_{}/raw'.format(
                                                     sub_index[0], sub_index[1]))
     os.makedirs('data/processed/joined/simsim/part_{}_{}/gt'.format(
                                                     sub_index[0], sub_index[1]))
-    """
     np.save(
         'data/processed/joined/simsim/part_{}_{}/raw/train.npy'.format(sub_index[0], sub_index[1]),
         np.concatenate([train_raws[sub_index[0]], train_raws[sub_index[1]]], axis=0))
@@ -311,18 +308,36 @@ def fuse_fish_and_simsim(data):
     fish_data_cut = np.array(fish_data_cut)
     fish_data_cut = np.repeat(fish_data_cut, repeat_fish, axis=0)
 
+    set_ = data[1]
+    mode = data[2]
+
+    if set_ == 'raw':
+        if mode == 'train':
+            simsim_all = train_raw
+            simsim_part = train_raws
+        if mode == 'test':
+            simsim_all = test_raw
+            simsim_part = test_raws
+    if set_ == 'gt':
+        if mode == 'train':
+            simsim_all = train_gt
+            simsim_part = train_gts
+        if mode == 'test':
+            simsim_all = test_gt
+            simsim_part = test_gts
+
     np.save(
-        'data/processed/joined/fish_simsim/raw_all/' + data[1] + '/' + data[2] + '.npy',
-        np.concatenate([fish_data_cut, train_raw], axis=0))
+        'data/processed/joined/fish_simsim/raw_all/' + set_ + '/' + mode + '.npy',
+        np.concatenate([fish_data_cut, simsim_all], axis=0))
     np.save(
-        'data/processed/joined/fish_simsim/raw_part0/' + data[1] + '/' + data[2] + '.npy',
-        np.concatenate([fish_data_cut, train_raws[0]], axis=0))
+        'data/processed/joined/fish_simsim/raw_part0/' + set_ + '/' + mode + '.npy',
+        np.concatenate([fish_data_cut, simsim_part[0]], axis=0))
     np.save(
-        'data/processed/joined/fish_simsim/raw_part1/' + data[1] + '/' + data[2] + '.npy',
-        np.concatenate([fish_data_cut, train_raws[1]], axis=0))
+        'data/processed/joined/fish_simsim/raw_part1/' + set_ + '/' + mode + '.npy',
+        np.concatenate([fish_data_cut, simsim_part[1]], axis=0))
     np.save(
-        'data/processed/joined/fish_simsim/raw_part2/' + data[1] + '/' + data[2] + '.npy',
-        np.concatenate([fish_data_cut, train_raws[2]], axis=0))
+        'data/processed/joined/fish_simsim/raw_part2/' + set_ + '/' + mode + '.npy',
+        np.concatenate([fish_data_cut, simsim_part[2]], axis=0))
     
 # We know the factors of the gt to raw from experience
 # We only need to repeat gt data as those are fewer images
