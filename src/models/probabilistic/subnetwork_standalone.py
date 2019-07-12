@@ -255,7 +255,7 @@ class SubUNet(nn.Module):
         # front of the exponential
         c = 1 / (torch.sqrt(2 * math.pi * std**2))
         # exp is no exponential here because we take the log of the loss
-        exp = torch.exp(-(labels - mean)**2)/(2 * std**2))
+        exp = -(labels - mean)**2)/(2 * std**2)
         loss = torch.sum(masks * (c + exp)/torch.sum(masks)
         return loss
 
