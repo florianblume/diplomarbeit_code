@@ -8,7 +8,7 @@ import numpy as np
 
 import util
 import abstract_network
-from subnetwork import SubUNet
+from .subnetwork import SubUNet
 
 class ImageWeightUNet(abstract_network.AbstractUNet):
     """ `UNet` class is based on https://arxiv.org/abs/1505.04597
@@ -51,11 +51,11 @@ class ImageWeightUNet(abstract_network.AbstractUNet):
                 for transpose convolution or 'upsample' for nearest neighbour
                 upsampling.
         """
-        super(ImageWeightUNet, self).__init__(num_classes, mean, std, in_channels, 
-                main_net_depth, start_filts, up_mode, merge_mode, augment_data, device)
-
         self.num_subnets = num_subnets
         self.sub_net_depth = sub_net_depth
+        super().__init__(num_classes, mean, std, in_channels, depth=main_net_depth, 
+                start_filts=start_filts, up_mode=up_mode, merge_mode=merge_mode, 
+                augment_data=augment_data, device=device)
 
     def _build_network_head(self, outs):
         self.subnets = nn.ModuleList()
@@ -63,7 +63,8 @@ class ImageWeightUNet(abstract_network.AbstractUNet):
 
         for i in range(self.num_subnets):
             # We create each requested subnet
-            self.subnets.append(SubUNet(num_classes, mean, std, depth=sub_net_depth))
+            self.subnets.append(SubUNet(self.num_classes, self.mean, self.std, 
+                                                    depth=self.sub_net_depth))
             # And we output a weight for each subnet based on the whole image
             # That's why we employ torch.sum
             self.final_op.append(torch.sum(conv1x1(outs, self.num_classes)))
@@ -155,7 +156,7 @@ class ImageWeightUNet(abstract_network.AbstractUNet):
                 patch = image[ymin:ymax, xmin:xmax]
                 # We save all weights for all patches and average later
                 weights.append(self.predict_patch(patch))
-                sub_images[:, ymin:ymax, xmin:xmax][ovTop:, ovLeft:] 
+                sub_images[:, ymin:ymax, xmin:xmax][ovTop:, ovLeft:]\
                     = [subnet.predict_patch(patch) for subnet in self.subnets][:, ovTop:, ovLeft:] 
                 ymin = ymin-overlap+patch_size
                 ymax = ymin+patch_size
@@ -234,6 +235,7 @@ class PixelWeightUNet(nn.Module):
     def __init__(self, num_classes, mean, std, in_channels=1, depth=5,
                  main_net_depth=1, sub_net_depth=3, num_subnets=2,
                  start_filts=64, up_mode='transpose', merge_mode='add',
+                 augment_data=True,
                  device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")):
         """
         NOTE: mean and std will be persisted by the model and restored on loading
@@ -250,11 +252,11 @@ class PixelWeightUNet(nn.Module):
                 for transpose convolution or 'upsample' for nearest neighbour
                 upsampling.
         """
-        super(PixelWeightUNet, self).__init__(num_classes, mean, std, in_channels, 
-                main_net_depth, start_filts, up_mode, merge_mode, augment_data, device)
-
         self.num_subnets = num_subnets
         self.sub_net_depth = sub_net_depth
+        super().__init__(num_classes, mean, std, in_channels, depth=main_net_depth, 
+                start_filts=start_filts, up_mode=up_mode, merge_mode=merge_mode, 
+                augment_data=augment_data, device=device)
 
     def _build_network_head(self, outs):
         self.subnets = nn.ModuleList()
@@ -262,7 +264,8 @@ class PixelWeightUNet(nn.Module):
 
         for i in range(self.num_subnets):
             # We create each requested subnet
-            self.subnets.append(SubUNet(num_classes, mean, std, depth=sub_net_depth))
+            self.subnets.append(SubUNet(self.num_classes, self.mean, self.std, 
+                                                    depth=self.sub_net_depth))
             # And for each pixel we output a weight for each subnet
             self.final_op.append(conv1x1(outs, self.num_classes))
 
@@ -357,9 +360,9 @@ class PixelWeightUNet(nn.Module):
                 patch = image[ymin:ymax, xmin:xmax]
                 # self.predict_patch(patch) returns [num_subnets, H, W]
                 # i.e. one weight for each pixel
-                weights[:, ymin:ymax, xmin:xmax][ovTop:, ovLeft:]  
+                weights[:, ymin:ymax, xmin:xmax][ovTop:, ovLeft:]\
                     = self.predict_patch(patch)
-                sub_images[:, ymin:ymax, xmin:xmax][ovTop:, ovLeft:] 
+                sub_images[:, ymin:ymax, xmin:xmax][ovTop:, ovLeft:]\
                     = [subnet.predict_patch(patch) for subnet in self.subnets][:, ovTop:, ovLeft:] 
                 ymin = ymin-overlap+patch_size
                 ymax = ymin+patch_size

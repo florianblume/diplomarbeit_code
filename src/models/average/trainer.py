@@ -7,18 +7,28 @@ import os
 import matplotlib.pyplot as plt
 import importlib
 
-from . import network
 import util
-import trainer
+import abstract_trainer
+from . import weight_network
 
-class Trainer(trainer.Trainer):
+class Trainer(abstract_trainer.AbstractTrainer):
 
     def _load_network(self):
-        # Device gets automatically created in constructor
-        # We persist mean and std when saving the network
-        self.net = network.UNet(self.config['NUM_CLASSES'], self.loader.mean(),
-                        self.loader.std(), depth=self.config['DEPTH'])
-        #TODO load pre-trained weights of network
+        if self.config['WEIGHT_MODE'] == 'image':
+            Network = weight_network.ImageWeightUNet
+        elif self.config['WEIGHT_MODE'] == 'pixel':
+            Network = weight_network.PixelWeightUNet
+        else:
+            raise 'Invalid config value for \"weight_mode\".'
+
+        self.net = Network(self.config['NUM_CLASSES'], self.loader.mean(),
+                    self.loader.std(), depth=self.config['DEPTH'],
+                    main_net_depth=self.config['MAIN_NET_DEPTH'],
+                    sub_net_depth=self.config['SUB_NET_DEPTH'],
+                    num_subnets=self.config['NUM_SUBNETS'],
+                    augment_data=self.config['AUGMENT_DATA'])
+                        
+        #TODO load pre-trained weights of network, if available
 
     def _create_checkpoint(self):
         return {'model_state_dict': self.net.state_dict(),
@@ -43,22 +53,20 @@ class Trainer(trainer.Trainer):
         psnr = util.PSNR(gt, prediction, 255)
         self.writer.add_scalar('psnr', psnr, self.print_step)
 
-        # Ugly but it works
-        plt.imsave('pred.png', prediction)
-        pred = plt.imread('pred.png')
-        self.writer.add_image('pred', pred, self.print_step, dataformats='HWC')
-        os.remove('pred.png')
+        prediction = prediction.astype(np.uint8)
+        self.writer.add_image('pred', prediction, self.print_step, dataformats='HW')
 
         for name, param in self.net.named_parameters():
             self.writer.add_histogram(
                 name, param.clone().cpu().data.numpy(), self.print_step)
 
     def _train(self):
-        outputs, labels, masks, self.dataCounter = self.net.training_predict(
-            self.data_train, self.data_train_gt, self.dataCounter, 
-            self.size, self.box_size, self.bs)
+        sub_outputs, weights, labels, masks, self.dataCounter =\
+            self.net.training_predict(
+                self.data_train, self.data_train_gt, self.dataCounter, 
+                self.size, self.box_size, self.bs)
 
-        self.train_loss = self.net.loss_function(outputs, labels, masks)
+        self.train_loss = self.net.loss_function(sub_outputs, weights, labels, masks)
         self.train_loss.backward()
         self.running_loss += self.train_loss.item()
         self.train_losses.append(self.train_loss.item())

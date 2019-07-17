@@ -1,6 +1,10 @@
 import argparse
 import importlib
 import os
+import sys
+
+main_path = os.getcwd()
+sys.path.append(os.path.join(main_path, 'src/models'))
 
 def main(predictor, config):
     predictor_module = importlib.import_module('models.' + predictor)

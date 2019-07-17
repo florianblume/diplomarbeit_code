@@ -50,7 +50,8 @@ class SubUNet(abstract_network.AbstractUNet):
                 upsampling.
         """
         super(SubUNet, self).__init__(num_classes, mean, std, in_channels, 
-                main_net_depth, start_filts, up_mode, merge_mode, augment_data, device)
+            depth=depth, start_filts=start_filts, up_mode=up_mode, 
+            merge_mode=merge_mode, augment_data=augment_data, device=device)
 
     def _build_network_head(self, outs):
         self.conv_final = conv1x1(outs, self.num_classes)

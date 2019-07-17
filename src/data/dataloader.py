@@ -69,7 +69,6 @@ class DataLoader():
         data_raw = np.load(data_raw_path)
         if convert_to is not None:
             data_raw = data_raw.astype(np.dtype(convert_to))
-        print(data_raw.dtype)
 
         print("Loaded " +
               str(data_raw.shape[0]) + " images from " + data_raw_path)

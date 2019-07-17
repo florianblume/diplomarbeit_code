@@ -58,9 +58,10 @@ class ImageProbabilisticUNet(abstract_network.AbstractUNet):
                 for transpose convolution or 'upsample' for nearest neighbour
                 upsampling.
         """
-        super(ImageProbabilisticUNet, self).__init__(num_classes, mean, std, 
-                in_channels, main_net_depth, start_filts, up_mode,
-                merge_mode, augment_data, device)
+        super().__init__(num_classes=num_classes, mean=mean, std=std, 
+                in_channels=in_channels, main_net_depth=main_net_depth, 
+                start_filts=start_filts, up_mode=up_mode, merge_mode=merge_mode, 
+                augment_data=augment_data, device=device)
 
         self.sub_net_depth = sub_net_depth
         self.num_subnets = num_subnets
@@ -239,9 +240,10 @@ class PixelProbabilisticUNet(nn.Module):
                 for transpose convolution or 'upsample' for nearest neighbour
                 upsampling.
         """
-        super(PixelProbabilisticUNet, self).__init__(num_classes, mean, std, 
-                in_channels, main_net_depth, start_filts, up_mode,
-                merge_mode, augment_data, device)
+        super().__init__(num_classes=num_classes, mean=mean, std=std, 
+                in_channels=in_channels, main_net_depth=main_net_depth, 
+                start_filts=start_filts, up_mode=up_mode, merge_mode=merge_mode, 
+                augment_data=augment_data, device=device)
 
         self.sub_net_depth = sub_net_depth
         self.num_subnets = num_subnets
