@@ -30,6 +30,10 @@ class Trainer(abstract_trainer.AbstractTrainer):
                         
         #TODO load pre-trained weights of network, if available
 
+    def _load_network_weights(self):
+        #TODO only for now
+        pass
+
     def _create_checkpoint(self):
         return {'model_state_dict': self.net.state_dict(),
                 'optimizier_state_dict': self.optimizer.state_dict(),
@@ -66,7 +70,7 @@ class Trainer(abstract_trainer.AbstractTrainer):
                 self.data_train, self.data_train_gt, self.dataCounter, 
                 self.size, self.box_size, self.bs)
 
-        self.train_loss = self.net.loss_function(sub_outputs, weights, labels, masks)
+        self.train_loss = self.net.loss_function(sub_outputs, labels, masks)
         self.train_loss.backward()
         self.running_loss += self.train_loss.item()
         self.train_losses.append(self.train_loss.item())

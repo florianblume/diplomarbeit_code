@@ -103,7 +103,9 @@ class AbstractTrainer():
         valCounter = 0
 
         for _ in range(self.val_size):
-            outputs, labels, masks, valCounter = self.net.training_predict(
+            #TODO just a temporary fix to handle the weights returned by the average network
+            # need to fix this properly
+            outputs, _, labels, masks, valCounter = self.net.training_predict(
                     self.data_val, self.data_val_gt, valCounter, 
                     self.size, self.box_size, self.bs)
             # Needed by subclasses that's why we store val_loss on self

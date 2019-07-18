@@ -8,6 +8,7 @@ import numpy as np
 
 import util
 import abstract_network
+from abstract_network import conv1x1
 
 class SubUNet(abstract_network.AbstractUNet):
     """ `UNet` class is based on https://arxiv.org/abs/1505.04597
@@ -32,7 +33,7 @@ class SubUNet(abstract_network.AbstractUNet):
 
     def __init__(self, num_classes, mean, std, in_channels=1, depth=5,
                  start_filts=64, up_mode='transpose',
-                 merge_mode='add',
+                 merge_mode='add', augment_data=True,
                  device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")):
         """
         NOTE: mean and std will be persisted by the model and restored on loading

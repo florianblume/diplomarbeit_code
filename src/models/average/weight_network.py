@@ -8,6 +8,7 @@ import numpy as np
 
 import util
 import abstract_network
+from abstract_network import conv1x1
 from .subnetwork import SubUNet
 
 class ImageWeightUNet(abstract_network.AbstractUNet):
@@ -59,15 +60,15 @@ class ImageWeightUNet(abstract_network.AbstractUNet):
 
     def _build_network_head(self, outs):
         self.subnets = nn.ModuleList()
-        self.final_op = nn.ModuleList()
-
+        self.final_ops = nn.ModuleList()
         for i in range(self.num_subnets):
             # We create each requested subnet
             self.subnets.append(SubUNet(self.num_classes, self.mean, self.std, 
                                                     depth=self.sub_net_depth))
             # And we output a weight for each subnet based on the whole image
             # That's why we employ torch.sum
-            self.final_op.append(torch.sum(conv1x1(outs, self.num_classes)))
+            op = conv1x1(outs, self.num_classes)
+            self.final_ops.append(op)
 
     @staticmethod
     def loss_function(outputs, labels, masks):
@@ -92,7 +93,14 @@ class ImageWeightUNet(abstract_network.AbstractUNet):
         # No softmax is used. This means you need to use
         # nn.CrossEntropyLoss is your training script,
         # as this module includes a softmax already.
-        x = self.final_op(x)
+        results = torch.stack([final_op(x) for final_op in self.final_ops])
+        # results = [num_subnets, batch_size, num_classes, H, W]
+        # where num_classes is only used in Probabilistic Noise2Void
+        # We want weights for the subnets, i.e. we need to take the mean
+        # (this is the image-wise weight network) along all other dimensions
+        # except for the batch dimension, since the individual entries in a
+        # batch do not necessarily belong to the same image
+        x = torch.mean(results, (2, 3, 4))
         return x
 
     def training_predict(self, train_data, train_data_clean, data_counter, size, box_size, bs):
@@ -125,17 +133,20 @@ class ImageWeightUNet(abstract_network.AbstractUNet):
         # We assume that training the network on patches and during prediction
         # averaging the weights works just as well since the network performs
         # some kind of averaging already but only on the patch-level.
-        # [batch, subnets]
+        # [subnets, batch]
         weights = self(inputs)
         # [subnets, batch, H, W]
-        sub_outputs = [sub(inputs) for sub in self.subnets]
-        # [batch, subnets, H, W]
-        sub_outputs = np.transpose(sub_outputs, axes=(1, 0, 2, 3))
+        sub_outputs = torch.stack([sub(inputs) for sub in self.subnets])
         # All pixels in each sub_output get multiplied by the same weight
-        # sum([batch, subnets] x [batch, subnets, H, W]) = [batch, H, W]
-        outputs = np.sum(weights * sub_outputs, axis=1)
+        # sum([subnets, batch] x [subnets, batch, H, W], 0) = [batch, H, W]
+        # torch is not able to broadcast weights directly
+        weights = weights.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+        outputs = torch.sum(weights * sub_outputs, 0)
+
         # [batch, H, W] / [batch]
-        outputs /= np.sum(weights, axis=1)
+        # i.e. we divide the patches that are comprised of weighted sums
+        # of the outputs of the subnetworks by the sum of the weights
+        outputs /= torch.sum(weights, 0)
         
         return sub_outputs, weights, labels, masks, data_counter
 
@@ -143,7 +154,7 @@ class ImageWeightUNet(abstract_network.AbstractUNet):
         # weights for each subnet for the whole imagess
         weights = []
         # sub_images = [subnets, H, W]
-        sub_images = np.zeros((self.num_subnets, image.shape))
+        sub_images = np.zeros((self.num_subnets, image.shape[0], image.shape[1]))
         # We have to use tiling because of memory constraints on the GPU
         xmin = 0
         ymin = 0
@@ -198,16 +209,11 @@ class ImageWeightUNet(abstract_network.AbstractUNet):
 
         output = self(inputs)
 
-        # In contrast to the other networks we only have a single output number
-        # per patch and not an output of shape [H, W] that's why we need to
-        # write (1, 0, 2) instead of (1, 0, 2, 3)
-        samples = (output).permute(1, 0, 2)
-
         # In contrast to probabilistic N2V we only have one sample
-        weights = samples[0, ...]
+        # weights = samples[0, ...]
 
         # Get data from GPU
-        weights = weights.cpu().detach().numpy()
+        weights = output.cpu().detach().numpy()
 
         return weights
 
