@@ -335,17 +335,15 @@ class PixelWeightUNet(nn.Module):
         
         # Forward step
         # Each pixel has its individual weight
-        # [batch, subnets, H, W]
+        # [subnets, batch, H, W]
         weights = self(inputs)
         # [subnets, batch, H, W]
         sub_outputs = [sub(inputs) for sub in self.subnets]
-        # [batch, subnets, H, W]
-        sub_outputs = sub_outputs.permute((1, 0, 2, 3))
-        # [batch, subnets, H, W] x [batch, subnets, H, W]
-        outputs = torch.sum(weights * sub_outputs, 1)
+        # [subnets, batch, H, W] x [subnets, batch, H, W]
+        outputs = torch.sum(weights * sub_outputs, 0)
         # TODO check if this actually works correctly
         # This works in pixel-wise and image-wise case
-        outputs /= torch.sum(weights, 1)
+        outputs /= torch.sum(weights, 0)
         
         return sub_outputs, weights, labels, masks, data_counter
 
