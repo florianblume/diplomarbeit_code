@@ -167,8 +167,10 @@ class ImageWeightUNet(abstract_network.AbstractUNet):
                 patch = image[ymin:ymax, xmin:xmax]
                 # We save all weights for all patches and average later
                 weights.append(self.predict_patch(patch))
-                sub_images[:, ymin:ymax, xmin:xmax][ovTop:, ovLeft:]\
-                    = [subnet.predict_patch(patch) for subnet in self.subnets][:, ovTop:, ovLeft:] 
+                sub_outputs = np.array([subnet.predict_patch(patch)\
+                                        for subnet in self.subnets])
+                sub_images[:, ymin:ymax, xmin:xmax][:, ovTop:, ovLeft:]\
+                    = sub_outputs[:, ovTop:, ovLeft:] 
                 ymin = ymin-overlap+patch_size
                 ymax = ymin+patch_size
                 ovTop = overlap//2
@@ -182,31 +184,28 @@ class ImageWeightUNet(abstract_network.AbstractUNet):
         weights = np.array(weights)
         # [num_subnets] = weights for the whole image for each subnet
         weights = np.mean(weights, axis=0)
+        # Expand dimensions to match the image's
+        weights = np.expand_dims(np.expand_dims(weights, -1), -1)
         # sub_images * weights = [num_subnets, H, W] * [num_subnets]
-        weighted_average = np.sum(sub_images * weights, axis=0) / np.sum(weights)
-
+        mult = sub_images * weights
+        weighted_average = np.sum(mult, axis=0) / np.sum(weights)
         return weighted_average, weights
 
     def predict_patch(self, patch):
         """Performs network prediction on a patch of an image using the
         specified parameters. The network expects the image to be normalized
-        with its mean and std. Likewise, it denormalizes the output images
-        using the same mean and std.
+        with its mean and std.
 
         Arguments:
             patch {np.array} -- the patch to perform prediction on
-            mean {int} -- the mean of the data the network was trained with
-            std {int} -- the std of the data the network was trained with
 
         Returns:
             np.array -- the denoised and denormalized patch
         """
         inputs = torch.zeros(1, 1, patch.shape[0], patch.shape[1])
         inputs[0, :, :, :] = util.img_to_tensor(patch)
-
         # copy to GPU
         inputs = inputs.to(self.device)
-
         output = self(inputs)
 
         # In contrast to probabilistic N2V we only have one sample
@@ -214,7 +213,8 @@ class ImageWeightUNet(abstract_network.AbstractUNet):
 
         # Get data from GPU
         weights = output.cpu().detach().numpy()
-
+        # Remove unnecessary dimensions
+        weights = np.squeeze(weights)
         return weights
 
 class PixelWeightUNet(nn.Module):
@@ -340,12 +340,12 @@ class PixelWeightUNet(nn.Module):
         # [subnets, batch, H, W]
         sub_outputs = [sub(inputs) for sub in self.subnets]
         # [batch, subnets, H, W]
-        sub_outputs = np.transpose(sub_outputs, axes=(1, 0, 2, 3))
+        sub_outputs = sub_outputs.permute((1, 0, 2, 3))
         # [batch, subnets, H, W] x [batch, subnets, H, W]
-        outputs = np.sum(weights * sub_outputs, axis=1)
+        outputs = torch.sum(weights * sub_outputs, 1)
         # TODO check if this actually works correctly
         # This works in pixel-wise and image-wise case
-        outputs /= np.sum(weights, axis=1)
+        outputs /= torch.sum(weights, 1)
         
         return sub_outputs, weights, labels, masks, data_counter
 
@@ -366,10 +366,12 @@ class PixelWeightUNet(nn.Module):
                 patch = image[ymin:ymax, xmin:xmax]
                 # self.predict_patch(patch) returns [num_subnets, H, W]
                 # i.e. one weight for each pixel
-                weights[:, ymin:ymax, xmin:xmax][ovTop:, ovLeft:]\
+                weights[:, ymin:ymax, xmin:xmax][:, ovTop:, ovLeft:]\
                     = self.predict_patch(patch)
-                sub_images[:, ymin:ymax, xmin:xmax][ovTop:, ovLeft:]\
-                    = [subnet.predict_patch(patch) for subnet in self.subnets][:, ovTop:, ovLeft:] 
+                sub_outputs = np.array([subnet.predict_patch(patch)\
+                                        for subnet in self.subnets])
+                sub_images[:, ymin:ymax, xmin:xmax][:, ovTop:, ovLeft:]\
+                    = sub_outputs[:, ovTop:, ovLeft:] 
                 ymin = ymin-overlap+patch_size
                 ymax = ymin+patch_size
                 ovTop = overlap//2
@@ -387,35 +389,24 @@ class PixelWeightUNet(nn.Module):
     def predict_patch(self, patch):
         """Performs network prediction on a patch of an image using the
         specified parameters. The network expects the image to be normalized
-        with its mean and std. Likewise, it denormalizes the output images
-        using the same mean and std.
+        with its mean and std.
 
         Arguments:
             patch {np.array} -- the patch to perform prediction on
-            mean {int} -- the mean of the data the network was trained with
-            std {int} -- the std of the data the network was trained with
 
         Returns:
             np.array -- the denoised and denormalized patch
         """
         inputs = torch.zeros(1, 1, patch.shape[0], patch.shape[1])
         inputs[0, :, :, :] = util.img_to_tensor(patch)
-
         # copy to GPU
         inputs = inputs.to(self.device)
-
         output = self(inputs)
 
-        samples = (output).permute(1, 0, 2, 3)
-
         # In contrast to probabilistic N2V we only have one sample
-        weights = samples[0, ...]
+        # weights = samples[0, ...]
 
         # Get data from GPU
-        weights = weights.cpu().detach().numpy()
-
-        # Reshape to 2D images and remove padding
-        weights.shape = (output.shape[2], output.shape[3])
-
-        # No denormalizing here as we output the weights
+        weights = output.cpu().detach().numpy()
+        weights = np.squeeze(weights)
         return weights

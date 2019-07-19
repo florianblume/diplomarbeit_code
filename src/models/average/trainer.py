@@ -50,7 +50,7 @@ class Trainer(abstract_trainer.AbstractTrainer):
         self.net.train(False)
         # Predict for one example image
         raw = self.data_raw[0]
-        prediction = self.net.predict(raw, self.ps, self.overlap)
+        prediction, weights = self.net.predict(raw, self.ps, self.overlap)
         self.net.train(True)
         gt = self.data_gt[0]
         gt = util.denormalize(gt, self.loader.mean(), self.loader.std())

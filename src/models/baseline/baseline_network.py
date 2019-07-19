@@ -102,18 +102,20 @@ class UNet(abstract_network.AbstractUNet):
 
         Arguments:
             patch {np.array} -- the patch to perform prediction on
-            mean {int} -- the mean of the data the network was trained with
-            std {int} -- the std of the data the network was trained with
 
         Returns:
             np.array -- the denoised and denormalized patch
         """
+        # In case of Probabilistic Noise2Void we would have samples from
+        # multiple Gaussian distributions and inputs[0, :, :, :] would become
+        # inputs[num_classes, :, :, :]
         inputs = torch.zeros(1, 1, patch.shape[0], patch.shape[1])
         inputs[0, :, :, :] = util.img_to_tensor(patch)
 
         # copy to GPU
         inputs = inputs.to(self.device)
         output = self(inputs)
+        # Permute batch and samples
         samples = (output).permute(1, 0, 2, 3)
 
         # In contrast to probabilistic N2V we only have one sample
@@ -122,7 +124,6 @@ class UNet(abstract_network.AbstractUNet):
         means = means.cpu().detach().numpy()
         # Reshape to 2D images and remove padding
         means.shape = (output.shape[2], output.shape[3])
-
         # Denormalize
         means = util.denormalize(means, self.mean, self.std)
         return means
