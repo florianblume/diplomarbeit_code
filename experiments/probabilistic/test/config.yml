@@ -1,0 +1,45 @@
+##### Network and data configuration
+
+#### Data paths
+DATA_BASE_PATH: "data/processed/fish/"
+
+# Set GT path to "" if N2V is to be performed
+DATA_TRAIN_RAW_PATH: "avg8/training_big_raw.npy"
+DATA_TRAIN_GT_PATH: "gt/training_big_GT.npy"
+
+DATA_PRED_RAW_PATH: "avg8/test_noisy.npy"
+DATA_PRED_GT_PATH: "gt/test_gt.npy"
+
+CONVERT_DATA_TO: "uint8"
+
+### Network configuration
+# Rigth now only depth 3 works
+DEPTH: 3
+BATCH_SIZE: 24
+TRAIN_PATCH_SIZE: 100
+PRED_PATCH_SIZE: 128
+VIRTUAL_BATCH_SIZE: 20
+OVERLAP: 48
+# How much of training data should be used for validation
+VALIDATION_RATIO: 0.1
+# Number of images to compute the validation loss with after a backpropagation step
+VALIDATION_SIZE: 20
+STEPS_PER_EPOCH: 5
+EPOCHS: 1000
+# Number of classes, in case of Probabilistic N2V we have 800, 1 otherwise
+NUM_CLASSES: 1
+AUGMENT_DATA: True
+WEIGHT_MODE: "image"
+# Base path for the experiment, the paths below are all relative to this one
+# Can be left out or set to "" if the experiment folder is the same containting
+# the config
+#EXPERIMENT_BASE_PATH: "./experiments/baseline/01_fish_avg16"
+# If specified, training will be continued from this checkpoint
+TRAIN_NETWORK_PATH: "best.net"
+# Trained network to use for prediction
+PRED_NETWORK_PATH: "best.net"
+# Path where to store denoised images, can be "" to omit
+PRED_OUTPUT_PATH: "prediction"
+WRITE_TENSORBOARD_DATA: yes
+# If set to yes, the network stores an example prediction every STEPS_PER_EPOCH
+WRITE_EXAMPLE_IMAGE: yes
