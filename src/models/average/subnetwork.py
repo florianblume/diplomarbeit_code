@@ -7,8 +7,7 @@ from torch.nn import init
 import numpy as np
 
 import util
-import abstract_network
-from abstract_network import conv1x1
+from models import abstract_network
 
 class SubUNet(abstract_network.AbstractUNet):
     """ `UNet` class is based on https://arxiv.org/abs/1505.04597
@@ -55,7 +54,7 @@ class SubUNet(abstract_network.AbstractUNet):
             merge_mode=merge_mode, augment_data=augment_data, device=device)
 
     def _build_network_head(self, outs):
-        self.conv_final = conv1x1(outs, self.num_classes)
+        self.conv_final = abstract_network.conv1x1(outs, self.num_classes)
 
     @staticmethod
     def loss_function(outputs, labels, masks):

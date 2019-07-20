@@ -5,19 +5,14 @@ from torch.autograd import Variable
 from collections import OrderedDict
 from torch.nn import init
 import numpy as np
-import os
-import sys
 
-main_path = os.getcwd()
-sys.path.append(os.path.join(main_path, 'src/models'))
 import util
-import abstract_network
-from abstract_network import conv1x1
+from models import abstract_network
 
 class UNet(abstract_network.AbstractUNet):
     
     def _build_network_head(self, outs):
-        self.network_head = conv1x1(outs, self.num_classes)
+        self.network_head = abstract_network.conv1x1(outs, self.num_classes)
 
     @staticmethod
     def loss_function(outputs, labels, masks):

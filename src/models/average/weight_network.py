@@ -7,9 +7,8 @@ from torch.nn import init
 import numpy as np
 
 import util
-import abstract_network
-from abstract_network import conv1x1
-from .subnetwork import SubUNet
+from models import abstract_network
+from models.average import subnetwork
 
 class ImageWeightUNet(abstract_network.AbstractUNet):
     """ `UNet` class is based on https://arxiv.org/abs/1505.04597
@@ -32,7 +31,7 @@ class ImageWeightUNet(abstract_network.AbstractUNet):
         the tranpose convolution (specified by upmode='transpose')
     """
 
-    def __init__(self, num_classes, mean, std, in_channels=1, depth=5,
+    def __init__(self, num_classes, mean, std, in_channels=1,
                  main_net_depth=1, sub_net_depth=3, num_subnets=2,
                  start_filts=64, up_mode='transpose', merge_mode='add',
                  augment_data=True,
@@ -63,11 +62,11 @@ class ImageWeightUNet(abstract_network.AbstractUNet):
         self.final_ops = nn.ModuleList()
         for i in range(self.num_subnets):
             # We create each requested subnet
-            self.subnets.append(SubUNet(self.num_classes, self.mean, self.std, 
+            self.subnets.append(subnetwork.SubUNet(self.num_classes, self.mean, self.std, 
                                                     depth=self.sub_net_depth))
             # And we output a weight for each subnet based on the whole image
             # That's why we employ torch.sum
-            op = conv1x1(outs, self.num_classes)
+            op = abstract_network.conv1x1(outs, self.num_classes)
             self.final_ops.append(op)
 
     @staticmethod

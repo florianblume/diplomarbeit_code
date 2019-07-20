@@ -15,17 +15,17 @@ CONVERT_DATA_TO: "uint8"
 ### Network configuration
 # Rigth now only depth 3 works
 DEPTH: 3
-BATCH_SIZE: 24
+BATCH_SIZE: 1
 TRAIN_PATCH_SIZE: 100
 PRED_PATCH_SIZE: 128
-VIRTUAL_BATCH_SIZE: 20
+VIRTUAL_BATCH_SIZE: 1
 OVERLAP: 48
 # How much of training data should be used for validation
 VALIDATION_RATIO: 0.1
 # Number of images to compute the validation loss with after a backpropagation step
-VALIDATION_SIZE: 20
-STEPS_PER_EPOCH: 5
-EPOCHS: 1000
+VALIDATION_SIZE: 1
+STEPS_PER_EPOCH: 1
+EPOCHS: 2
 # Number of classes, in case of Probabilistic N2V we have 800, 1 otherwise
 NUM_CLASSES: 1
 AUGMENT_DATA: True

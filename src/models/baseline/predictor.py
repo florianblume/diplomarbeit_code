@@ -6,13 +6,13 @@ import json
 import os
 
 from models import abstract_predictor
-from . import baseline_network
+from models.baseline import baseline_network
 
 class Predictor(abstract_predictor.AbstractPredictor):
 
     def _load_net(self):
         checkpoint = torch.load(self.network_path)
-        self.net = baseline_network.UNet(1, checkpoint['mean'], 
+        self.net = baseline_network.UNet(1, checkpoint['mean'],
                         checkpoint['std'], depth=self.config['DEPTH'])
         state_dict = checkpoint['model_state_dict']
         # Legacy weight adjustment

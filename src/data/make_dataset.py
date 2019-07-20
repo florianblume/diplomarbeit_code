@@ -1,26 +1,23 @@
 import os
 import numpy as np
-import sys
 import shutil
 import tifffile as tif
-from skimage import io
+
+from src import util
 
 """
 Script to create the datasets as they were used in the experiments.
 """
 
-# Needs to be in this order otherwise util won't get found
-main_path = os.getcwd()
-sys.path.append(os.path.join(main_path, 'src'))
-import util
+MAIN_PATH = os.getcwd()
 
 def load_add_gauss_store(src_path, dest_path, mean, std):
-    data = np.load(os.path.join(main_path, src_path))
+    data = np.load(os.path.join(MAIN_PATH, src_path))
     data = util.add_gauss_noise_to_images(data, mean, std)
     path = os.path.dirname(dest_path)
     if not os.path.exists(path):
         os.makedirs(path)
-    np.save(os.path.join(main_path, dest_path), data)
+    np.save(os.path.join(MAIN_PATH, dest_path), data)
 
 
 def zero_mean(data):
@@ -40,15 +37,15 @@ def adjust_raw_and_scaled_shifted_gt(gts, raws):
 
 print('Removing old generated data.')
 if os.path.exists('data/processed'):
-    shutil.rmtree(os.path.join(main_path, 'data/processed'))
+    shutil.rmtree(os.path.join(MAIN_PATH, 'data/processed'))
 
 print('Processing cells dataset.')
 
 ### Create fish dataset
 
 print('Creating fish dataset.')
-fish_dataset_src_path = os.path.join(main_path, 'data/raw/fish')
-fish_dataset_dest_path = os.path.join(main_path, 'data/processed/fish')
+fish_dataset_src_path = os.path.join(MAIN_PATH, 'data/raw/fish')
+fish_dataset_dest_path = os.path.join(MAIN_PATH, 'data/processed/fish')
 
 print('.....Copying raw data to \"processed\" folder.')
 shutil.copytree(fish_dataset_src_path, fish_dataset_dest_path)
@@ -76,8 +73,8 @@ load_add_gauss_store('data/raw/fish/raw/training_big_raw.npy',
 ### Create mouse dataset
 
 print('Creating mouse dataset.')
-fish_dataset_src_path = os.path.join(main_path, 'data/raw/mouse')
-fish_dataset_dest_path = os.path.join(main_path, 'data/processed/mouse')
+fish_dataset_src_path = os.path.join(MAIN_PATH, 'data/raw/mouse')
+fish_dataset_dest_path = os.path.join(MAIN_PATH, 'data/processed/mouse')
 
 print('.....Copying raw data to \"processed\" folder.')
 shutil.copytree(fish_dataset_src_path, fish_dataset_dest_path)

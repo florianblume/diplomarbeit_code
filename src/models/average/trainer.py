@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 import importlib
 
 import util
-import abstract_trainer
-from . import weight_network
+from models import abstract_trainer
+from models.average import weight_network
 
 class Trainer(abstract_trainer.AbstractTrainer):
 
@@ -50,7 +50,7 @@ class Trainer(abstract_trainer.AbstractTrainer):
         self.net.train(False)
         # Predict for one example image
         raw = self.data_raw[0]
-        prediction, weights = self.net.predict(raw, self.ps, self.overlap)
+        prediction, _ = self.net.predict(raw, self.ps, self.overlap)
         self.net.train(True)
         gt = self.data_gt[0]
         gt = util.denormalize(gt, self.loader.mean(), self.loader.std())
@@ -64,13 +64,38 @@ class Trainer(abstract_trainer.AbstractTrainer):
             self.writer.add_histogram(
                 name, param.clone().cpu().data.numpy(), self.print_step)
 
-    def _train(self):
-        sub_outputs, weights, labels, masks, self.dataCounter =\
-            self.net.training_predict(
-                self.data_train, self.data_train_gt, self.dataCounter, 
-                self.size, self.box_size, self.bs)
+    def _perform_validation(self):
+        for _ in range(self.val_size):
+            #TODO just a temporary fix to handle the weights returned by the average network
+            # need to fix this properly
+            outputs, _, labels, masks, self.val_counter = self.net.training_predict(
+                    self.data_val, self.data_val_gt, self.val_counter, 
+                    self.size, self.box_size, self.bs)
+            # Needed by subclasses that's why we store val_loss on self
+            self.val_loss = self.net.loss_function(outputs, labels, masks)
+            self.val_losses.append(self.val_loss.item())
 
-        self.train_loss = self.net.loss_function(sub_outputs, labels, masks)
-        self.train_loss.backward()
-        self.running_loss += self.train_loss.item()
-        self.train_losses.append(self.train_loss.item())
+    def _perform_epochs(self):
+        # loop over the dataset multiple times
+        for step in range(self.epochs):
+            self.train_losses = []
+            self.optimizer.zero_grad()
+
+            # Iterate over virtual batch
+            for _ in range(self.vbatch):
+                outputs, _, labels, masks, self.data_counter = self.net.training_predict(
+                    self.data_train, self.data_train_gt, self.data_counter, 
+                    self.size, self.box_size, self.bs)
+
+                self.train_loss = self.net.loss_function(outputs, labels, masks)
+                self.train_loss.backward()
+                self.running_loss += self.train_loss.item()
+                self.train_losses.append(self.train_loss.item())
+
+            self.optimizer.step()
+            if step % self.steps_per_epoch == self.steps_per_epoch-1:
+                self.epoch = step / self.steps_per_epoch
+                self._on_epoch_end(step, self.train_losses)
+
+                #if step / self.steps_per_epoch > 200:
+                    #break

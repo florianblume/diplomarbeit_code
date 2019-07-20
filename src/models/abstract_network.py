@@ -5,6 +5,7 @@ from torch.autograd import Variable
 from collections import OrderedDict
 from torch.nn import init
 import numpy as np
+
 import util
 
 def conv3x3(in_channels, out_channels, stride=1,

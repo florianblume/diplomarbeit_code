@@ -1,13 +1,12 @@
+import os
 import torch
 import torchvision
 import torch.optim as optim
 import torch.distributions as tdist
 import numpy as np
-import os
-import importlib
 
-from data import dataloader
-import util
+from src import util
+from src.data import dataloader
 
 class AbstractTrainer():
 
@@ -34,7 +33,7 @@ class AbstractTrainer():
         self.bs = self.config['BATCH_SIZE']
         self.size = self.config['TRAIN_PATCH_SIZE']
         self.num_pix = self.size * self.size / 32.0
-        self.dataCounter = None
+        self.data_counter = None
         self.box_size = np.round(
             np.sqrt(
                 self.size * self.size / self.num_pix)).astype(np.int)
@@ -85,13 +84,16 @@ class AbstractTrainer():
     def _write_tensorboard_data(self):
         raise 'This function needs to be implemented by the subclasses.'
 
+    def _perform_validation(self):
+        raise 'This function needs to be implemented by the subclasses.'
+
     def _on_epoch_end(self, step, train_losses):
         # Needed by subclasses
         self.print_step = step + 1
         running_loss = (np.mean(train_losses))
         print("Step:", self.print_step, "| Avg. epoch loss:", running_loss)
         train_losses = np.array(train_losses)
-        print("avg. loss: "+str(np.mean(train_losses))+"+-" +
+        print("Avg. loss: "+str(np.mean(train_losses))+"+-" +
             str(np.std(train_losses)/np.sqrt(train_losses.size)))
         # Average loss for the current iteration
         # Need to store on class because subclasses need the loss
@@ -99,21 +101,13 @@ class AbstractTrainer():
         self.train_hist.append(self.avg_train_loss)
 
         self.net.train(False)
-        val_losses = []
-        valCounter = 0
+        self.val_losses = []
+        self.val_counter = 0
 
-        for _ in range(self.val_size):
-            #TODO just a temporary fix to handle the weights returned by the average network
-            # need to fix this properly
-            outputs, _, labels, masks, valCounter = self.net.training_predict(
-                    self.data_val, self.data_val_gt, valCounter, 
-                    self.size, self.box_size, self.bs)
-            # Needed by subclasses that's why we store val_loss on self
-            self.val_loss = self.net.loss_function(outputs, labels, masks)
-            val_losses.append(self.val_loss.item())
+        self._perform_validation()
 
         # Need to store on class because subclasses need the loss
-        self.avg_val_loss = np.mean(val_losses)
+        self.avg_val_loss = np.mean(self.val_losses)
         self.net.train(True)
 
         # Save the current best network
@@ -135,7 +129,7 @@ class AbstractTrainer():
         if self.write_tensorboard_data:
             self._write_tensorboard_data()
 
-    def _train(self):
+    def _perform_epochs(self):
         raise 'This function needs to be implemented by the subclasses.'
 
     def train(self):
@@ -163,25 +157,7 @@ class AbstractTrainer():
             self.writer = SummaryWriter(os.path.join(
                 self.experiment_base_path, 'tensorboard'))
 
-        # loop over the dataset multiple times
-        for step in range(self.epochs):
-            self.train_losses = []
-            self.optimizer.zero_grad()
-
-            # Iterate over virtual batch
-            for _ in range(self.vbatch):
-                # Implemented by subclasses
-                self._train()
-
-            #TODO Maybe the stepping needs to go in the subclasses as well
-            self.optimizer.step()
-
-            if step % self.steps_per_epoch == self.steps_per_epoch-1:
-                self.epoch = step / self.steps_per_epoch
-                self._on_epoch_end(step, self.train_losses)
-
-                #if step / self.steps_per_epoch > 200:
-                    #break
+        self._perform_epochs()
 
         if self.write_tensorboard_data:
             # The graph is nonsense and otherwise we have to

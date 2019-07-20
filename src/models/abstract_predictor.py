@@ -1,15 +1,14 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import os
 import json
 import time
-import importlib
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 
-from data import dataloader
 import util
+from data import dataloader
 
 
 class AbstractPredictor():
@@ -17,6 +16,17 @@ class AbstractPredictor():
     def __init__(self, config):
         self.config_path = os.path.dirname(config)
         self.config = util.load_config(config)
+
+        #Initialize member variables that are getting set later
+        self.net = None
+        self.network_path = None
+        self.experiment_base_path = None
+        self.pred_output_path = None
+        self.ps = None
+        self.overlap = None
+        self.loader = None
+        self.data_gt = None
+        self.data_test = None
 
     def _load_config_parameters(self):
         if 'PRED_NETWORK_PATH' not in self.config:
@@ -85,15 +95,16 @@ class AbstractPredictor():
             running_times.append(end - start)
 
             pred_image_filename = 'pred_' + str(index).zfill(4) + '.png'
-            im_filename = 'im_' + str(index).zfill(4) + '.png'
+            # If we want to store the unnoised test image we have to normalize it
+            im = util.denormalize(im, self.net.mean, self.net.std)
+            #im_filename = 'im_' + str(index).zfill(4) + '.png'
             if self.pred_output_path != "":
                 # zfill(4) is enough, probably never going to pedict on more images than 9999
                 plt.imsave(os.path.join(self.pred_output_path,
                                         pred_image_filename), prediction, cmap='gray')
-                plt.imsave(os.path.join(self.pred_output_path,
-                                        im_filename), im, cmap='gray')
+                #plt.imsave(os.path.join(self.pred_output_path,
+                #                       im_filename), im, cmap='gray')
 
-            im = util.denormalize(im, self.net.mean, self.net.std)
 
             # Can be None, if no ground-truth data has been specified
             if self.data_gt is not None:
@@ -110,14 +121,14 @@ class AbstractPredictor():
         print('')
         avg_runtime = np.mean(running_times)
         print("Average runtime per image:", avg_runtime)
+        with open(os.path.join(self.pred_output_path, 'results.json'), 'w') as json_output:
+            results['average_runtime'] = avg_runtime
 
-        if self.data_gt is not None:
-            average = np.mean(np.array(list(results.values())))
-            std = np.std(psnr_values)
-            print("Average PSNR:", average)
-            print("Standard deviation:", std)
-            with open(os.path.join(self.pred_output_path, 'results.json'), 'w') as json_output:
+            if self.data_gt is not None:
+                average = np.mean(np.array(list(results.values())))
+                std = np.std(psnr_values)
+                print("Average PSNR:", average)
+                print("Standard deviation:", std)
                 results['average'] = average
                 results['std'] = std
-                results['average_runtime'] = avg_runtime
                 json.dump(results, json_output)

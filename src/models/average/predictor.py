@@ -7,6 +7,7 @@ import json
 import os
 
 from models import abstract_predictor
+from models.average import weight_network
 
 class Predictor(abstract_predictor.AbstractPredictor):
 
@@ -15,14 +16,14 @@ class Predictor(abstract_predictor.AbstractPredictor):
         assert weight_mode in ['image', 'pixel']
         checkpoint = torch.load(self.network_path)
         if weight_mode == 'image':
-            from weight_network import ImageWeightUNet as Network
+            Network = weight_network.ImageWeightUNet
         else:
-            from weight_network import PixelWeightUNet as Network
-        net = Network(self.config['NUM_CLASSES'], checkpoint['mean'], 
+            Network = weight_network.PixelWeightUNet
+        self.net = Network(self.config['NUM_CLASSES'], checkpoint['mean'], 
                         checkpoint['std'], depth=self.config['DEPTH'])
-        net.load_state_dict(checkpoint['model_state_dict'])
-        return net
+        self.net.load_state_dict(checkpoint['model_state_dict'])
 
     def _predict(self, image):
-        image = self.net.predict(image, self.ps, self.overlap)
+        image, weights = self.net.predict(image, self.ps, self.overlap)
+        print("Weights of subnetworks: {}".format(weights))
         return image
