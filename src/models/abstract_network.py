@@ -154,7 +154,6 @@ class AbstractUNet(nn.Module):
                 upsampling.
         """
         super(AbstractUNet, self).__init__()
-
         if up_mode in ('transpose', 'upsample'):
             self.up_mode = up_mode
         else:
@@ -185,12 +184,15 @@ class AbstractUNet(nn.Module):
         self.device = device
         self.mean = mean
         self.std = std
+        self.up_mode = up_mode
+        self.merge_mode = merge_mode
         self.augment_data = augment_data
 
         self.down_convs = []
         self.up_convs = []
 
         self.noiseSTD = nn.Parameter(data=torch.log(torch.tensor(0.5)))
+        self.noiseSTD.requires_grad = False
 
         # create the encoder pathway and add to a list
         for i in range(depth):
@@ -227,8 +229,8 @@ class AbstractUNet(nn.Module):
     @staticmethod
     def weight_init(m):
         if isinstance(m, nn.Conv2d):
-            init.xavier_normal(m.weight)
-            init.constant(m.bias, 0)
+            init.xavier_normal_(m.weight)
+            init.constant_(m.bias, 0)
 
     @staticmethod
     def loss_function(outputs, labels, masks):
@@ -254,7 +256,7 @@ class AbstractUNet(nn.Module):
         # Assemble mini batch
         for j in range(bs):
             im, l, m, data_counter = util.random_crop_fri(
-                train_data, size, size, box_size, counter=data_counter, 
+                train_data, size, size, box_size, counter=data_counter,
                 dataClean=train_data_clean, augment_data=self.augment_data)
             inputs[j, :, :, :] = util.img_to_tensor(im)
             labels[j, :, :] = util.img_to_tensor(l)

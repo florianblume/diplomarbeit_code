@@ -54,17 +54,25 @@ class ImageWeightUNet(AbstractUNet):
         """
         self.num_subnets = num_subnets
         self.sub_net_depth = sub_net_depth
+        
         super().__init__(num_classes, mean, std, in_channels, depth=main_net_depth, 
                 start_filts=start_filts, up_mode=up_mode, merge_mode=merge_mode, 
                 augment_data=augment_data, device=device)
 
     def _build_network_head(self, outs):
+        # Do not move to init as this method gets called by the init of the
+        # super class.
         self.subnets = nn.ModuleList()
         self.final_ops = nn.ModuleList()
-        for i in range(self.num_subnets):
+
+        for _ in range(self.num_subnets):
             # We create each requested subnet
             self.subnets.append(SubUNet(self.num_classes, self.mean, self.std,
-                                                    depth=self.sub_net_depth))
+                                        depth=self.sub_net_depth, 
+                                        start_filts=self.start_filts,
+                                        up_mode=self.up_mode, 
+                                        merge_mode=self.merge_mode,
+                                        device=self.device))
             self.final_ops.append(conv1x1(outs, self.num_classes))
 
     @staticmethod
@@ -145,7 +153,7 @@ class ImageWeightUNet(AbstractUNet):
         # of the outputs of the subnetworks by the sum of the weights
         outputs /= torch.sum(weights, 0)
         
-        return sub_outputs, weights, labels, masks, data_counter
+        return outputs, weights, labels, masks, data_counter
 
     def predict(self, image, patch_size, overlap):
         # weights for each subnet for the whole imagess
