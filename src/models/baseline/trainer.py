@@ -8,15 +8,15 @@ import matplotlib.pyplot as plt
 import importlib
 
 import util
-from models import abstract_trainer
-from models.baseline import baseline_network
+from models import AbstractTrainer
+from models.baseline import UNet
 
-class Trainer(abstract_trainer.AbstractTrainer):
+class Trainer(AbstractTrainer):
 
     def _load_network(self):
         # Device gets automatically created in constructor
         # We persist mean and std when saving the network
-        self.net = baseline_network.UNet(self.config['NUM_CLASSES'], 
+        self.net = UNet(self.config['NUM_CLASSES'], 
                         self.loader.mean(), self.loader.std(), 
                         depth=self.config['DEPTH'],
                         augment_data=self.config['AUGMENT_DATA'])

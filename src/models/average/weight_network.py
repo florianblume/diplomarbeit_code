@@ -7,10 +7,11 @@ from torch.nn import init
 import numpy as np
 
 import util
-from models import abstract_network
-from models.average import subnetwork
+from models import AbstractUNet
+from models import conv1x1
+from models.average import SubUNet
 
-class ImageWeightUNet(abstract_network.AbstractUNet):
+class ImageWeightUNet(AbstractUNet):
     """ `UNet` class is based on https://arxiv.org/abs/1505.04597
     The U-Net is a convolutional encoder-decoder neural network.
     Contextual spatial information (from the decoding,
@@ -62,12 +63,9 @@ class ImageWeightUNet(abstract_network.AbstractUNet):
         self.final_ops = nn.ModuleList()
         for i in range(self.num_subnets):
             # We create each requested subnet
-            self.subnets.append(subnetwork.SubUNet(self.num_classes, self.mean, self.std, 
+            self.subnets.append(SubUNet(self.num_classes, self.mean, self.std,
                                                     depth=self.sub_net_depth))
-            # And we output a weight for each subnet based on the whole image
-            # That's why we employ torch.sum
-            op = abstract_network.conv1x1(outs, self.num_classes)
-            self.final_ops.append(op)
+            self.final_ops.append(conv1x1(outs, self.num_classes))
 
     @staticmethod
     def loss_function(outputs, labels, masks):

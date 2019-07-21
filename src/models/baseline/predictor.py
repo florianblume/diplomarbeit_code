@@ -1,18 +1,13 @@
-import argparse
 import torch
-import numpy as np
-import matplotlib.pyplot as plt
-import json
-import os
 
-from models import abstract_predictor
-from models.baseline import baseline_network
+from models.baseline import UNet
+from models import AbstractPredictor
 
-class Predictor(abstract_predictor.AbstractPredictor):
+class Predictor(AbstractPredictor):
 
     def _load_net(self):
         checkpoint = torch.load(self.network_path)
-        self.net = baseline_network.UNet(1, checkpoint['mean'],
+        self.net = UNet(1, checkpoint['mean'],
                         checkpoint['std'], depth=self.config['DEPTH'])
         state_dict = checkpoint['model_state_dict']
         # Legacy weight adjustment

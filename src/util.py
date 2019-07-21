@@ -13,6 +13,8 @@ def normal_dense(x, m_=0.0, std_=None):
 def img_to_tensor(img):
     import torchvision
     img.shape = (img.shape[0], img.shape[1], 1)
+    # torch expects channels as the first dimension - this function automatically
+    # permuates the dimensions correctly
     imgOut = torchvision.transforms.functional.to_tensor(img)
     return imgOut
 

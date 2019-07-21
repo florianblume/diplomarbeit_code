@@ -7,12 +7,13 @@ from torch.nn import init
 import numpy as np
 
 import util
-from models import abstract_network
+from models import AbstractUNet
+from models import conv1x1
 
-class UNet(abstract_network.AbstractUNet):
+class UNet(AbstractUNet):
     
     def _build_network_head(self, outs):
-        self.network_head = abstract_network.conv1x1(outs, self.num_classes)
+        self.network_head = conv1x1(outs, self.num_classes)
 
     @staticmethod
     def loss_function(outputs, labels, masks):
@@ -104,6 +105,7 @@ class UNet(abstract_network.AbstractUNet):
         # In case of Probabilistic Noise2Void we would have samples from
         # multiple Gaussian distributions and inputs[0, :, :, :] would become
         # inputs[num_classes, :, :, :]
+        # Shape of inputs is [num_classes, channels, H, W]
         inputs = torch.zeros(1, 1, patch.shape[0], patch.shape[1])
         inputs[0, :, :, :] = util.img_to_tensor(patch)
 

@@ -3,7 +3,7 @@ import numpy as np
 import shutil
 import tifffile as tif
 
-from src import util
+import util
 
 """
 Script to create the datasets as they were used in the experiments.

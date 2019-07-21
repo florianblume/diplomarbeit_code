@@ -8,16 +8,17 @@ import matplotlib.pyplot as plt
 import importlib
 
 import util
-from models import abstract_trainer
-from models.average import weight_network
+from models import AbstractTrainer
+from models.average import ImageWeightUNet
+from models.average import PixelWeightUNet
 
-class Trainer(abstract_trainer.AbstractTrainer):
+class Trainer(AbstractTrainer):
 
     def _load_network(self):
         if self.config['WEIGHT_MODE'] == 'image':
-            Network = weight_network.ImageWeightUNet
+            Network = ImageWeightUNet
         elif self.config['WEIGHT_MODE'] == 'pixel':
-            Network = weight_network.PixelWeightUNet
+            Network = PixelWeightUNet
         else:
             raise 'Invalid config value for \"weight_mode\".'
 

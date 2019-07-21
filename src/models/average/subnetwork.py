@@ -7,9 +7,10 @@ from torch.nn import init
 import numpy as np
 
 import util
-from models import abstract_network
+from models import AbstractUNet
+from models import conv1x1
 
-class SubUNet(abstract_network.AbstractUNet):
+class SubUNet(AbstractUNet):
     """ `UNet` class is based on https://arxiv.org/abs/1505.04597
     The U-Net is a convolutional encoder-decoder neural network.
     Contextual spatial information (from the decoding,
@@ -54,7 +55,7 @@ class SubUNet(abstract_network.AbstractUNet):
             merge_mode=merge_mode, augment_data=augment_data, device=device)
 
     def _build_network_head(self, outs):
-        self.conv_final = abstract_network.conv1x1(outs, self.num_classes)
+        self.conv_final = conv1x1(outs, self.num_classes)
 
     @staticmethod
     def loss_function(outputs, labels, masks):

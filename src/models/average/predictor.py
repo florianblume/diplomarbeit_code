@@ -1,24 +1,19 @@
-import argparse
 import torch
-import numpy as np
-import matplotlib.pyplot as plt
-import importlib
-import json
-import os
 
-from models import abstract_predictor
-from models.average import weight_network
+from models import AbstractPredictor
+from models.average import ImageWeightUNet
+from models.average import PixelWeightUNet
 
-class Predictor(abstract_predictor.AbstractPredictor):
+class Predictor(AbstractPredictor):
 
     def _load_net(self):
         weight_mode = self.config['WEIGHT_MODE']
         assert weight_mode in ['image', 'pixel']
         checkpoint = torch.load(self.network_path)
         if weight_mode == 'image':
-            Network = weight_network.ImageWeightUNet
+            Network = ImageWeightUNet
         else:
-            Network = weight_network.PixelWeightUNet
+            Network = PixelWeightUNet
         self.net = Network(self.config['NUM_CLASSES'], checkpoint['mean'], 
                         checkpoint['std'], depth=self.config['DEPTH'])
         self.net.load_state_dict(checkpoint['model_state_dict'])

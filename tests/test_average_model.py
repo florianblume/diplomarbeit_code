@@ -3,19 +3,14 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from torchtest import assert_vars_change
 
-import os
-import sys
+from tests import base_test
+from models.average import ImageWeightUNet
 
-sys.path.append(os.path.join(os.getcwd(), 'src'))
-
-from src.models.average.weight_network import ImageWeightUnet
-from src.models.average.weight_network import PixelWeightUnet
-
-def execute():
+def test_average_model():
     inputs = Variable(torch.randn(20, 20))
     targets = Variable(torch.randn(20, 20))
     batch = [inputs, targets]
-    model = ImageWeightUnet(
+    model = ImageWeightUNet(
                 1, 0, 0, in_channels=1,
                 main_net_depth=1, sub_net_depth=3, num_subnets=2,
                  start_filts=64, up_mode='transpose', merge_mode='add',

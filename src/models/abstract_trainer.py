@@ -5,8 +5,8 @@ import torch.optim as optim
 import torch.distributions as tdist
 import numpy as np
 
-from src import util
-from src.data import dataloader
+import util
+from data import dataloader
 
 class AbstractTrainer():
 
