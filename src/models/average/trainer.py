@@ -23,7 +23,7 @@ class Trainer(AbstractTrainer):
             raise 'Invalid config value for \"weight_mode\".'
 
         self.net = Network(self.config['NUM_CLASSES'], self.loader.mean(),
-                    self.loader.std(), depth=self.config['DEPTH'],
+                    self.loader.std(),
                     main_net_depth=self.config['MAIN_NET_DEPTH'],
                     sub_net_depth=self.config['SUB_NET_DEPTH'],
                     num_subnets=self.config['NUM_SUBNETS'],
