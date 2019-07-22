@@ -106,6 +106,7 @@ class ImageWeightUNet(AbstractUNet):
         # except for the batch dimension, since the individual entries in a
         # batch do not necessarily belong to the same image
         x = torch.mean(results, (2, 3, 4))
+        x = torch.exp(x)
         return x
 
     def training_predict(self, train_data, train_data_clean, data_counter, size, box_size, bs):
@@ -140,11 +141,14 @@ class ImageWeightUNet(AbstractUNet):
         # some kind of averaging already but only on the patch-level.
         # [subnets, batch]
         weights = self(inputs)
-        # [subnets, batch, H, W]
+        # [subnets, batch, num_classes, H, W]
         sub_outputs = torch.stack([sub(inputs) for sub in self.subnets])
-        # All pixels in each sub_output get multiplied by the same weight
-        # sum([subnets, batch] x [subnets, batch, H, W], 0) = [batch, H, W]
-        # torch is not able to broadcast weights directly
+        # We compute weights on a per-image basis -> one weight for one image
+        # If we were to perform Probabilistic Noise2Void we would need
+        # the reconstruction of based on the output samples and weight this
+        # reconstruction.
+        # torch is not able to broadcast weights directly thus we have to
+        # expand the shape of the weights.
         weights = weights.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
         outputs = torch.sum(weights * sub_outputs, 0)
 
