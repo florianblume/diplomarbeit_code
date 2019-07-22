@@ -29,7 +29,7 @@ AUGMENT_DATA: True
 # Number of classes, in case of Probabilistic N2V we have 800, 1 otherwise
 NUM_CLASSES: 1
 # Depth of the main net computing the weights
-MAIN_NET_DEPTH: 1
+MAIN_NET_DEPTH: 3
 # Number of subnets to use
 NUM_SUBNETS: 2
 # Depth of the subnetworks performing the actual denoising

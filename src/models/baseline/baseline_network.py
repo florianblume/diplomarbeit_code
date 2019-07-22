@@ -13,7 +13,9 @@ from models import conv1x1
 class UNet(AbstractUNet):
     
     def _build_network_head(self, outs):
-        self.network_head = conv1x1(outs, self.num_classes)
+        # TODO actually output should be self.num_channels x self.num_classes
+        # to account for RGB images and Probabilistic Noise2Void
+        self.network_head = conv1x1(outs, 1)
 
     @staticmethod
     def loss_function(outputs, labels, masks):
