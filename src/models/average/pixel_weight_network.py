@@ -12,25 +12,6 @@ from models import conv1x1
 from models.average import SubUNet
 
 class PixelWeightUNet(nn.Module):
-    """ `UNet` class is based on https://arxiv.org/abs/1505.04597
-    The U-Net is a convolutional encoder-decoder neural network.
-    Contextual spatial information (from the decoding,
-    expansive pathway) about an input tensor is merged with
-    information representing the localization of details
-    (from the encoding, compressive pathway).
-    Modifications to the original paper:
-    (1) padding is used in 3x3 convolutions to prevent loss
-        of border pixels
-    (2) merging outputs does not require cropping due to (1)
-    (3) residual connections can be used by specifying
-        UNet(merge_mode='add')
-    (4) if non-parametric upsampling is used in the decoder
-        pathway (specified by upmode='upsample'), then an
-        additional 1x1 2d convolution occurs after upsampling
-        to reduce channel dimensionality by a factor of 2.
-        This channel halving happens with the convolution in
-        the tranpose convolution (specified by upmode='transpose')
-    """
 
     def __init__(self, num_classes, mean, std, in_channels=1,
                  main_net_depth=1, sub_net_depth=3, num_subnets=2,
@@ -119,23 +100,13 @@ class PixelWeightUNet(nn.Module):
         # Compute the pixel-wise weights for the subnetworks
         # x = [num_subnets, batch_size, num_classes, H, W]
         # where num_classes is only used in Probabilistic Noise2Void
-        x = torch.stack([final_op(x) for final_op in self.final_ops])
-        x = torch.exp(x)
-        return x
+        weights = torch.stack([final_op(x) for final_op in self.final_ops])
+        weights = torch.exp(weights)
+        # Sum along first axis, i.e. subnets, and divide by sum of weights
+        amalgamted_image = torch.sum(weights * sub_outputs, 0) / torch.sum(weights, 0)
+        return amalgamted_image, weights
 
     def training_predict(self, train_data, train_data_clean, data_counter, size, box_size, bs):
-        """Performs a forward step during training.
-
-        Arguments:
-            train_data {np.array} -- the normalized raw training data
-            train_data_clean {np.array} -- the normalized ground-truth targets, if available
-            data_counter {int} -- the counter when to shuffle the training data
-            size {int} -- the patch size
-            bs {int} -- the batch size
-
-        Returns:
-            np.array, np.array, np.array, int -- outputs, labels, masks, data_counter
-        """
         # Init Variables
         inputs, labels, masks = self.assemble_training__batch(bs, size, box_size,
                                     data_counter, train_data, train_data_clean)
@@ -145,23 +116,15 @@ class PixelWeightUNet(nn.Module):
             self.device), labels.to(self.device), masks.to(self.device)
         
         # Forward step
-        # Each pixel has its individual weight
-        # [subnets, batch, num_classes, H, W]
-        weights = self(inputs)
-        # [subnets, batch, num_classes, H, W]
-        sub_outputs = [sub(inputs) for sub in self.subnets]
-        # [subnets, batch, H, W] x [subnets, batch, H, W]
-        outputs = torch.sum(weights * sub_outputs, 0)
-        # This works in pixel-wise and image-wise case
-        outputs /= torch.sum(weights, 0)
+        amalgamted_image, weights = self(inputs)
         
-        return sub_outputs, weights, labels, masks, data_counter
+        return amalgamted_image, weights, labels, masks, data_counter
 
     def predict(self, image, patch_size, overlap):
         # weights for each subnet per pixel
-        weights = np.zeros((self.num_subnets, image.shape))
+        weights = np.zeros((self.num_subnets, image.shape[0], image.shape[1]))
         # sub_images = [subnets, H, W]
-        sub_images = np.zeros((self.num_subnets, image.shape))
+        amalgamted_image = np.zeros((self.num_subnets, image.shape[0], image.shape[1]))
         # We have to use tiling because of memory constraints on the GPU
         xmin = 0
         ymin = 0
@@ -172,14 +135,11 @@ class PixelWeightUNet(nn.Module):
             ovTop = 0
             while (ymin < image.shape[0]):
                 patch = image[ymin:ymax, xmin:xmax]
-                # self.predict_patch(patch) returns [num_subnets, H, W]
-                # i.e. one weight for each pixel
+                _weights, _amalgamted_image = self.predict_patch(patch)
                 weights[:, ymin:ymax, xmin:xmax][:, ovTop:, ovLeft:]\
-                    = self.predict_patch(patch)
-                sub_outputs = np.array([subnet.predict_patch(patch)\
-                                        for subnet in self.subnets])
-                sub_images[:, ymin:ymax, xmin:xmax][:, ovTop:, ovLeft:]\
-                    = sub_outputs[:, ovTop:, ovLeft:] 
+                    = _weights(patch)
+                amalgamted_image[:, ymin:ymax, xmin:xmax][:, ovTop:, ovLeft:]\
+                    = _amalgamted_image[:, ovTop:, ovLeft:]
                 ymin = ymin-overlap+patch_size
                 ymax = ymin+patch_size
                 ovTop = overlap//2
@@ -189,32 +149,23 @@ class PixelWeightUNet(nn.Module):
             xmax = xmin+patch_size
             ovLeft = overlap//2
 
-        # weights * sub_images = [num_subnets, H, W] x [num_subnets, H, W]
-        weighted_average = np.sum(weights * sub_images, axis=0) / np.sum(weights, axis=0)
-
-        return weighted_average, weights
+        return amalgamted_image, weights
 
     def predict_patch(self, patch):
-        """Performs network prediction on a patch of an image using the
-        specified parameters. The network expects the image to be normalized
-        with its mean and std.
-
-        Arguments:
-            patch {np.array} -- the patch to perform prediction on
-
-        Returns:
-            np.array -- the denoised and denormalized patch
-        """
+        # [batch_size, num_channels, H, W]
+        # TODO use num_channels of our class instead of setting it to 1 manually
         inputs = torch.zeros(1, 1, patch.shape[0], patch.shape[1])
         inputs[0, :, :, :] = util.img_to_tensor(patch)
         # copy to GPU
         inputs = inputs.to(self.device)
-        output = self(inputs)
+        amalgamted_image, weights = self(inputs)
 
         # In contrast to probabilistic N2V we only have one sample
         # weights = samples[0, ...]
 
         # Get data from GPU
-        weights = output.cpu().detach().numpy()
+        amalgamted_image = amalgamted_image.cpu().detach().numpy()
+        weights = weights.cpu().detach().numpy()
+        # Remove unnecessary dimensions
         weights = np.squeeze(weights)
-        return weights
+        return amalgamted_image, weights

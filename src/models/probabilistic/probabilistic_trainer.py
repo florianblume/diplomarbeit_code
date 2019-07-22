@@ -3,15 +3,13 @@ import torchvision
 import torch.distributions as tdist
 import torch.optim as optim
 import numpy as np
-import os
-import matplotlib.pyplot as plt
-import importlib
 
-from . import probabilistic_network
-import abstract_trainer
 import util
+from models import AbstractTrainer
+from models.probabilistic import ImageProbabilisticUNet
+from models.probabilistic import PixelProbabilisticUNet
 
-class Trainer(abstract_trainer.AbstractTrainer):
+class Trainer(AbstractTrainer):
 
     def _load_network(self):
         # Device gets automatically created in constructor
@@ -20,9 +18,9 @@ class Trainer(abstract_trainer.AbstractTrainer):
         weight_mode = self.config['WEIGHT_MODE']
         assert weight_mode in ['image', 'pixel']
         if weight_mode == 'image':
-            Network = probabilistic_network.ImageProbabilisticUNet
+            Network = ImageProbabilisticUNet
         else:
-            Network = probabilistic_network.PixelProbabilisticUNet
+            Network = PixelProbabilisticUNet
         self.net = Network(self.config['NUM_CLASSES'], self.loader.mean(),
             self.loader.std(), main_net_depth=self.config['MAIN_NET_DEPTH'],
             sub_net_depth=self.config['SUB_NET_DEPTH'])
@@ -62,8 +60,8 @@ class Trainer(abstract_trainer.AbstractTrainer):
                 name, param.clone().cpu().data.numpy(), self.print_step)
 
     def _train(self):
-        mean, self.std, labels, masks, self.dataCounter = self.net.training_predict(
-            self.data_train, self.data_train_gt, self.dataCounter, 
+        mean, std, labels, masks, self.dataCounter = self.net.training_predict(
+            self.data_train, self.data_train_gt, self.dataCounter,
             self.size, self.box_size, self.bs)
 
         self.train_loss = self.net.loss_function(mean, labels, masks)

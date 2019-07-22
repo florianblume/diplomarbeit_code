@@ -142,7 +142,10 @@ class AbstractUNet(nn.Module):
         NOTE: mean and std will be persisted by the model and restored on loading
 
         Arguments:
-            mean: int, the mean of the raw data that this network was trained with. 
+            num_classes: int, for Probabilistic Noise2Void this is the number of
+                distributions we want to draw the samples from. Set it to 1 if
+                not training in probabilistic style.
+            mean: int, the mean of the raw data that this network was trained with.
             std: int, the std of the raw data that this network was trained with.
             in_channels: int, number of channels in the input tensor.
                 Default is 3 for RGB images.
@@ -152,6 +155,8 @@ class AbstractUNet(nn.Module):
             up_mode: string, type of upconvolution. Choices: 'transpose'
                 for transpose convolution or 'upsample' for nearest neighbour
                 upsampling.
+            merge_mode: string, method to merge down and up convolutions. Choices:
+                'concat' to concatenate the convolutions or 'add' to add them.
         """
         super(AbstractUNet, self).__init__()
         if up_mode in ('transpose', 'upsample'):
@@ -234,6 +239,13 @@ class AbstractUNet(nn.Module):
 
     @staticmethod
     def loss_function(outputs, labels, masks):
+        """The loss function of this network.
+        
+        Arguments:
+            outputs {np.array} -- the outputs that the network produces
+            labels {np.array} -- the target outputs that the network should have produced
+            masks {np.array} -- the mask of the active pixels
+        """
         raise 'This function needs to be implemented by the subclasses.'
 
     def reset_params(self):
@@ -241,14 +253,54 @@ class AbstractUNet(nn.Module):
             self.weight_init(m)
 
     def forward(self, x):
+        """Runs this network on the given input x.
+        
+        Arguments:
+            x {np.array} -- the input image to process
+
+        Returns:
+            {np.array} -- the denoised image
+            NOTE -- subclasses might return additional artifacts
+        """
         raise 'This function needs to be implemented by the subclasses.'
 
-    def training_predict(self, train_data, train_data_clean, 
+    def training_predict(self, train_data, train_data_clean,
                             data_counter, size, box_size, bs):
+        """Performs a forward step during training.
+
+        Arguments:
+            train_data {np.array} -- the normalized raw training data
+            train_data_clean {np.array} -- the normalized ground-truth targets, if available
+            data_counter {int} -- the counter when to shuffle the training data
+            size {int} -- the patch size
+            bs {int} -- the batch size
+
+        Returns:
+            {np.array} -- outputs
+            {np.array} -- labels
+            {np.array} -- masks
+            {int} -- data_counter
+        """
         raise 'This function needs to be implemented by the subclasses.'
 
     def assemble_training__batch(self, bs, size, box_size, data_counter,
                                 train_data, train_data_clean):
+        """Assembles a training batch of the requested batch size using the
+        specified patch size and data.
+        
+        Arguments:
+            bs {int} -- batch size
+            size {int} -- size of a patch
+            box_size {int} -- size of a box
+            data_counter {None or int} -- counts whether we should shuffle the data
+            train_data {np.array} -- the raw training data
+            train_data_clean {np.array} -- the ground-truth training data - if available
+        
+        Returns:
+            {np.array} -- prepared inputs
+            {np.array} -- target outputs
+            {np.array} -- masks, i.e. active pixels                                  
+        """
         inputs = torch.zeros(bs, 1, size, size)
         labels = torch.zeros(bs, size, size)
         masks = torch.zeros(bs, size, size)
@@ -265,7 +317,30 @@ class AbstractUNet(nn.Module):
         return inputs, labels, masks
 
     def predict(self, image, patch_size, overlap):
+        """Performs prediction on the whole image. Since we have certain memory
+        constraints on the GPU it is important to define an appropriate patch
+        size. The overlap defines the overlap between patches.
+        
+        Arguments:
+            image {np.array} -- 2D image (grayscale or RGB)
+            patch_size {int} -- size of the patches to process individually
+            overlap {int} -- overlap between patches
+
+        Returns:
+            {np.array} -- the denoised image
+            NOTE -- subclasses might return additional artifacts
+        """
         raise 'This function needs to be implemented by the subclasses.'
 
     def predict_patch(self, patch):
+        """Performs network prediction on a patch of an image using the
+        specified parameters. The network expects the image to be normalized
+        with its mean and std.
+
+        Arguments:
+            patch {np.array} -- the patch to perform prediction on
+
+        Returns:
+            np.array -- the denoised and denormalized patch
+        """
         raise 'This function needs to be implemented by the subclasses.'

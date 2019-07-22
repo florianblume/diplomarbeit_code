@@ -7,16 +7,16 @@ import os
 import matplotlib.pyplot as plt
 import importlib
 
-from . import subnetwork_standalone as subnetwork
-import abstract_trainer
 import util
+from models import AbstractTrainer
+from models.probabilistic import StandaloneSubUNet
 
 class Trainer(abstract_trainer.AbstractTrainer):
 
     def _load_network(self):
         # Device gets automatically created in constructor
         # We persist mean and std when saving the network
-        self.net = subnetwork.ProbabilisticSubUNet(self.config['NUM_CLASSES'], self.loader.mean(),
+        self.net = StandaloneSubUNet(self.config['NUM_CLASSES'], self.loader.mean(),
                         self.loader.std(), depth=self.config['DEPTH'])
 
     def _load_network_weights(self):
@@ -55,7 +55,7 @@ class Trainer(abstract_trainer.AbstractTrainer):
                 name, param.clone().cpu().data.numpy(), self.print_step)
 
     def _train(self):
-        mean, self.std, labels, masks, self.dataCounter = self.net.training_predict(
+        mean, std, labels, masks, self.dataCounter = self.net.training_predict(
             self.data_train, self.data_train_gt, self.dataCounter, 
             self.size, self.box_size, self.bs)
 

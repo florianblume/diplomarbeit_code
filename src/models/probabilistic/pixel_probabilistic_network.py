@@ -1,16 +1,14 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable
-from collections import OrderedDict
-from torch.nn import init
 import numpy as np
-import math
 
 import util
-import abstract_network
+from models import AbstractUNet
+from models import conv1x1
+from models.probabilistic import IntegratedSubUNet
 
-class ProbabilisticSubUNet(abstract_network.AbstractUNet):
+class PixelProbabilisticUNet(AbstractUNet):
     """ `UNet` class is based on https://arxiv.org/abs/1505.04597
     The U-Net is a convolutional encoder-decoder neural network.
     Contextual spatial information (from the decoding,
@@ -29,17 +27,12 @@ class ProbabilisticSubUNet(abstract_network.AbstractUNet):
         to reduce channel dimensionality by a factor of 2.
         This channel halving happens with the convolution in
         the tranpose convolution (specified by upmode='transpose')
-
-    This UNet predicts the mean and standard deviation of the
-    probability density of the clean pixels. We assume the noise
-    to be i.i.d. This means the probability of the output image
-    given the input image is the product of the single probabilities
-    of the output pixels conditioned on the input pixels.
     """
 
-    def __init__(self, num_classes, mean, std, in_channels=1, depth=5,
+    def __init__(self, num_classes, mean, std, in_channels=1, 
+                 main_net_depth=1, sub_net_depth=3, num_subnets=2,
                  start_filts=64, up_mode='transpose',
-                 merge_mode='add',
+                 merge_mode='add', augment_data=True,
                  device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")):
         """
         NOTE: mean and std will be persisted by the model and restored on loading
@@ -56,39 +49,31 @@ class ProbabilisticSubUNet(abstract_network.AbstractUNet):
                 for transpose convolution or 'upsample' for nearest neighbour
                 upsampling.
         """
-        super(ProbabilisticSubUNet, self).__init__(num_classes, mean, std, in_channels, 
-                main_net_depth, start_filts, up_mode, merge_mode, augment_data, device)
+        super().__init__(num_classes=num_classes, mean=mean, std=std, 
+                in_channels=in_channels, main_net_depth=main_net_depth, 
+                start_filts=start_filts, up_mode=up_mode, merge_mode=merge_mode, 
+                augment_data=augment_data, device=device)
 
-    self _build_network_heads(self, outs):
-        self.conv_final_mean = conv1x1(outs, self.num_classes)
-        self.conv_final_std = conv1x1(outs, self.num_classes)
+        self.sub_net_depth = sub_net_depth
+        self.num_subnets = num_subnets
+
+    def _build_network_head(self, outs):
+        self.subnets = nn.ModuleList()
+        self.weight_probabilities = nn.ModuleList()
+
+        for i in range(self.num_subnets):
+            # create the two subnets
+            self.subnets.append(IntegratedSubUNet(self.num_classes, self.mean, self.std, 
+                                                depth=self.sub_net_depth))
+            # create the probability weights, this can be seen as p(z|x), i.e. the probability
+            # of a decision given the input image. To obtain a weighted "average" of the
+            # predictions of the subnets, we multiply this weight to their output.
+            self.weight_probabilities.append(conv1x1(outs, self.num_classes))
 
     @staticmethod
-    def loss_function(mean, std, labels, masks):
-        # Mean and std for all pixel that the network pred
-        mean = mean[:, 0, ...]
-        std = std[:, 0, ...]
-        ###################
-        # We have pixel-wise independent probabilities of the noise. This means
-        # the probability of the output image is the product over the probabilities
-        # of the individual pixels. To get rid of the product we take the log.
-        # This way we get a sum of logs of gaussians. The gaussians can be split
-        # (due to the log rule) into the constant based only on std and the exponential
-        # which vaniches due to the log.
-        ###################
-        # N(x; mean, std) = 1 / sqrt(2 * pi * std^2) * e^(-(x - mean)^2 / 2 * std^2)
-        # log(a * b) = log(a) + log(b)
-        # c is the factor of a gauss prob density based on the standard deviation in
-        # front of the exponential
-        c = 1 / (torch.sqrt(2 * math.pi * std**2))
-        # exp is no exponential here because we take the log of the loss
-        exp = torch.exp(-(labels - mean)**2)/(2 * std**2))
-        loss = torch.sum(masks * (c + exp)/torch.sum(masks)
-        return loss
-
-    def reset_params(self):
-        for i, m in enumerate(self.modules()):
-            self.weight_init(m)
+    def loss_function(outputs, labels, masks):
+        outs = outputs[:, 0, ...]
+        raise 'Need to implement!'
 
     def forward(self, x):
         encoder_outs = []
@@ -102,15 +87,14 @@ class ProbabilisticSubUNet(abstract_network.AbstractUNet):
             before_pool = encoder_outs[-(i+2)]
             x = module(before_pool, x)
 
-        # No softmax is used. This means you need to use
-        # nn.CrossEntropyLoss is your training script,
-        # as this module includes a softmax already.
-        mean = self.conv_final_mean(x)
-        # exp makes std positive (which it always is)
-        std = torch.exp(self.conv_final_std(x))
-        return mean, std
+        # Compute the individual weight probabilities
+        # One probability (weight) for each subnet
+        outs = torch.stack([prob(x) for prob in self.weight_probabilities])
+        outs = F.softmax(outs, dim=0)
+        return outs
 
-    def training_predict(self, train_data, train_data_clean, data_counter, size, box_size, bs):
+    def training_predict(self, train_data, train_data_clean, data_counter, 
+                                                size, box_size, bs):
         """Performs a forward step during training.
 
         Arguments:
@@ -124,34 +108,31 @@ class ProbabilisticSubUNet(abstract_network.AbstractUNet):
             np.array, np.array, np.array, int -- outputs, labels, masks, data_counter
         """
         # Init Variables
-        
-        inputs, labels, masks = self.assemble_training__batch(bs, size, box_size,
-                                    data_counter, train_data, train_data_clean)
+        inputs, labels, masks = self.assemble_training__batch(bs, size, box_size, 
+                                data_counter, train_data, train_data_clean)
 
         # Move to GPU
         inputs, labels, masks = inputs.to(
             self.device), labels.to(self.device), masks.to(self.device)
 
         # Forward step
-        # We just need the mean (=^ gray color) but the std gives interesting insights
-        mean, std = self(inputs)
-        return mean, std, labels, masks, data_counter
+        weights = self(inputs)
+        means, stds = [subnet(inputs) for subnet in self.subnets]
+
+        # TODO THIS IS NOT CORRECT!!!
+        # The correct formula is w_i = 1/sigma_i^2
+        # bar(x) = sum(x_i sigma_i^(-2))/sum(sigma_i^(-2)) (mean)
+        # sigma_bar(x) = sqrt(1 / sum(sigma_i^(-2)))
+        # See also https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Variance_weights
+        means_out = np.array([w * m for w in weights for m in means])
+        stds_out = np.array([w * m for w in weights for m in stds])
+        #TODO this might be wrong
+        means_out = np.sum(means_out, axis=0)
+        stds_out = np.sum(stds_out, axis=0)
+        return means_out, stds_out, labels, masks, data_counter
 
     def predict(self, image, patch_size, overlap):
-        """Performs denoising on the given image using the specified patch size and overlap.
-        
-        Arguments:
-            image {(H, W)} -- the image to denoise
-            patch_size {int} -- the patch size to use for prediction on individual pixels
-            overlap {int} -- overlap between patches
-        
-        Returns:
-            mean -- the predicted pixel values 
-                    (mean because the network actually estimates a normal distribution)
-            std  -- the standard deviation for each pixel
-        """
-        mean = np.zeros(image.shape)
-        std = np.zeros(image.shape)
+        means = np.zeros(image.shape)
         # We have to use tiling because of memory constraints on the GPU
         xmin = 0
         ymin = 0
@@ -161,18 +142,18 @@ class ProbabilisticSubUNet(abstract_network.AbstractUNet):
         while (xmin < image.shape[1]):
             ovTop = 0
             while (ymin < image.shape[0]):
-                _mean, _std = self.predict_patch(image[ymin:ymax, xmin:xmax])
-                mean[ymin:ymax, xmin:xmax][ovTop:, ovLeft:] = _mean[ovTop:, ovLeft:]
-                std[ymin:ymax, xmin:xmax][ovTop:, ovLeft:] = _std[ovTop:, ovLeft:]
-                ymin = ymin - overlap + patch_size
-                ymax = ymin + patch_size
+                a = self.predict_patch(image[ymin:ymax, xmin:xmax])
+                means[ymin:ymax, xmin:xmax][ovTop:,
+                                            ovLeft:] = a[ovTop:, ovLeft:]
+                ymin = ymin-overlap+patch_size
+                ymax = ymin+patch_size
                 ovTop = overlap//2
             ymin = 0
             ymax = patch_size
-            xmin = xmin - overlap + patch_size
-            xmax = xmin + patch_size
+            xmin = xmin-overlap+patch_size
+            xmax = xmin+patch_size
             ovLeft = overlap//2
-        return mean, std
+        return means
 
     def predict_patch(self, patch):
         """Performs network prediction on a patch of an image using the
@@ -193,25 +174,16 @@ class ProbabilisticSubUNet(abstract_network.AbstractUNet):
 
         # copy to GPU
         inputs = inputs.to(self.device)
-
-        mean, std = self(inputs)
-
-        mean_samples = (mean).permute(1, 0, 2, 3)
-        std_samples = (std).permute(1, 0, 2, 3)
+        output = self(inputs)
+        samples = (output).permute(1, 0, 2, 3)
 
         # In contrast to probabilistic N2V we only have one sample
-        means = mean_samples[0, ...]
-        stds = std_samples[0, ...]
-
+        means = samples[0, ...]
         # Get data from GPU
         means = means.cpu().detach().numpy()
-        stds = stds.cpu().detach().numpy()
-
         # Reshape to 2D images and remove padding
-        means.shape = (mean.shape[2], mean.shape[3])
-        stds.shape = (std.shape[2], std.shape[3])
+        means.shape = (output.shape[2], output.shape[3])
 
         # Denormalize
         means = util.denormalize(means, self.mean, self.std)
-        stds = util.denormalize(stds, self.mean, self.std)
-        return means, std
+        return means

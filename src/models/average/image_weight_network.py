@@ -210,16 +210,6 @@ class ImageWeightUNet(AbstractUNet):
         return weighted_average, weights
 
     def predict_patch(self, patch):
-        """Performs network prediction on a patch of an image using the
-        specified parameters. The network expects the image to be normalized
-        with its mean and std.
-
-        Arguments:
-            patch {np.array} -- the patch to perform prediction on
-
-        Returns:
-            np.array -- the denoised and denormalized patch
-        """
         inputs = torch.zeros(1, 1, patch.shape[0], patch.shape[1])
         inputs[0, :, :, :] = util.img_to_tensor(patch)
         # copy to GPU
