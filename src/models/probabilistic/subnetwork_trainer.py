@@ -11,7 +11,7 @@ import util
 from models import AbstractTrainer
 from models.probabilistic import StandaloneSubUNet
 
-class Trainer(abstract_trainer.AbstractTrainer):
+class SubnetworkTrainer(AbstractTrainer):
 
     def _load_network(self):
         # Device gets automatically created in constructor

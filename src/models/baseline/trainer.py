@@ -1,32 +1,36 @@
-import torch
-import torchvision
-import torch.distributions as tdist
-import torch.optim as optim
-import numpy as np
 import os
-import matplotlib.pyplot as plt
-import importlib
+import torch
+import numpy as np
 
 import util
 from models import AbstractTrainer
 from models.baseline import UNet
 
 class Trainer(AbstractTrainer):
+    """The trainer for the baseline network.
+    """
+
+    def __init__(self, config, config_path):
+        self.train_loss = 0.0
+        self.train_losses = []
+        self.val_loss = 0.0
+
+        super(Trainer, self).__init__(config, config_path)
 
     def _load_network(self):
         # Device gets automatically created in constructor
         # We persist mean and std when saving the network
-        self.net = UNet(self.config['NUM_CLASSES'], 
-                        self.loader.mean(), self.loader.std(), 
-                        depth=self.config['DEPTH'],
-                        augment_data=self.config['AUGMENT_DATA'])
+        return UNet(self.config['NUM_CLASSES'],
+                    self.loader.mean(), self.loader.std(),
+                    depth=self.config['DEPTH'],
+                    augment_data=self.config['AUGMENT_DATA'])
 
-    def _load_network_weights(self):
+    def _load_network_state(self):
         train_network_path = self.config.get('TRAIN_NETWORK_PATH', None)
         if train_network_path is not None:
-            train_network_path = os.path.join(
-                    self.experiment_base_path, 
-                    self.config.get('TRAIN_NETWORK_PATH', None))
+            train_network_path = os.path.join(self.experiment_base_path,
+                                              self.config.get(
+                                                  'TRAIN_NETWORK_PATH', None))
             checkpoint = torch.load(train_network_path)
             self.net.load_state_dict(checkpoint['model_state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizier_state_dict'])
@@ -52,7 +56,7 @@ class Trainer(AbstractTrainer):
                 'val_hist': self.val_hist}
 
     def _write_tensorboard_data(self):
-        self.writer.add_scalar('train_loss',self.avg_train_loss, self.print_step)
+        self.writer.add_scalar('train_loss', self.avg_train_loss, self.print_step)
         self.writer.add_scalar('val_loss', self.avg_val_loss, self.print_step)
 
         self.net.train(False)
@@ -74,8 +78,6 @@ class Trainer(AbstractTrainer):
 
     def _perform_validation(self):
         for _ in range(self.val_size):
-            #TODO just a temporary fix to handle the weights returned by the average network
-            # need to fix this properly
             outputs, labels, masks, self.val_counter = self.net.training_predict(
                     self.data_val, self.data_val_gt, self.val_counter, 
                     self.size, self.box_size, self.bs)

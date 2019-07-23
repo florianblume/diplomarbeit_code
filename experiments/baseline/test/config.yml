@@ -13,7 +13,8 @@ DATA_PRED_GT_PATH: "gt/test_gt.npy"
 CONVERT_DATA_TO: "uint8"
 
 ### Network configuration
-DEPTH: 6
+MODEL: "baseline"
+DEPTH: 4
 BATCH_SIZE: 1
 TRAIN_PATCH_SIZE: 100
 PRED_PATCH_SIZE: 128

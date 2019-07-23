@@ -9,7 +9,7 @@ from models import AbstractTrainer
 from models.probabilistic import ImageProbabilisticUNet
 from models.probabilistic import PixelProbabilisticUNet
 
-class Trainer(AbstractTrainer):
+class ProbabilisticTrainer(AbstractTrainer):
 
     def _load_network(self):
         # Device gets automatically created in constructor

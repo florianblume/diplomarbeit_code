@@ -1,18 +1,49 @@
 import os
 import torch
-import torchvision
 import torch.optim as optim
-import torch.distributions as tdist
 import numpy as np
 
-import util
 from data import dataloader
 
 class AbstractTrainer():
+    """Class AbstractTrainer is the base class of all trainers. It automatically
+    loads data from the locations specified in the config and creates the net.
+    It establishes a training loop and lets the subclasses perform the actual
+    training iterations.
+    """
 
-    def __init__(self, config):
-        self.config_path = os.path.dirname(config)
-        self.config = util.load_config(config)
+    def __init__(self, config, config_path):
+        self.config_path = config_path
+        self.config = config
+        
+        # Need to set here because those values might get overwritten by
+        # subclasses when loading a saved net for further training
+        self.train_hist = []
+        self.val_hist = []
+        self.epoch = 0
+        self.running_loss = 0.0
+        self.avg_train_loss = 0.0
+        self.avg_val_loss = 0.0
+        self.val_losses = []
+        self.val_counter = 0
+        self.print_step = 0
+
+        self._load_config_parameters()
+        self._load_data()
+        self.net = self._load_network()
+        # Optimizer is needed to load network weights 
+        # that's why we create it first
+        self.optimizer = optim.Adam(self.net.parameters(), lr=0.0001)
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, 'min', patience=10, factor=0.5, verbose=True)
+        self._load_network_state()
+        self.net.train(True)
+
+        # If tensorboard logs are requested create the writer
+        if self.write_tensorboard_data:
+            from torch.utils.tensorboard import SummaryWriter
+            self.writer = SummaryWriter(os.path.join(
+                self.experiment_base_path, 'tensorboard'))
 
     def _load_config_parameters(self):
         # Set all parameters from the config
@@ -45,47 +76,31 @@ class AbstractTrainer():
         self.loader = dataloader.DataLoader(self.config['DATA_BASE_PATH'])
         # In case the ground truth data path was not set we pass '' to
         # the loader which returns None to us
-        self.data_raw, self.data_gt = self.loader.load_training_data(
-            self.config['DATA_TRAIN_RAW_PATH'], 
+        data = self.loader.load_training_data(
+            self.config['DATA_TRAIN_RAW_PATH'],
             self.config.get('DATA_TRAIN_GT_PATH', ''),
             self.config.get('CONVERT_DATA_TO', None))
-
-        if self.data_gt is not None:
-            data_raw, data_gt = util.joint_shuffle(self.data_raw, self.data_gt)
-            # If loaded, the network is trained using clean targets, otherwise it performs N2V
-            val_gt_index = int((1 - self.val_ratio) * data_gt.shape[0])
-            self.data_train_gt = data_gt[:val_gt_index].copy()
-            self.data_val_gt = data_gt[val_gt_index:].copy()
-        else:
-            self.data_train_gt = None
-            self.data_val_gt = None
-            data_raw = np.random.shuffle(data_raw)
-
-        val_raw_index = int((1 - self.val_ratio) * data_raw.shape[0])
-        self.data_train = data_raw[:val_raw_index].copy()
-        self.data_val = data_raw[val_raw_index:].copy()
-        print('Using {} raw images for training and {} raw images for validation.'\
-                    .format(self.data_train.shape[0], self.data_val.shape[0]))
-        if self.data_train_gt.shape[0] > 0:
-            print('Using {} gt images for training and {} gt images for validation.'\
-                .format(self.data_train_gt.shape[0], self.data_val_gt.shape[0]))
-        else:
-            print('No ground-truth images available for training.')
+        self.data_raw = data[0]
+        self.data_gt = data[1]
+        self.data_train = data[2]
+        self.data_train_gt = data[3]
+        self.data_val = data[4]
+        self.data_val_gt = data[5]
 
     def _load_network(self):
-        raise 'This function needs to be implemented by the subclasses.'
+        raise NotImplementedError
 
-    def _load_network_weights(self):
-        raise 'This function needs to be implemented by the subclasses.'
+    def _load_network_state(self):
+        raise NotImplementedError
 
     def _create_checkpoint(self):
-        raise 'This function needs to be implemented by the subclasses.'
+        raise NotImplementedError
 
     def _write_tensorboard_data(self):
-        raise 'This function needs to be implemented by the subclasses.'
+        raise NotImplementedError
 
     def _perform_validation(self):
-        raise 'This function needs to be implemented by the subclasses.'
+        raise NotImplementedError
 
     def _on_epoch_end(self, step, train_losses):
         # Needed by subclasses
@@ -133,30 +148,9 @@ class AbstractTrainer():
         raise 'This function needs to be implemented by the subclasses.'
 
     def train(self):
-        # Need to set here because those values might get overwritten by
-        # subclasses when loading a saved net for further training
-        self.train_hist = []
-        self.val_hist = []
-        self.epoch = 0
-        self.running_loss = 0.0
-        self.net = None
-
-        self._load_config_parameters()
-        self._load_data()
-        self._load_network()
-        # Optimizer is needed to load network weights that's why we create it first
-        self.optimizer = optim.Adam(self.net.parameters(), lr=0.0001)
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, 'min', patience=10, factor=0.5, verbose=True)
-        self._load_network_weights()
-        self.net.train(True)
-
-        # If tensorboard logs are requested create the writer
-        if self.write_tensorboard_data:
-            from torch.utils.tensorboard import SummaryWriter
-            self.writer = SummaryWriter(os.path.join(
-                self.experiment_base_path, 'tensorboard'))
-
+        """This method performs training of this network using the earlier
+        set configuration and parameters.
+        """
         self._perform_epochs()
 
         if self.write_tensorboard_data:

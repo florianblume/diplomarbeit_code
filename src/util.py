@@ -1,5 +1,6 @@
 import numpy as np
-import os   
+import os
+
 
 def normal_dense(x, m_=0.0, std_=None):
     import torch
@@ -53,8 +54,20 @@ def joint_shuffle(inA, inB):
     return inA[indices], inB[indices]
 
 
+def shuffle(inA):
+    """Shuffles the given array. This function is here to provide a single point
+    of responsibility.
+    
+    Arguments:
+        inA {np.array} -- the array to shuffle
+    
+    Returns:
+        np.array -- the shuffled array
+    """
+    return np.random.shuffle(inA)
+
 def random_crop_fri(data, width, height, box_size, dataClean=None, counter=None,
-                        augment_data=True):
+                    augment_data=True):
 
     if counter is None or counter >= data.shape[0]:
         counter = 0
@@ -75,8 +88,8 @@ def random_crop_fri(data, width, height, box_size, dataClean=None, counter=None,
     return imgOut, imgOutC, mask, counter
 
 
-def random_crop(img, width, height, box_size, imgClean=None, 
-                    hotPixels=64, augment_data=True):
+def random_crop(img, width, height, box_size, imgClean=None,
+                hotPixels=64, augment_data=True):
     assert img.shape[0] >= height
     assert img.shape[1] >= width
 
@@ -228,6 +241,7 @@ def merge_two_npy_datasets(dataset_path_1, dataset_path_2, output_path):
             os.makedirs(output_dir)
         np.save(os.path.join(output_path, _file), result)
 
+
 def compute_variance_in_existing_experiments():
     import glob
     import json
@@ -241,3 +255,26 @@ def compute_variance_in_existing_experiments():
                     psnr_values.append(results[key])
             psnr_std = np.std(psnr_values) / float(np.sqrt(len(psnr_values)))
             results['std'] = psnr_std
+
+
+def load_trainer_or_predictor(type_, config, config_path):
+    """Loads the trainer or predictor class specified in the config.
+    
+    Arguments:
+        type_ {str} -- the type to load, possible choices: 'Trainer' or 'Predictor'
+        config {dict} -- the config that specifies what exactly to load
+        config_path {str} -- the path to the config on the filesystem
+    
+    Returns:
+        object -- the loaded trainer or predictor
+    """
+    import importlib
+    model = config['MODEL']
+    sub_model = config.get('SUB_MODEL', None)
+    model_module_name = 'models.' + model
+    type_class_name = (sub_model.capitalize()
+                            if sub_model is not None else "") + type_
+    type_module = importlib.import_module(model_module_name)
+    type_class = getattr(type_module, type_class_name)
+    result = type_class(config, os.path.dirname(config_path))
+    return result

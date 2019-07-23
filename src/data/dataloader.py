@@ -38,26 +38,34 @@ class DataLoader():
         """
         return self._std
 
-    def load_training_data(self, data_raw_path: str, data_gt_path: str, convert_to=None):
+    def load_training_data(self, data_raw_path: str, data_gt_path: str,
+                            convert_to=None, val_ratio=0.1):
         """Loads the raw and ground truth data from the given paths for
         training. The data also gets normalized by the mean and std of
         the raw data. These values are also saved in this DataLoader and
         can be access through mean() and std().
 
         Arguments:
-            raw_data_path {str}  -- path to the saved numpy array of 
+            raw_data_path {str}  -- path to the saved numpy array of
                                     raw data relative to the base path
             gt_data_path {str}   -- path to the saved numpy array of
                                     ground truth data relative to the
                                     base path
             convert_to {str}     -- if specified, the loaded data is converted
                                     to the desired numpy dtype - for more
-                                    information on types see 
+                                    information on types see
                                     https://docs.scipy.org/doc/numpy/reference/arrays.dtypes.html
+            val_ratio {float}    -- the percentage of the validation data of
+                                    the training data, e.g. 0.1 for 10% validation
+                                    images
 
         Returns:
             np.array -- normalized raw data array
             np.array -- normalized gt data array
+            np.array -- normalized raw training data array
+            np.array -- normalized gt training data array
+            np.array -- normalized raw validation data array
+            np.array -- normalized gt validation data array
         """
         print("Loading training data...")
 
@@ -95,11 +103,32 @@ class DataLoader():
             # GT image for multiple raw images
             print("Repeating ground-truth data {} times...".format(img_factor))
             data_gt = np.repeat(data_gt, img_factor, axis=0)
+            # Shuffle the data for training
+            data_raw, data_gt = util.joint_shuffle(data_raw, data_gt)
+            # If loaded, the network is trained using clean targets, otherwise it performs N2V
+            val_gt_index = int((1 - val_ratio) * data_gt.shape[0])
+            data_train_gt = data_gt[:val_gt_index].copy()
+            data_val_gt = data_gt[val_gt_index:].copy()
+        else:
+            data_train_gt = None
+            data_val_gt = None
+            data_raw = util.shuffle(data_raw)
 
-        return data_raw, data_gt
+        val_raw_index = int((1 - val_ratio) * data_raw.shape[0])
+        data_train = data_raw[:val_raw_index].copy()
+        data_val = data_raw[val_raw_index:].copy()
+        print('Using {} raw images for training and {} raw images for validation.'\
+                    .format(data_train.shape[0], data_val.shape[0]))
+        if data_train_gt.shape[0] > 0:
+            print('Using {} gt images for training and {} gt images for validation.'\
+                .format(data_train_gt.shape[0], data_val_gt.shape[0]))
+        else:
+            print('No ground-truth images available for training.')
 
-    def load_test_data(self, data_raw_path: str, data_gt_path: str, 
-                            mean: int, std: int, convert_to=None):
+        return data_raw, data_gt, data_train, data_train_gt, data_val, data_val_gt
+
+    def load_test_data(self, data_raw_path: str, data_gt_path: str,
+                       mean: int, std: int, convert_to=None):
         """Loads the the data for prediction at the specified path
         and normalizes it using the mean and std from the raw training
         data loaded via the load_training_data function.
@@ -113,7 +142,7 @@ class DataLoader():
             std {int}           -- the std to normalize the raw data with
             convert_to {str}    -- if specified, the loaded data is converted
                                     to the desired numpy dtype - for more
-                                    information on types see 
+                                    information on types see
                                     https://docs.scipy.org/doc/numpy/reference/arrays.dtypes.html
 
         Returns:
@@ -130,7 +159,7 @@ class DataLoader():
             if convert_to is not None:
                 data_gt = data_gt.astype(np.dtype(convert_to))
         else:
-            None
+            data_gt = None
         print("Normalizing RAW data with mean {} and std {}...".format(mean, std))
 
         data_raw = util.normalize(data_raw, mean, std)

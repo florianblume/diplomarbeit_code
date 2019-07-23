@@ -229,7 +229,7 @@ class AbstractUNet(nn.Module):
         self.to(self.device)
 
     def _build_network_head(self, outs):
-        raise 'This function needs to be implemented by the subclasses.'
+        raise NotImplementedError
 
     @staticmethod
     def weight_init(m):
@@ -246,7 +246,7 @@ class AbstractUNet(nn.Module):
             labels {np.array} -- the target outputs that the network should have produced
             masks {np.array} -- the mask of the active pixels
         """
-        raise 'This function needs to be implemented by the subclasses.'
+        raise NotImplementedError
 
     def reset_params(self):
         for _, m in enumerate(self.modules()):
@@ -262,7 +262,7 @@ class AbstractUNet(nn.Module):
             {np.array} -- the denoised image
             NOTE -- subclasses might return additional artifacts
         """
-        raise 'This function needs to be implemented by the subclasses.'
+        raise NotImplementedError
 
     def training_predict(self, train_data, train_data_clean,
                             data_counter, size, box_size, bs):
@@ -281,7 +281,7 @@ class AbstractUNet(nn.Module):
             {np.array} -- masks
             {int} -- data_counter
         """
-        raise 'This function needs to be implemented by the subclasses.'
+        raise NotImplementedError
 
     def assemble_training__batch(self, bs, size, box_size, data_counter,
                                 train_data, train_data_clean):
@@ -330,7 +330,7 @@ class AbstractUNet(nn.Module):
             {np.array} -- the denoised image
             NOTE -- subclasses might return additional artifacts
         """
-        raise 'This function needs to be implemented by the subclasses.'
+        raise NotImplementedError
 
     def predict_patch(self, patch):
         """Performs network prediction on a patch of an image using the
@@ -343,4 +343,4 @@ class AbstractUNet(nn.Module):
         Returns:
             np.array -- the denoised and denormalized patch
         """
-        raise 'This function needs to be implemented by the subclasses.'
+        raise NotImplementedError

@@ -14,6 +14,13 @@ from models.average import PixelWeightUNet
 
 class Trainer(AbstractTrainer):
 
+    def __init__(self, config, config_path):
+        self.train_loss = 0.0
+        self.train_losses = []
+        self.val_loss = 0.0
+
+        super(Trainer, self).__init__(config, config_path)
+
     def _load_network(self):
         if self.config['WEIGHT_MODE'] == 'image':
             Network = ImageWeightUNet
@@ -22,18 +29,16 @@ class Trainer(AbstractTrainer):
         else:
             raise 'Invalid config value for \"weight_mode\".'
 
-        self.net = Network(self.config['NUM_CLASSES'], self.loader.mean(),
-                    self.loader.std(),
-                    main_net_depth=self.config['MAIN_NET_DEPTH'],
-                    sub_net_depth=self.config['SUB_NET_DEPTH'],
-                    num_subnets=self.config['NUM_SUBNETS'],
-                    augment_data=self.config['AUGMENT_DATA'])
-                        
-        #TODO load pre-trained weights of network, if available
+        return Network(self.config['NUM_CLASSES'], self.loader.mean(),
+                       self.loader.std(),
+                       main_net_depth=self.config['MAIN_NET_DEPTH'],
+                       sub_net_depth=self.config['SUB_NET_DEPTH'],
+                       num_subnets=self.config['NUM_SUBNETS'],
+                       augment_data=self.config['AUGMENT_DATA'])
 
-    def _load_network_weights(self):
+    def _load_network_state(self):
         #TODO only for now
-        pass
+        print('WARNING: Loading network state has not been implemented, yet.')
 
     def _create_checkpoint(self):
         return {'model_state_dict': self.net.state_dict(),
@@ -45,13 +50,13 @@ class Trainer(AbstractTrainer):
                 'val_loss': self.val_loss}
 
     def _write_tensorboard_data(self):
-        self.writer.add_scalar('train_loss',self. avg_train_loss, self.print_step)
+        self.writer.add_scalar('train_loss', self. avg_train_loss, self.print_step)
         self.writer.add_scalar('val_loss', self.avg_val_loss, self.print_step)
 
         self.net.train(False)
         # Predict for one example image
         raw = self.data_raw[0]
-        prediction, _ = self.net.predict(raw, self.ps, self.overlap)
+        prediction, weights = self.net.predict(raw, self.ps, self.overlap)
         self.net.train(True)
         gt = self.data_gt[0]
         gt = util.denormalize(gt, self.loader.mean(), self.loader.std())
@@ -85,7 +90,7 @@ class Trainer(AbstractTrainer):
             # Iterate over virtual batch
             for _ in range(self.vbatch):
                 outputs, _, labels, masks, self.data_counter = self.net.training_predict(
-                    self.data_train, self.data_train_gt, self.data_counter, 
+                    self.data_train, self.data_train_gt, self.data_counter,
                     self.size, self.box_size, self.bs)
 
                 self.train_loss = self.net.loss_function(outputs, labels, masks)

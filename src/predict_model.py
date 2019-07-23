@@ -1,20 +1,15 @@
 import argparse
-import importlib
-import os
-import sys
 
-main_path = os.getcwd()
-sys.path.append(os.path.join(main_path, 'src/models'))
+import util
 
-def main(predictor, config):
-    predictor_module = importlib.import_module('models.' + predictor)
-    predictor = predictor_module.Predictor(config)
+def main(config_path):
+    config = util.load_config(config_path)
+    predictor = util.load_trainer_or_predictor('Predictor', config, config_path)
     predictor.predict()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", "-c", help="Path to the config.")
-    parser.add_argument("--predictor", "-p", 
-        help="The predictor to use [packapge.pyfile(without extension)].")
     args = parser.parse_args()
-    main(args.predictor, args.config)
+    main(args.config)
+    

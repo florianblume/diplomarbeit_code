@@ -11,6 +11,7 @@ DATA_PRED_GT_PATH: "gt/test_gt.npy"
 CONVERT_DATA_TO: "uint8"
 
 ### Network configuration
+MODEL: "baseline"
 # Rigth now only depth 3 works
 DEPTH: 3
 BATCH_SIZE: 24

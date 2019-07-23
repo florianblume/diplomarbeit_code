@@ -1,9 +1,6 @@
 import os
 import json
 import time
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -12,16 +9,20 @@ from data import dataloader
 
 
 class AbstractPredictor():
+    """Class AbstractPredictor is the base class for all predictor classes. It
+    manages data loading and network initizliation. Subclasses need to implement
+    certain specific functions.
+    """
 
-    def __init__(self, config):
-        self.config_path = os.path.dirname(config)
-        self.config = util.load_config(config)
+    def __init__(self, config, config_path):
+        self.config_path = config_path
+        self.config = config
         self._load_config_parameters()
         self.loader = dataloader.DataLoader(self.config['DATA_BASE_PATH'])
         self.net = None
         # Load saved network
         print("Loading network from {}".format(self.network_path))
-        self._load_net()
+        self.net = self._load_net()
         # To set dropout and batchnormalization (which we don't have but maybe in the future)
         # to inference mode.
         self.net.eval()
@@ -47,13 +48,10 @@ class AbstractPredictor():
         self.overlap = self.config['OVERLAP']
 
     def _load_net(self):
-        raise 'This function needs to be implemented by the subclasses.'
+        raise NotImplementedError
 
     def _predict(self, image):
-        raise 'This function needs to be implemented by the subclasses.'
-        # Keep statement so that it is clear to IDEs that the method is going
-        # to return something
-        return 0
+        raise NotImplementedError
 
     def predict(self):
         self.data_test, self.data_gt = self.loader.load_test_data(
@@ -87,7 +85,7 @@ class AbstractPredictor():
 
             # If we want to store the unnoised test image we have to normalize it
             im = util.denormalize(im, self.net.mean, self.net.std)
-            #im_filename = 'im_' + str(index).zfill(4) + '.png'
+            im_filename = 'im_' + str(index).zfill(4) + '.png'
             if self.pred_output_path != "":
                 # zfill(4) is enough, probably never going to pedict on more images than 9999
                 plt.imsave(os.path.join(self.pred_output_path,
@@ -111,7 +109,7 @@ class AbstractPredictor():
         # To show a visual break before printing averages
         print('')
         avg_runtime = np.mean(running_times)
-        print("Average runtime per image:", avg_runtime)
+        print("Average runtime per image: {:.4f}".format(avg_runtime))
         with open(os.path.join(self.pred_output_path, 'results.json'), 'w') as json_output:
             results['average_runtime'] = avg_runtime
 
