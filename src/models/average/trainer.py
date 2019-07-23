@@ -1,11 +1,5 @@
 import torch
-import torchvision
-import torch.distributions as tdist
-import torch.optim as optim
 import numpy as np
-import os
-import matplotlib.pyplot as plt
-import importlib
 
 import util
 from models import AbstractTrainer
@@ -23,8 +17,10 @@ class Trainer(AbstractTrainer):
 
     def _load_network(self):
         if self.config['WEIGHT_MODE'] == 'image':
+            self.weight_mode = 'image'
             Network = ImageWeightUNet
         elif self.config['WEIGHT_MODE'] == 'pixel':
+            self.weight_mode = 'pixel'
             Network = PixelWeightUNet
         else:
             raise 'Invalid config value for \"weight_mode\".'
@@ -49,16 +45,33 @@ class Trainer(AbstractTrainer):
                 'train_loss': self.train_loss,
                 'val_loss': self.val_loss}
 
+    def _write_weights_to_tensorboard(self, weights):
+        # In case that we predict the weights for the whole image we only
+        # want to plot their histograms. In case that we predict the weights
+        # on a per-pixel basis we store it as an image.
+        if self.weight_mode == 'image':
+            self.writer.add_histogram('weights', weights, self.print_step, bins='auto')
+        elif self.weight_mode == 'pixel':
+            # Normalize weights
+            weights = weights / np.sum(weights, axis=0)
+            weights = weights * 255
+            weights = weights.astype(np.uint8)
+            self.writer.add_image('weights', weights, self.print_step)
+        else:
+            raise ValueError('Unkown weight mode.')
+
+
     def _write_tensorboard_data(self):
         self.writer.add_scalar('train_loss', self. avg_train_loss, self.print_step)
         self.writer.add_scalar('val_loss', self.avg_val_loss, self.print_step)
 
         self.net.train(False)
         # Predict for one example image
-        raw = self.data_raw[0]
+        raw = self.raw_example
         prediction, weights = self.net.predict(raw, self.ps, self.overlap)
+        self._write_weights_to_tensorboard(weights)
         self.net.train(True)
-        gt = self.data_gt[0]
+        gt = self.gt_example
         gt = util.denormalize(gt, self.loader.mean(), self.loader.std())
         psnr = util.PSNR(gt, prediction, 255)
         self.writer.add_scalar('psnr', psnr, self.print_step)

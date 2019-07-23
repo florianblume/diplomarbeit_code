@@ -14,7 +14,7 @@ CONVERT_DATA_TO: "uint8"
 
 ### Network configuration
 MODEL: "baseline"
-DEPTH: 4
+DEPTH: 3
 BATCH_SIZE: 1
 TRAIN_PATCH_SIZE: 100
 PRED_PATCH_SIZE: 128

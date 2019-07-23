@@ -55,9 +55,14 @@ class ImageWeightUNet(AbstractUNet):
         self.num_subnets = num_subnets
         self.sub_net_depth = sub_net_depth
         
-        super().__init__(num_classes, mean, std, in_channels, depth=main_net_depth,
-                start_filts=start_filts, up_mode=up_mode, merge_mode=merge_mode,
-                augment_data=augment_data, device=device)
+        super(ImageWeightUNet, self).__init__(num_classes, mean, std,
+                                              in_channels=in_channels,
+                                              depth=main_net_depth,
+                                              start_filts=start_filts,
+                                              up_mode=up_mode,
+                                              merge_mode=merge_mode,
+                                              augment_data=augment_data,
+                                              device=device)
 
     def _build_network_head(self, outs):
         # Do not move to init as this method gets called by the init of the

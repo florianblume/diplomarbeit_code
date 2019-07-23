@@ -51,7 +51,9 @@ def joint_shuffle(inA, inB, seed=None):
     """
     assert inA.shape[0] == inB.shape[0]
     indices = np.arange(inA.shape[0])
-    np.random.seed(seed)
+    if seed is not None:
+        print('Seeding numpy with {}'.format(seed))
+        np.random.seed(seed)
     np.random.shuffle(indices)
     return inA[indices], inB[indices]
 
@@ -67,7 +69,9 @@ def shuffle(inA, seed=None):
     Returns:
         np.array -- the shuffled array
     """
-    np.random.seed(seed)
+    if seed is not None:
+        print('Seeding numpy with {}'.format(seed))
+        np.random.seed(seed)
     return np.random.shuffle(inA)
 
 def random_crop_fri(data, width, height, box_size, dataClean=None, counter=None,

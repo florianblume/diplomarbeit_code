@@ -11,7 +11,7 @@ from models import AbstractUNet
 from models import conv1x1
 from models.average import SubUNet
 
-class PixelWeightUNet(nn.Module):
+class PixelWeightUNet(AbstractUNet):
 
     def __init__(self, num_classes, mean, std, in_channels=1,
                  main_net_depth=1, sub_net_depth=3, num_subnets=2,
@@ -36,7 +36,7 @@ class PixelWeightUNet(nn.Module):
         self.num_subnets = num_subnets
         self.sub_net_depth = sub_net_depth
         super(PixelWeightUNet, self).__init__(num_classes, mean, std,
-                                              in_channels,
+                                              in_channels=in_channels,
                                               depth=main_net_depth,
                                               start_filts=start_filts,
                                               up_mode=up_mode,
@@ -46,7 +46,7 @@ class PixelWeightUNet(nn.Module):
 
     def _build_network_head(self, outs):
         self.subnets = nn.ModuleList()
-        self.final_op = nn.ModuleList()
+        self.final_ops = nn.ModuleList()
 
         for _ in range(self.num_subnets):
             # We create each requested subnet
@@ -60,14 +60,7 @@ class PixelWeightUNet(nn.Module):
                                         augment_data=self.augment_data,
                                         device=self.device))
             # And for each pixel we output a weight for each subnet
-            self.final_op.append(conv1x1(outs, 1))
-
-
-    @staticmethod
-    def weight_init(m):
-        if isinstance(m, nn.Conv2d):
-            init.xavier_normal(m.weight)
-            init.constant(m.bias, 0)
+            self.final_ops.append(conv1x1(outs, 1))
 
     @staticmethod
     def loss_function(outputs, labels, masks):
@@ -76,10 +69,6 @@ class PixelWeightUNet(nn.Module):
         outs = outputs[:, 0, ...]
         loss = torch.sum(masks * (labels - outs)**2) / torch.sum(masks)
         return loss
-
-    def reset_params(self):
-        for m in self.modules():
-            self.weight_init(m)
 
     def forward(self, x):
         encoder_outs = []

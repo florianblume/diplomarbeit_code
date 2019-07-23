@@ -76,16 +76,20 @@ class AbstractTrainer():
         self.loader = dataloader.DataLoader(self.config['DATA_BASE_PATH'])
         # In case the ground truth data path was not set we pass '' to
         # the loader which returns None to us
-        data = self.loader.load_training_data(
+        self.data_raw, self.data_gt, self.data_train, self.data_train_gt, self.data_val, self.data_val_gt = self.loader.load_training_data(
             self.config['DATA_TRAIN_RAW_PATH'],
             self.config.get('DATA_TRAIN_GT_PATH', ''),
             self.config.get('CONVERT_DATA_TO', None))
-        self.data_raw = data[0]
-        self.data_gt = data[1]
-        self.data_train = data[2]
-        self.data_train_gt = data[3]
-        self.data_val = data[4]
-        self.data_val_gt = data[5]
+        
+
+        ################## TODO #####################
+        #### Just a temporary fix, maybe we need data_raw again in the future
+        #### But this way we avoid memory errors and we don't need data_raw
+        self.raw_example = self.data_raw[0]
+        self.gt_example = self.data_gt[0]
+        print('WARNING: Deleting data_raw and data_gt')
+        del self.data_raw
+        del self.data_gt
 
     def _load_network(self):
         raise NotImplementedError
@@ -128,7 +132,7 @@ class AbstractTrainer():
         # Save the current best network
         if len(self.val_hist) == 0 or self.avg_val_loss < np.min(self.val_hist):
             torch.save(
-                self._create_checkpoint(), 
+                self._create_checkpoint(),
                 os.path.join(self.experiment_base_path, 'best.net'))
         self.val_hist.append(self.avg_val_loss)
 
