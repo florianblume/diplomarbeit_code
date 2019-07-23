@@ -35,7 +35,7 @@ def get_stratified_coords2D(box_size, shape):
     return coords
 
 
-def joint_shuffle(inA, inB):
+def joint_shuffle(inA, inB, seed=None):
     """Shuffles both numpy arrays consistently.
     This is useful to shuffle raw and ground-truth
     data together. Both arrays need to have the same
@@ -44,26 +44,30 @@ def joint_shuffle(inA, inB):
     Arguments:
         inA {np.array} -- first array to shuffle
         inB {np.array} -- second array to shuffle
+        seed {int}     -- if set, will be used as seed to numpy
 
     Returns:
         np.array, np.array -- the shuffled arrays
     """
     assert inA.shape[0] == inB.shape[0]
     indices = np.arange(inA.shape[0])
+    np.random.seed(seed)
     np.random.shuffle(indices)
     return inA[indices], inB[indices]
 
 
-def shuffle(inA):
+def shuffle(inA, seed=None):
     """Shuffles the given array. This function is here to provide a single point
     of responsibility.
     
     Arguments:
         inA {np.array} -- the array to shuffle
+        seed {int}     -- if set, will be used as seed to numpy
     
     Returns:
         np.array -- the shuffled array
     """
+    np.random.seed(seed)
     return np.random.shuffle(inA)
 
 def random_crop_fri(data, width, height, box_size, dataClean=None, counter=None,
@@ -149,8 +153,12 @@ def random_crop(img, width, height, box_size, imgClean=None,
 
 
 def PSNR(gt, pred, range_=255.0):
-    mse = np.mean((gt - pred)**2)
+    mse = MSE(gt, pred)
     return 20 * np.log10((range_)/np.sqrt(mse))
+
+
+def MSE(gt, pred):
+    return np.mean((gt - pred)**2)
 
 
 def average_PSNR_of_stored_numpy_array(path_to_array, path_to_gt_array):

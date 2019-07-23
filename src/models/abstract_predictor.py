@@ -53,6 +53,12 @@ class AbstractPredictor():
     def _predict(self, image):
         raise NotImplementedError
 
+    def _store_additional_intermediate_results(self, image_name, results):
+        raise NotImplementedError
+
+    def _store_additional_results(self, results):
+        raise NotImplementedError
+
     def predict(self):
         self.data_test, self.data_gt = self.loader.load_test_data(
             self.config['DATA_PRED_RAW_PATH'], self.config['DATA_PRED_GT_PATH'],
@@ -66,6 +72,7 @@ class AbstractPredictor():
         num_images = self.data_test.shape[0]
         # To compute standard deviation of PSNR, if available
         psnr_values = []
+        mse_values = []
         running_times = []
 
         print('Predicting on {} images.'.format(num_images))
@@ -85,7 +92,7 @@ class AbstractPredictor():
 
             # If we want to store the unnoised test image we have to normalize it
             im = util.denormalize(im, self.net.mean, self.net.std)
-            im_filename = 'im_' + str(index).zfill(4) + '.png'
+            #im_filename = 'im_' + str(index).zfill(4) + '.png'
             if self.pred_output_path != "":
                 # zfill(4) is enough, probably never going to pedict on more images than 9999
                 plt.imsave(os.path.join(self.pred_output_path,
@@ -99,12 +106,21 @@ class AbstractPredictor():
             if self.data_gt is not None:
                 # X images get 1 GT image together (due to creation of data set)
                 factor = int(self.data_test.shape[0] / self.data_gt.shape[0])
-                l = self.data_gt[int(index / factor)]
-                psnr = util.PSNR(l, prediction, 255)
+                ground_truth = self.data_gt[int(index / factor)]
+                psnr = util.PSNR(ground_truth, prediction, 255)
                 psnr_values.append(psnr)
-                print("PSNR raw {:.4f}".format(util.PSNR(l, im, 255)))
-                results[self.pred_image_filename] = psnr
+                mse = util.MSE(ground_truth, prediction)
+                mse_values.append(mse)
+                results[self.pred_image_filename] = {'psnr' : psnr,
+                                                     'mse'  : mse}
+                print("PSNR raw {:.4f}".format(util.PSNR(ground_truth, im, 255)))
                 print("PSNR denoised {:.4f}".format(psnr))  # Without info from masked pixel
+                print('MSE {:.4f}'.format(mse))
+                # Weights etc only get stored if ground-truth data is available
+                # This is ok since the subclasses store the weights again as
+                # numpy arrays so they do not get lost if there is no ground-truth
+                self._store_additional_intermediate_results(self.pred_image_filename, 
+                                                            results)
 
         # To show a visual break before printing averages
         print('')
@@ -114,10 +130,15 @@ class AbstractPredictor():
             results['average_runtime'] = avg_runtime
 
             if self.data_gt is not None:
-                average = np.mean(np.array(list(results.values())))
+                psnr_average = np.mean(np.array(psnr_values))
+                mse_average = np.mean(np.array(mse_values))
                 std = np.std(psnr_values)
-                print("Average PSNR: {:.4f}".format(average))
+                print("Average PSNR: {:.4f}".format(psnr_average))
+                print("Average MSE: {:.4f}".format(mse_average))
                 print("Standard deviation: {:.4f}".format(std))
-                results['average'] = average
+                results['psnr_average'] = psnr_average
+                results['mse_average'] = mse_average
                 results['std'] = std
-                json.dump(results, json_output)
+                self._store_additional_results(results)
+                # We are pretty printing
+                json.dump(results, json_output, indent=4)

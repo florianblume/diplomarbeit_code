@@ -39,7 +39,7 @@ class DataLoader():
         return self._std
 
     def load_training_data(self, data_raw_path: str, data_gt_path: str,
-                            convert_to=None, val_ratio=0.1):
+                           convert_to=None, val_ratio=0.1):
         """Loads the raw and ground truth data from the given paths for
         training. The data also gets normalized by the mean and std of
         the raw data. These values are also saved in this DataLoader and
@@ -103,8 +103,9 @@ class DataLoader():
             # GT image for multiple raw images
             print("Repeating ground-truth data {} times...".format(img_factor))
             data_gt = np.repeat(data_gt, img_factor, axis=0)
-            # Shuffle the data for training
-            data_raw, data_gt = util.joint_shuffle(data_raw, data_gt)
+            # Shuffle the data for training, seed so that networks trained on
+            # the same dataset receive the same validation sets
+            data_raw, data_gt = util.joint_shuffle(data_raw, data_gt, seed=42)
             # If loaded, the network is trained using clean targets, otherwise it performs N2V
             val_gt_index = int((1 - val_ratio) * data_gt.shape[0])
             data_train_gt = data_gt[:val_gt_index].copy()
@@ -112,7 +113,9 @@ class DataLoader():
         else:
             data_train_gt = None
             data_val_gt = None
-            data_raw = util.shuffle(data_raw)
+            # Shuffle the data for training, seed so that networks trained on
+            # the same dataset receive the same validation sets
+            data_raw = util.shuffle(data_raw, seed=42)
 
         val_raw_index = int((1 - val_ratio) * data_raw.shape[0])
         data_train = data_raw[:val_raw_index].copy()

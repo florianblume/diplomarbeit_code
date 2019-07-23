@@ -207,7 +207,7 @@ class AbstractUNet(nn.Module):
 
             down_conv = DownConv(ins, outs, pooling=pooling)
             self.down_convs.append(down_conv)
-
+            
         # create the decoder pathway and add to a list
         # - careful! decoding only requires depth-1 blocks
         for i in range(depth-1):

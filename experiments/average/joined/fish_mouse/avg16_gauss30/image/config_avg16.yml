@@ -11,8 +11,9 @@ DATA_PRED_GT_PATH: "gt/test_gt.npy"
 CONVERT_DATA_TO: "uint8"
 
 ### Network configuration
-# Rigth now only depth 3 works
-DEPTH: 3
+MODEL: "average"
+# Specifies whether to compute weights for the whole image or per pixel
+WEIGHT_MODE: "image"
 BATCH_SIZE: 24
 TRAIN_PATCH_SIZE: 100
 PRED_PATCH_SIZE: 128
