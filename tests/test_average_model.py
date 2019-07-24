@@ -2,9 +2,9 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
-# We want the local torchtest that we modified
-from .torchtest import assert_vars_change
 
+# We want the local torchtest that we modified
+from tests.torchtest import assert_vars_change
 from tests import base_test
 from models.average import ImageWeightUNet
 
@@ -33,5 +33,3 @@ def test_average_model():
         #patch_size=128,
         #overlap=48,
         device=device)
-
-test_average_model()

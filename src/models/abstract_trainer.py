@@ -2,6 +2,7 @@ import os
 import torch
 import torch.optim as optim
 import numpy as np
+import memory_profiler
 
 from data import dataloader
 
@@ -76,7 +77,7 @@ class AbstractTrainer():
         self.loader = dataloader.DataLoader(self.config['DATA_BASE_PATH'])
         # In case the ground truth data path was not set we pass '' to
         # the loader which returns None to us
-        self.data_raw, self.data_gt, self.data_train, self.data_train_gt, self.data_val, self.data_val_gt = self.loader.load_training_data(
+        data_raw, data_gt, self.data_train, self.data_train_gt, self.data_val, self.data_val_gt = self.loader.load_training_data(
             self.config['DATA_TRAIN_RAW_PATH'],
             self.config.get('DATA_TRAIN_GT_PATH', ''),
             self.config.get('CONVERT_DATA_TO', None))
@@ -85,11 +86,8 @@ class AbstractTrainer():
         ################## TODO #####################
         #### Just a temporary fix, maybe we need data_raw again in the future
         #### But this way we avoid memory errors and we don't need data_raw
-        self.raw_example = self.data_raw[0]
-        self.gt_example = self.data_gt[0]
-        print('WARNING: Deleting data_raw and data_gt')
-        del self.data_raw
-        del self.data_gt
+        self.raw_example = data_raw[0]
+        self.gt_example = data_gt[0]
 
     def _load_network(self):
         raise NotImplementedError

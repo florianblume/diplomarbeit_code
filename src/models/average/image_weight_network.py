@@ -1,9 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
-from collections import OrderedDict
-from torch.nn import init
 import numpy as np
 
 import util
@@ -12,24 +8,10 @@ from models import conv1x1
 from models.average import SubUNet
 
 class ImageWeightUNet(AbstractUNet):
-    """ `UNet` class is based on https://arxiv.org/abs/1505.04597
-    The U-Net is a convolutional encoder-decoder neural network.
-    Contextual spatial information (from the decoding,
-    expansive pathway) about an input tensor is merged with
-    information representing the localization of details
-    (from the encoding, compressive pathway).
-    Modifications to the original paper:
-    (1) padding is used in 3x3 convolutions to prevent loss
-        of border pixels
-    (2) merging outputs does not require cropping due to (1)
-    (3) residual connections can be used by specifying
-        UNet(merge_mode='add')
-    (4) if non-parametric upsampling is used in the decoder
-        pathway (specified by upmode='upsample'), then an
-        additional 1x1 2d convolution occurs after upsampling
-        to reduce channel dimensionality by a factor of 2.
-        This channel halving happens with the convolution in
-        the tranpose convolution (specified by upmode='transpose')
+    """This network computes the weights for the subnetworks on a per-image basis.
+    This means that each subnetwork gets one weight. The whole output of each
+    subnetwork is multiplied by the respective weight. These weighted outputs
+    are then summed up and divided by the sum of the weights.
     """
 
     def __init__(self, num_classes, mean, std, in_channels=1,
@@ -37,21 +19,6 @@ class ImageWeightUNet(AbstractUNet):
                  start_filts=64, up_mode='transpose', merge_mode='add',
                  augment_data=True,
                  device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")):
-        """
-        NOTE: mean and std will be persisted by the model and restored on loading
-
-        Arguments:
-            mean: int, the mean of the raw data that this network was trained with. 
-            std: int, the std of the raw data that this network was trained with.
-            in_channels: int, number of channels in the input tensor.
-                Default is 3 for RGB images.
-            depth: int, number of MaxPools in the U-Net.
-            start_filts: int, number of convolutional filters for the
-                first conv.
-            up_mode: string, type of upconvolution. Choices: 'transpose'
-                for transpose convolution or 'upsample' for nearest neighbour
-                upsampling.
-        """
         self.num_subnets = num_subnets
         self.sub_net_depth = sub_net_depth
         
@@ -89,6 +56,15 @@ class ImageWeightUNet(AbstractUNet):
         outs = outputs[:, 0, ...]
         loss = torch.sum(masks * (labels - outs)**2) / torch.sum(masks)
         return loss
+
+    @staticmethod
+    def loss_function_with_entropy(outputs, labels, masks, weights, weights_lambda):
+        # This is the leftover of Probabilistic N2V where the network outputs
+        # 800 means per pixel instead of only 1
+        outs = outputs[:, 0, ...]
+        loss = torch.sum(masks * (labels - outs)**2) / torch.sum(masks)
+        entropy = -torch.sum(weights * torch.log(weights))
+        return loss + weights_lambda * entropy
 
     def forward(self, x):
         encoder_outs = []
@@ -212,7 +188,7 @@ class ImageWeightUNet(AbstractUNet):
         # sub_images * weights = [num_subnets, H, W] * [num_subnets]
         mult = sub_images * weights
         weighted_average = np.sum(mult, axis=0) / np.sum(weights)
-        return weighted_average, weights
+        return weighted_average, mult, weights
 
     def predict_patch(self, patch):
         inputs = torch.zeros(1, 1, patch.shape[0], patch.shape[1])

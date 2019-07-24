@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import os
 
 import util
 from models import AbstractTrainer
@@ -9,11 +10,14 @@ from models.average import PixelWeightUNet
 class Trainer(AbstractTrainer):
 
     def __init__(self, config, config_path):
+        super(Trainer, self).__init__(config, config_path)
         self.train_loss = 0.0
         self.train_losses = []
         self.val_loss = 0.0
-
-        super(Trainer, self).__init__(config, config_path)
+        self.weight_constraint =\
+                self.config.get('WEIGHT_CONSTRAINT', None)
+        self.weight_constraint_lambda =\
+                self.config.get('WEIGHT_CONSTRAINT_LAMBDA', 0)
 
     def _load_network(self):
         if self.config['WEIGHT_MODE'] == 'image':
@@ -33,8 +37,22 @@ class Trainer(AbstractTrainer):
                        augment_data=self.config['AUGMENT_DATA'])
 
     def _load_network_state(self):
-        #TODO only for now
-        print('WARNING: Loading network state has not been implemented, yet.')
+        train_network_path = self.config.get('TRAIN_NETWORK_PATH', None)
+        if train_network_path is not None:
+            train_network_path = os.path.join(self.experiment_base_path,
+                                              self.config.get(
+                                                  'TRAIN_NETWORK_PATH', None))
+            checkpoint = torch.load(train_network_path)
+            self.net.load_state_dict(checkpoint['model_state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizier_state_dict'])
+            self.epoch = checkpoint['epoch']
+            self.mean = checkpoint['mean']
+            self.std = checkpoint['std']
+            self.running_loss = checkpoint['running_loss']
+            self.train_loss = checkpoint['train_loss']
+            self.train_hist = checkpoint['train_hist']
+            self.val_loss = checkpoint['val_loss']
+            self.val_hist = checkpoint['val_hist']
 
     def _create_checkpoint(self):
         return {'model_state_dict': self.net.state_dict(),
@@ -42,8 +60,11 @@ class Trainer(AbstractTrainer):
                 'epoch': self.epoch,
                 'mean': self.loader.mean(),
                 'std': self.loader.std(),
+                'running_loss': self.running_loss,
                 'train_loss': self.train_loss,
-                'val_loss': self.val_loss}
+                'train_hist' : self.train_hist,
+                'val_loss': self.val_loss,
+                'val_hist': self.val_hist}
 
     def _write_weights_to_tensorboard(self, weights):
         # In case that we predict the weights for the whole image we only
@@ -60,7 +81,6 @@ class Trainer(AbstractTrainer):
         else:
             raise ValueError('Unkown weight mode.')
 
-
     def _write_tensorboard_data(self):
         self.writer.add_scalar('train_loss', self. avg_train_loss, self.print_step)
         self.writer.add_scalar('val_loss', self.avg_val_loss, self.print_step)
@@ -68,7 +88,8 @@ class Trainer(AbstractTrainer):
         self.net.train(False)
         # Predict for one example image
         raw = self.raw_example
-        prediction, weights = self.net.predict(raw, self.ps, self.overlap)
+        # Second is the sub images
+        prediction, _, weights = self.net.predict(raw, self.ps, self.overlap)
         self._write_weights_to_tensorboard(weights)
         self.net.train(True)
         gt = self.gt_example
@@ -85,13 +106,22 @@ class Trainer(AbstractTrainer):
 
     def _perform_validation(self):
         for _ in range(self.val_size):
-            #TODO just a temporary fix to handle the weights returned by the average network
-            # need to fix this properly
-            outputs, _, labels, masks, self.val_counter = self.net.training_predict(
-                    self.data_val, self.data_val_gt, self.val_counter, 
+            #TODO just a temporary fix to handle the weights returned by 
+            # the average network need to fix this properly
+            outputs, weights, labels, masks, self.val_counter = self.net.training_predict(
+                    self.data_val, self.data_val_gt, self.val_counter,
                     self.size, self.box_size, self.bs)
             # Needed by subclasses that's why we store val_loss on self
-            self.val_loss = self.net.loss_function(outputs, labels, masks)
+            if self.weight_constraint is None or self.weight_constraint == '':
+                self.val_loss =\
+                    self.net.loss_function(outputs, labels, masks)
+            elif self.weight_constraint == 'entropy':
+                self.val_loss =\
+                    self.net.loss_function_with_entropy(outputs,
+                                                        labels,
+                                                        masks,
+                                                        weights,
+                                                        self.weight_constraint_lambda)
             self.val_losses.append(self.val_loss.item())
 
     def _perform_epochs(self):
@@ -102,11 +132,23 @@ class Trainer(AbstractTrainer):
 
             # Iterate over virtual batch
             for _ in range(self.vbatch):
-                outputs, _, labels, masks, self.data_counter = self.net.training_predict(
-                    self.data_train, self.data_train_gt, self.data_counter,
-                    self.size, self.box_size, self.bs)
-
-                self.train_loss = self.net.loss_function(outputs, labels, masks)
+                outputs, weights, labels, masks, self.data_counter =\
+                    self.net.training_predict(self.data_train,
+                                              self.data_train_gt,
+                                              self.data_counter,
+                                              self.size,
+                                              self.box_size,
+                                              self.bs)
+                if self.weight_constraint is None or self.weight_constraint == '':
+                    self.train_loss =\
+                        self.net.loss_function(outputs, labels, masks)
+                elif self.weight_constraint == 'entropy':
+                    self.train_loss =\
+                        self.net.loss_function_with_entropy(outputs,
+                                                            labels,
+                                                            masks,
+                                                            weights,
+                                                            self.weight_constraint_lambda)
                 self.train_loss.backward()
                 self.running_loss += self.train_loss.item()
                 self.train_losses.append(self.train_loss.item())

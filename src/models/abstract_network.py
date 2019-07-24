@@ -299,7 +299,7 @@ class AbstractUNet(nn.Module):
         Returns:
             {np.array} -- prepared inputs
             {np.array} -- target outputs
-            {np.array} -- masks, i.e. active pixels                                  
+            {np.array} -- masks, i.e. active pixels
         """
         inputs = torch.zeros(bs, 1, size, size)
         labels = torch.zeros(bs, size, size)

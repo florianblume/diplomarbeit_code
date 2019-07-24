@@ -1,9 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
-from collections import OrderedDict
-from torch.nn import init
 import numpy as np
 
 import util
@@ -12,6 +8,11 @@ from models import conv1x1
 from models.average import SubUNet
 
 class PixelWeightUNet(AbstractUNet):
+    """This network computes weights for each subnetwork on a per-pixel basis.
+    This means that each pixel gets a weights for each subnet. The outputs of
+    the subnets are multiplied with their respective weights and added up.
+    Afterwards the results is divided by the sum of the weights.
+    """
 
     def __init__(self, num_classes, mean, std, in_channels=1,
                  main_net_depth=1, sub_net_depth=3, num_subnets=2,
@@ -70,6 +71,15 @@ class PixelWeightUNet(AbstractUNet):
         loss = torch.sum(masks * (labels - outs)**2) / torch.sum(masks)
         return loss
 
+    @staticmethod
+    def loss_function_with_entropy(outputs, labels, masks, weights, weights_lambda):
+        # This is the leftover of Probabilistic N2V where the network outputs
+        # 800 means per pixel instead of only 1
+        outs = outputs[:, 0, ...]
+        loss = torch.sum(masks * (labels - outs)**2) / torch.sum(masks)
+        entropy = -torch.sum(weights * torch.log(weights))
+        return loss + weights_lambda * entropy
+
     def forward(self, x):
         encoder_outs = []
         # Compute the outputs of the subnetworks - this is ok here since we
@@ -92,9 +102,10 @@ class PixelWeightUNet(AbstractUNet):
         # where num_classes is only used in Probabilistic Noise2Void
         weights = torch.stack([final_op(x) for final_op in self.final_ops])
         weights = torch.exp(weights)
+        sub_images = weights * sub_outputs
         # Sum along first axis, i.e. subnets, and divide by sum of weights
-        amalgamted_image = torch.sum(weights * sub_outputs, 0) / torch.sum(weights, 0)
-        return amalgamted_image, weights
+        amalgamted_image = torch.sum(sub_images, 0) / torch.sum(weights, 0)
+        return amalgamted_image, sub_images, weights
 
     def training_predict(self, train_data, train_data_clean, data_counter, size, box_size, bs):
         # Init Variables
@@ -106,15 +117,17 @@ class PixelWeightUNet(AbstractUNet):
             self.device), labels.to(self.device), masks.to(self.device)
         
         # Forward step
-        amalgamted_image, weights = self(inputs)
+        amalgamted_image, _, weights = self(inputs)
         
         return amalgamted_image, weights, labels, masks, data_counter
 
     def predict(self, image, patch_size, overlap):
         # weights for each subnet per pixel
         weights = np.zeros((self.num_subnets, image.shape[0], image.shape[1]))
-        # sub_images = [subnets, H, W]
-        amalgamted_image = np.zeros((self.num_subnets, image.shape[0], image.shape[1]))
+        sub_images = np.zeros((self.num_subnets, image.shape[0], image.shape[1]))
+        # sub_images = [C, H, W] since the network performs amalgamation
+        # already in its forward method
+        amalgamted_image = np.zeros(image.shape)
         # We have to use tiling because of memory constraints on the GPU
         xmin = 0
         ymin = 0
@@ -125,11 +138,15 @@ class PixelWeightUNet(AbstractUNet):
             ovTop = 0
             while (ymin < image.shape[0]):
                 patch = image[ymin:ymax, xmin:xmax]
-                _weights, _amalgamted_image = self.predict_patch(patch)
+                _amalgamted_image, _sub_images, _weights = self.predict_patch(patch)
+                # Remove unnecessary dimensions that are still there
+                _amalgamted_image = _amalgamted_image.squeeze()
+                amalgamted_image[ymin:ymax, xmin:xmax][ovTop:, ovLeft:]\
+                    = _amalgamted_image[ovTop:, ovLeft:]
+                sub_images[:, ymin:ymax, xmin:xmax][:, ovTop:, ovLeft:]\
+                    = _sub_images[:, ovTop:, ovLeft:]
                 weights[:, ymin:ymax, xmin:xmax][:, ovTop:, ovLeft:]\
-                    = _weights(patch)
-                amalgamted_image[:, ymin:ymax, xmin:xmax][:, ovTop:, ovLeft:]\
-                    = _amalgamted_image[:, ovTop:, ovLeft:]
+                    = _weights[:, ovTop:, ovLeft:]
                 ymin = ymin-overlap+patch_size
                 ymax = ymin+patch_size
                 ovTop = overlap//2
@@ -139,7 +156,7 @@ class PixelWeightUNet(AbstractUNet):
             xmax = xmin+patch_size
             ovLeft = overlap//2
 
-        return amalgamted_image, weights
+        return amalgamted_image, sub_images, weights
 
     def predict_patch(self, patch):
         # [batch_size, num_channels, H, W]
@@ -148,14 +165,15 @@ class PixelWeightUNet(AbstractUNet):
         inputs[0, :, :, :] = util.img_to_tensor(patch)
         # copy to GPU
         inputs = inputs.to(self.device)
-        amalgamted_image, weights = self(inputs)
+        amalgamted_image, sub_images, weights = self(inputs)
 
         # In contrast to probabilistic N2V we only have one sample
         # weights = samples[0, ...]
 
         # Get data from GPU
         amalgamted_image = amalgamted_image.cpu().detach().numpy()
+        sub_images = sub_images.cpu().detach().numpy()
         weights = weights.cpu().detach().numpy()
         # Remove unnecessary dimensions
         weights = np.squeeze(weights)
-        return amalgamted_image, weights
+        return amalgamted_image, sub_images, weights

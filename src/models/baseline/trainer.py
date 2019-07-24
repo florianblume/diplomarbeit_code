@@ -36,7 +36,7 @@ class Trainer(AbstractTrainer):
             self.optimizer.load_state_dict(checkpoint['optimizier_state_dict'])
             self.epoch = checkpoint['epoch']
             self.mean = checkpoint['mean']
-            self.std = checkpoint['mean']
+            self.std = checkpoint['std']
             self.running_loss = checkpoint['running_loss']
             self.train_loss = checkpoint['train_loss']
             self.train_hist = checkpoint['train_hist']

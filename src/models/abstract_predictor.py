@@ -3,6 +3,7 @@ import json
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+import tifffile as tif
 
 import util
 from data import dataloader
@@ -27,8 +28,12 @@ class AbstractPredictor():
         # to inference mode.
         self.net.eval()
         # Subclasses need to access this that's why we store it on the class
-        self.pred_output_path = os.path.join(
-            self.experiment_base_path, self.config['PRED_OUTPUT_PATH'])
+        pred_output_path = self.config.get('PRED_OUTPUT_PATH', None)
+        if pred_output_path:
+            self.pred_output_path = os.path.join(self.experiment_base_path,
+                                                 pred_output_path)
+        else:
+            self.pred_output_path = None
         if not os.path.exists(self.pred_output_path):
             os.mkdir(self.pred_output_path)
 
@@ -40,8 +45,6 @@ class AbstractPredictor():
             'EXPERIMENT_BASE_PATH', self.config_path)
         if self.experiment_base_path == "":
             self.experiment_base_path = self.config_path
-        # don't need config path anymore
-        del self.config_path
         self.network_path = os.path.join(
             self.experiment_base_path, self.config['PRED_NETWORK_PATH'])
         self.ps = self.config['PRED_PATCH_SIZE']
@@ -51,6 +54,19 @@ class AbstractPredictor():
         raise NotImplementedError
 
     def _predict(self, image):
+        raise NotImplementedError
+
+    def _write_data_to_output_path(self, output_path, image_name_base):
+        """This function writes additional data to the specified output path.
+        The AbstractPredictor takes care of writing the denoised images that
+        the network outputs to the output folder.
+        
+        Arguments:
+            output_path {str} -- the folder where to store prediction
+            artifacts
+            image_name_base {str} -- the base of the name of the currently 
+                                     processed image, e.g. 0000_pred
+        """
         raise NotImplementedError
 
     def _store_additional_intermediate_results(self, image_name, results):
@@ -80,26 +96,34 @@ class AbstractPredictor():
             im = self.data_test[index]
             # Do not move after self._predict(im), the subclasses need this info
             # Not the nicest style but works...
-            self.pred_image_filename_base = 'pred_' + str(index).zfill(4)
-            self.pred_image_filename = self.pred_image_filename_base + '.png'
+            pred_image_filename = '{}_pred'.format(str(index).zfill(4))
 
             # This is the actual prediction
             print("\nPredicting on image {} with shape {}:".format(index, im.shape))
             start = time.time()
             prediction = self._predict(im)
             end = time.time()
-            running_times.append(end - start)
+            diff = end - start
+            running_times.append(diff)
+            print('...took {:.4f} seconds.'.format(diff))
 
             # If we want to store the unnoised test image we have to normalize it
             im = util.denormalize(im, self.net.mean, self.net.std)
             #im_filename = 'im_' + str(index).zfill(4) + '.png'
-            if self.pred_output_path != "":
-                # zfill(4) is enough, probably never going to pedict on more images than 9999
-                plt.imsave(os.path.join(self.pred_output_path,
-                                        self.pred_image_filename), prediction, cmap='gray')
-                # Uncomment if you want to see the ground-truth images
+            if self.pred_output_path:
+                if 'tif' in self.config['OUTPUT_IMAGE_FORMATS']:
+                    tif.imsave(os.path.join(self.pred_output_path,
+                                        pred_image_filename + '.tif'),
+                           prediction.astype(np.float32))
+                if 'png' in self.config['OUTPUT_IMAGE_FORMATS']:
+                    plt.imsave(os.path.join(self.pred_output_path,
+                                        pred_image_filename + '.png'),
+                           prediction)
+                # Uncomment if you want to see the raw image
                 #plt.imsave(os.path.join(self.pred_output_path,
                 #                       im_filename), im, cmap='gray')
+                self._write_data_to_output_path(self.pred_output_path,
+                                                pred_image_filename)
 
 
             # Can be None, if no ground-truth data has been specified
@@ -111,7 +135,7 @@ class AbstractPredictor():
                 psnr_values.append(psnr)
                 mse = util.MSE(ground_truth, prediction)
                 mse_values.append(mse)
-                results[self.pred_image_filename] = {'psnr' : psnr,
+                results[pred_image_filename] = {'psnr' : psnr,
                                                      'mse'  : mse}
                 print("PSNR raw {:.4f}".format(util.PSNR(ground_truth, im, 255)))
                 print("PSNR denoised {:.4f}".format(psnr))  # Without info from masked pixel
@@ -119,26 +143,29 @@ class AbstractPredictor():
                 # Weights etc only get stored if ground-truth data is available
                 # This is ok since the subclasses store the weights again as
                 # numpy arrays so they do not get lost if there is no ground-truth
-                self._store_additional_intermediate_results(self.pred_image_filename, 
+                self._store_additional_intermediate_results(pred_image_filename,
                                                             results)
 
         # To show a visual break before printing averages
         print('')
         avg_runtime = np.mean(running_times)
         print("Average runtime per image: {:.4f}".format(avg_runtime))
-        with open(os.path.join(self.pred_output_path, 'results.json'), 'w') as json_output:
-            results['average_runtime'] = avg_runtime
 
-            if self.data_gt is not None:
-                psnr_average = np.mean(np.array(psnr_values))
-                mse_average = np.mean(np.array(mse_values))
-                std = np.std(psnr_values)
-                print("Average PSNR: {:.4f}".format(psnr_average))
-                print("Average MSE: {:.4f}".format(mse_average))
-                print("Standard deviation: {:.4f}".format(std))
-                results['psnr_average'] = psnr_average
-                results['mse_average'] = mse_average
-                results['std'] = std
-                self._store_additional_results(results)
-                # We are pretty printing
-                json.dump(results, json_output, indent=4)
+        if self.data_gt is not None:
+            psnr_average = np.mean(np.array(psnr_values))
+            mse_average = np.mean(np.array(mse_values))
+            std = np.std(psnr_values)
+            print("Average PSNR: {:.4f}".format(psnr_average))
+            print("Average MSE: {:.4f}".format(mse_average))
+            print("Standard error: {:.4f}".format(std))
+
+            if self.pred_output_path:
+                with open(os.path.join(self.pred_output_path, 
+                                       'results.json'), 'w') as json_output:
+                    results['average_runtime'] = avg_runtime
+                    results['psnr_average'] = psnr_average
+                    results['mse_average'] = mse_average
+                    results['std'] = std
+                    self._store_additional_results(results)
+                    # We are pretty printing
+                    json.dump(results, json_output, indent=4)

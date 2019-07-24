@@ -1,5 +1,9 @@
 import argparse
 
+import os
+import sys
+sys.path.append(os.path.join(os.getcwd(), 'src'))
+
 import util
 
 def main(config_path):

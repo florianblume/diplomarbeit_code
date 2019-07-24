@@ -1,6 +1,8 @@
 import os
 import torch
 import numpy as np
+import tifffile as tif
+import matplotlib.pyplot as plt
 
 from models import AbstractPredictor
 from models.average import ImageWeightUNet
@@ -22,6 +24,7 @@ class Predictor(AbstractPredictor):
         self.weights = None
         self.weights_list = []
         self.weights_percentages = None
+        self.sub_images = None
         super(Predictor, self).__init__(config, config_path)
 
     def _load_net(self):
@@ -42,20 +45,37 @@ class Predictor(AbstractPredictor):
         return net
 
     def _predict(self, image):
-        image, weights = self.net.predict(image, self.ps, self.overlap)
+        image, sub_images, weights = self.net.predict(image, self.ps, self.overlap)
         self.weights = weights.squeeze()
         self.weights_list.append(self.weights)
-        weights_sum = np.sum(weights)
-        weights_percentages = [weight / float(weights_sum) for
+        self.sub_images = sub_images
+        return image
+
+    def _write_data_to_output_path(self, output_path, image_name_base):
+        if self.config['WRITE_SUBNETWORK_WEIGHTS']:
+            # Save weights for evaluation, etc.
+            weights_filename = image_name_base + '_weights.npy'
+            np.save(os.path.join(output_path, weights_filename), self.weights)
+        if self.config['WRITE_SUBNETWORK_IMAGES']:
+            for i, sub_image in enumerate(self.sub_images):
+                image_filename = '{}_sub_{}'.format(image_name_base, i)
+                # Store it once for inspection purposes (tif) and once to
+                # view it (png)
+                if 'tif' in self.config['OUTPUT_IMAGE_FORMATS']:
+                    tif.imsave(
+                        os.path.join(output_path, image_filename + '.tif'),
+                        sub_image.astype(np.float32))
+                if 'png' in self.config['OUTPUT_IMAGE_FORMATS']:
+                    plt.imsave(
+                        os.path.join(output_path, image_filename + '.png'),
+                        sub_image)
+
+    def _store_additional_intermediate_results(self, image_name, results):
+        weights_sum = np.sum(self.weights)
+        weights_percentages = [(weight / float(weights_sum)) * 100.0 for
                                weight in self.weights]
         formatted_weights = Predictor.pretty_string(self.weights, weights_percentages)
         print("Weights of subnetworks: {}".format(formatted_weights))
-        # Save weights for evaluation, etc.
-        weights_filename = self.pred_image_filename_base + '_weights.npy'
-        np.save(os.path.join(self.pred_output_path, weights_filename), self.weights)
-        return image
-
-    def _store_additional_intermediate_results(self, image_name, results):
         results[image_name]['weights'] = self.weights.tolist()
 
     def _store_additional_results(self, results):
@@ -63,7 +83,7 @@ class Predictor(AbstractPredictor):
         # Compute average over all weights
         weights_average = np.mean(self.weights_list, axis=0)
         weights_average_percentage = weights_average / np.sum(weights_average)
-        formatted_weights = Predictor.pretty_string(weights_average, 
+        formatted_weights = Predictor.pretty_string(weights_average,
                                                     weights_average_percentage)
         print('Average weights {}'.format(formatted_weights))
         results['average_weights'] = weights_average.tolist()

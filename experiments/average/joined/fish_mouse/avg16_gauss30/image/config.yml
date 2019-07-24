@@ -16,6 +16,12 @@ CONVERT_DATA_TO: "uint8"
 MODEL: "average"
 # Specifies whether to compute weights for the whole image or per pixel
 WEIGHT_MODE: "image"
+# Specifies how to constraint the weights for the subnetworks (not the parameters
+# of the network itself). E.g. entropy adds an entropy loss term over the 
+# weights to the existing l2 loss. Possibilities are "", "entropy" or leave out
+WEIGHT_CONSTRAINT: ""
+# The balancing parameter how much influence the constraint has
+WEIGHT_CONSTRAINT_LAMBDA: 0
 BATCH_SIZE: 24
 TRAIN_PATCH_SIZE: 100
 PRED_PATCH_SIZE: 128
@@ -39,16 +45,20 @@ NUM_SUBNETS: 2
 SUB_NET_DEPTH: 3
 
 ### EXperiment configuration
-# Base path for the experiment, the paths below are all relative to this one
-# Can be left out or set to "" if the experiment folder is the same containting
-# the config
-#EXPERIMENT_BASE_PATH: "./experiments/baseline/01_fish_avg16"
 # If specified, training will be continued from this checkpoint
 TRAIN_NETWORK_PATH: "best.net"
+# If set to yes, the training process will write data to tensorboard
+WRITE_TENSORBOARD_DATA: yes
+# If set to yes, the network stores an example prediction every STEPS_PER_EPOCH
+WRITE_EXAMPLE_IMAGE: yes
 # Trained network to use for prediction
 PRED_NETWORK_PATH: "best.net"
 # Path where to store denoised images, can be "" to omit storing prediction results
 PRED_OUTPUT_PATH: "prediction"
-WRITE_TENSORBOARD_DATA: yes
-# If set to yes, the network stores an example prediction every STEPS_PER_EPOCH
-WRITE_EXAMPLE_IMAGE: yes
+# Images will be stored using the specified formats. Possible values are 'png' and 'tif'.
+OUTPUT_IMAGE_FORMATS: ["png", "tif"]
+# If set to yes, the network also writes the individual images weighted by their
+# respective weight to the prediction output folder [PRED_OUTPUT_PATH]
+WRITE_SUBNETWORK_IMAGES: yes
+# If set to yes, the network saves the weights computed for the subnetworks
+WRITE_SUBNETWORK_WEIGHTS: yes
