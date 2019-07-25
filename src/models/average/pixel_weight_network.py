@@ -31,6 +31,8 @@ class PixelWeightUNet(AbstractWeightNetwork):
     def _build_final_ops(self, outs):
         for _ in range(self.num_subnets):
             # And for each pixel we output a weight for each subnet
+            # 1 is num_classes in the subnets, but we do not sample the weight
+            # or something like but just produce one weight per pixel
             self.final_ops.append(conv1x1(outs, 1))
 
     def forward(self, x):
@@ -92,6 +94,12 @@ class PixelWeightUNet(AbstractWeightNetwork):
             while (ymin < image.shape[0]):
                 patch = image[ymin:ymax, xmin:xmax]
                 _amalgamted_image, _sub_images, _weights = self.predict_patch(patch)
+                print(_sub_images.squeeze().shape)
+                print(_sub_images.squeeze()[:, ovTop:, ovLeft:].shape)
+                print(_sub_images[:, ovTop:, ovLeft:].shape)
+                print(_sub_images[:, ovTop:, ovLeft:][0].shape)
+                print(_sub_images[:, ovTop:, ovLeft:][0].squeeze().shape)
+                print(sub_images[:, ymin:ymax, xmin:xmax][:, ovTop:, ovLeft:].shape)
                 # Remove unnecessary dimensions that are still there
                 _amalgamted_image = _amalgamted_image.squeeze()
                 amalgamted_image[ymin:ymax, xmin:xmax][ovTop:, ovLeft:]\
@@ -113,7 +121,10 @@ class PixelWeightUNet(AbstractWeightNetwork):
         return amalgamted_image, sub_images, weights
 
     def predict_patch(self, patch):
+        # network expects a batch size even in prediction
         # [batch_size, num_channels, H, W]
+        # NOTE the shape has nothing to do with the number of classes yet
+        # (Probabilistic Noise2Void) as its the input to the network!
         # TODO use num_channels of our class instead of setting it to 1 manually
         inputs = torch.zeros(1, 1, patch.shape[0], patch.shape[1])
         inputs[0, :, :, :] = util.img_to_tensor(patch)
@@ -127,6 +138,7 @@ class PixelWeightUNet(AbstractWeightNetwork):
         # Get data from GPU
         amalgamted_image = amalgamted_image.cpu().detach().numpy()
         sub_images = sub_images.cpu().detach().numpy()
+        sub_images = sub_images.squeeze()
         weights = weights.cpu().detach().numpy()
         # Remove unnecessary dimensions
         weights = np.squeeze(weights)
