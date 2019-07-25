@@ -79,6 +79,8 @@ class AbstractPredictor():
         self.data_test, self.data_gt = self.loader.load_test_data(
             self.config['DATA_PRED_RAW_PATH'], self.config['DATA_PRED_GT_PATH'],
             self.net.mean, self.net.std, self.config.get('CONVERT_DATA_TO', None))
+        print(self.data_test.shape)
+        print(self.data_gt.shape)
 
         if self.data_gt is None:
             print(
@@ -113,12 +115,13 @@ class AbstractPredictor():
             if self.pred_output_path:
                 if 'tif' in self.config['OUTPUT_IMAGE_FORMATS']:
                     tif.imsave(os.path.join(self.pred_output_path,
-                                        pred_image_filename + '.tif'),
-                           prediction.astype(np.float32))
+                                            pred_image_filename + '.tif'),
+                               prediction.astype(np.float32))
                 if 'png' in self.config['OUTPUT_IMAGE_FORMATS']:
                     plt.imsave(os.path.join(self.pred_output_path,
-                                        pred_image_filename + '.png'),
-                           prediction)
+                                            pred_image_filename + '.png'),
+                               prediction,
+                               cmap='gray')
                 # Uncomment if you want to see the raw image
                 #plt.imsave(os.path.join(self.pred_output_path,
                 #                       im_filename), im, cmap='gray')
@@ -136,7 +139,7 @@ class AbstractPredictor():
                 mse = util.MSE(ground_truth, prediction)
                 mse_values.append(mse)
                 results[pred_image_filename] = {'psnr' : psnr,
-                                                     'mse'  : mse}
+                                                'mse'  : mse}
                 print("PSNR raw {:.4f}".format(util.PSNR(ground_truth, im, 255)))
                 print("PSNR denoised {:.4f}".format(psnr))  # Without info from masked pixel
                 print('MSE {:.4f}'.format(mse))

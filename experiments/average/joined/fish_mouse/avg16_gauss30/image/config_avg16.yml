@@ -38,7 +38,7 @@ SUB_NET_DEPTH: 3
 
 ### EXperiment configuration
 # If specified, training will be continued from this checkpoint
-TRAIN_NETWORK_PATH: "best.net"
+#TRAIN_NETWORK_PATH: "best.net"
 # If set to yes, the training process will write data to tensorboard
 WRITE_TENSORBOARD_DATA: yes
 # If set to yes, the network stores an example prediction every STEPS_PER_EPOCH
@@ -46,7 +46,9 @@ WRITE_EXAMPLE_IMAGE: yes
 # Trained network to use for prediction
 PRED_NETWORK_PATH: "best.net"
 # Path where to store denoised images, can be "" to omit storing prediction results
-PRED_OUTPUT_PATH: "prediction"
+PRED_OUTPUT_PATH: "prediction_avg16"
+# Images will be stored using the specified formats. Possible values are 'png' and 'tif'.
+OUTPUT_IMAGE_FORMATS: ["png", "tif"]
 # If set to yes, the network also writes the individual images weighted by their
 # respective weight to the prediction output folder [PRED_OUTPUT_PATH]
 WRITE_SUBNETWORK_IMAGES: yes

@@ -3,6 +3,8 @@ import numpy as np
 
 import util
 
+NP_RANDOM_SEED = 19680801
+
 class DataLoader():
     """Helper class to load trainind and prediction data. The data loader
     automatically stores the mean and std of the last loaded raw training
@@ -105,7 +107,7 @@ class DataLoader():
             data_gt = np.repeat(data_gt, img_factor, axis=0)
             # Shuffle the data for training, seed so that networks trained on
             # the same dataset receive the same validation sets
-            data_raw, data_gt = util.joint_shuffle(data_raw, data_gt, seed=42)
+            data_raw, data_gt = util.joint_shuffle(data_raw, data_gt, seed=NP_RANDOM_SEED)
             # If loaded, the network is trained using clean targets, otherwise it performs N2V
             val_gt_index = int((1 - val_ratio) * data_gt.shape[0])
             data_train_gt = data_gt[:val_gt_index].copy()
@@ -115,7 +117,7 @@ class DataLoader():
             data_val_gt = None
             # Shuffle the data for training, seed so that networks trained on
             # the same dataset receive the same validation sets
-            data_raw = util.shuffle(data_raw, seed=42)
+            data_raw = util.shuffle(data_raw, seed=NP_RANDOM_SEED)
 
         val_raw_index = int((1 - val_ratio) * data_raw.shape[0])
         data_train = data_raw[:val_raw_index].copy()

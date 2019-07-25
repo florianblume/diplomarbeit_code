@@ -3,11 +3,11 @@ import torch.nn as nn
 import numpy as np
 
 import util
-from models import AbstractUNet
 from models import conv1x1
+from models.average import AbstractWeightNetwork
 from models.average import SubUNet
 
-class ImageWeightUNet(AbstractUNet):
+class ImageWeightUNet(AbstractWeightNetwork):
     """This network computes the weights for the subnetworks on a per-image basis.
     This means that each subnetwork gets one weight. The whole output of each
     subnetwork is multiplied by the respective weight. These weighted outputs
@@ -19,52 +19,20 @@ class ImageWeightUNet(AbstractUNet):
                  start_filts=64, up_mode='transpose', merge_mode='add',
                  augment_data=True,
                  device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")):
-        self.num_subnets = num_subnets
-        self.sub_net_depth = sub_net_depth
-        
         super(ImageWeightUNet, self).__init__(num_classes, mean, std,
                                               in_channels=in_channels,
-                                              depth=main_net_depth,
+                                              main_net_depth=main_net_depth,
+                                              sub_net_depth=sub_net_depth,
+                                              num_subnets=num_subnets,
                                               start_filts=start_filts,
                                               up_mode=up_mode,
                                               merge_mode=merge_mode,
                                               augment_data=augment_data,
                                               device=device)
 
-    def _build_network_head(self, outs):
-        # Do not move to init as this method gets called by the init of the
-        # super class.
-        self.subnets = nn.ModuleList()
-        self.final_ops = nn.ModuleList()
-
+    def _build_final_ops(self, outs):
         for _ in range(self.num_subnets):
-            # We create each requested subnet
-            # TODO Make main and subnets individually configurable
-            self.subnets.append(SubUNet(self.num_classes, self.mean, self.std,
-                                        in_channels=self.in_channels,
-                                        depth=self.sub_net_depth,
-                                        start_filts=self.start_filts,
-                                        up_mode=self.up_mode,
-                                        merge_mode=self.merge_mode,
-                                        device=self.device))
             self.final_ops.append(conv1x1(outs, 1))
-
-    @staticmethod
-    def loss_function(outputs, labels, masks):
-        # This is the leftover of Probabilistic N2V where the network outputs
-        # 800 means per pixel instead of only 1
-        outs = outputs[:, 0, ...]
-        loss = torch.sum(masks * (labels - outs)**2) / torch.sum(masks)
-        return loss
-
-    @staticmethod
-    def loss_function_with_entropy(outputs, labels, masks, weights, weights_lambda):
-        # This is the leftover of Probabilistic N2V where the network outputs
-        # 800 means per pixel instead of only 1
-        outs = outputs[:, 0, ...]
-        loss = torch.sum(masks * (labels - outs)**2) / torch.sum(masks)
-        entropy = -torch.sum(weights * torch.log(weights))
-        return loss + weights_lambda * entropy
 
     def forward(self, x):
         encoder_outs = []

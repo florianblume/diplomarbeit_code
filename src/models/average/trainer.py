@@ -70,16 +70,21 @@ class Trainer(AbstractTrainer):
         # In case that we predict the weights for the whole image we only
         # want to plot their histograms. In case that we predict the weights
         # on a per-pixel basis we store it as an image.
-        if self.weight_mode == 'image':
-            self.writer.add_histogram('weights', weights, self.print_step, bins='auto')
-        elif self.weight_mode == 'pixel':
-            # Normalize weights
-            weights = weights / np.sum(weights, axis=0)
-            weights = weights * 255
-            weights = weights.astype(np.uint8)
-            self.writer.add_image('weights', weights, self.print_step)
-        else:
-            raise ValueError('Unkown weight mode.')
+        for i in weights.shape[0]:
+            weights_name = 'weights.subnet.{}'.format(i)
+            if self.weight_mode == 'image':
+                self.writer.add_histogram(weights_name,
+                                          weights,
+                                          self.print_step,
+                                          bins='auto')
+            elif self.weight_mode == 'pixel':
+                # Normalize weights
+                weights = weights / np.sum(weights, axis=0)
+                weights = weights * 255
+                weights = weights.astype(np.uint8)
+                self.writer.add_image(weights_name, weights, self.print_step)
+            else:
+                raise ValueError('Unkown weight mode.')
 
     def _write_tensorboard_data(self):
         self.writer.add_scalar('train_loss', self. avg_train_loss, self.print_step)

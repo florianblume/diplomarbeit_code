@@ -68,7 +68,8 @@ class Predictor(AbstractPredictor):
                 if 'png' in self.config['OUTPUT_IMAGE_FORMATS']:
                     plt.imsave(
                         os.path.join(output_path, image_filename + '.png'),
-                        sub_image)
+                        sub_image,
+                        cmap='gray')
 
     def _store_additional_intermediate_results(self, image_name, results):
         weights_sum = np.sum(self.weights)
@@ -85,5 +86,9 @@ class Predictor(AbstractPredictor):
         weights_average_percentage = weights_average / np.sum(weights_average)
         formatted_weights = Predictor.pretty_string(weights_average,
                                                     weights_average_percentage)
-        print('Average weights {}'.format(formatted_weights))
+        print('Average weights: {}'.format(formatted_weights))
         results['average_weights'] = weights_average.tolist()
+        weights_std = np.std(self.weights_list, axis=0)
+        weights_std_string = ', '.join('{:.4f}'.format(std) for std in weights_std)
+        print('Weights std: {}'.format(weights_std_string))
+        results['weights_std'] = weights_std.tolist()

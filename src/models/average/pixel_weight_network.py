@@ -1,13 +1,11 @@
 import torch
-import torch.nn as nn
 import numpy as np
 
 import util
-from models import AbstractUNet
 from models import conv1x1
-from models.average import SubUNet
+from models.average import AbstractWeightNetwork
 
-class PixelWeightUNet(AbstractUNet):
+class PixelWeightUNet(AbstractWeightNetwork):
     """This network computes weights for each subnetwork on a per-pixel basis.
     This means that each pixel gets a weights for each subnet. The outputs of
     the subnets are multiplied with their respective weights and added up.
@@ -19,66 +17,21 @@ class PixelWeightUNet(AbstractUNet):
                  start_filts=64, up_mode='transpose', merge_mode='add',
                  augment_data=True,
                  device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")):
-        """
-        NOTE: mean and std will be persisted by the model and restored on loading
-
-        Arguments:
-            mean: int, the mean of the raw data that this network was trained with. 
-            std: int, the std of the raw data that this network was trained with.
-            in_channels: int, number of channels in the input tensor.
-                Default is 3 for RGB images.
-            depth: int, number of MaxPools in the U-Net.
-            start_filts: int, number of convolutional filters for the
-                first conv.
-            up_mode: string, type of upconvolution. Choices: 'transpose'
-                for transpose convolution or 'upsample' for nearest neighbour
-                upsampling.
-        """
-        self.num_subnets = num_subnets
-        self.sub_net_depth = sub_net_depth
         super(PixelWeightUNet, self).__init__(num_classes, mean, std,
                                               in_channels=in_channels,
-                                              depth=main_net_depth,
+                                              main_net_depth=main_net_depth,
+                                              sub_net_depth=sub_net_depth,
+                                              num_subnets=num_subnets,
                                               start_filts=start_filts,
                                               up_mode=up_mode,
                                               merge_mode=merge_mode,
                                               augment_data=augment_data,
                                               device=device)
 
-    def _build_network_head(self, outs):
-        self.subnets = nn.ModuleList()
-        self.final_ops = nn.ModuleList()
-
+    def _build_final_ops(self, outs):
         for _ in range(self.num_subnets):
-            # We create each requested subnet
-            # TODO Make main and subnets individually configurable
-            self.subnets.append(SubUNet(self.num_classes, self.mean, self.std,
-                                        in_channels=self.in_channels,
-                                        depth=self.sub_net_depth,
-                                        start_filts=self.start_filts,
-                                        up_mode=self.up_mode,
-                                        merge_mode=self.merge_mode,
-                                        augment_data=self.augment_data,
-                                        device=self.device))
             # And for each pixel we output a weight for each subnet
             self.final_ops.append(conv1x1(outs, 1))
-
-    @staticmethod
-    def loss_function(outputs, labels, masks):
-        # This is the leftover of Probabilistic N2V where the network outputs
-        # 800 means per pixel instead of only 1
-        outs = outputs[:, 0, ...]
-        loss = torch.sum(masks * (labels - outs)**2) / torch.sum(masks)
-        return loss
-
-    @staticmethod
-    def loss_function_with_entropy(outputs, labels, masks, weights, weights_lambda):
-        # This is the leftover of Probabilistic N2V where the network outputs
-        # 800 means per pixel instead of only 1
-        outs = outputs[:, 0, ...]
-        loss = torch.sum(masks * (labels - outs)**2) / torch.sum(masks)
-        entropy = -torch.sum(weights * torch.log(weights))
-        return loss + weights_lambda * entropy
 
     def forward(self, x):
         encoder_outs = []
@@ -144,7 +97,8 @@ class PixelWeightUNet(AbstractUNet):
                 amalgamted_image[ymin:ymax, xmin:xmax][ovTop:, ovLeft:]\
                     = _amalgamted_image[ovTop:, ovLeft:]
                 sub_images[:, ymin:ymax, xmin:xmax][:, ovTop:, ovLeft:]\
-                    = _sub_images[:, ovTop:, ovLeft:]
+                    = [_sub_images[:, ovTop:, ovLeft:][0].squeeze(),
+                       _sub_images[:, ovTop:, ovLeft:][1].squeeze()]
                 weights[:, ymin:ymax, xmin:xmax][:, ovTop:, ovLeft:]\
                     = _weights[:, ovTop:, ovLeft:]
                 ymin = ymin-overlap+patch_size
