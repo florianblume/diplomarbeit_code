@@ -18,7 +18,28 @@ def numpy_array_to_images(array_path, output_path):
     for i, image in enumerate(data):
         plt.imsave(os.path.join(output_path, str(i).zfill(4) + '.png'), image, cmap='gray')
 
-def print_weight_histogram_and_scatterplot(json_path, bins=20, range=None):
+def print_weight_histogram_and_scatterplot(json_path,
+                                           output_dir,
+                                           hist_name,
+                                           scatter_plot_name,
+                                           bins=20,
+                                           range=None):
+    """This functions produces a scatter plot and histogram of the weights
+    contained in a single json results file.
+    
+    Arguments:
+        json_path {str}         -- the path to the json file
+        output_dir {str}        -- the directory where to store the results
+        hist_name {str}         -- the filename of the histogram, the extension 
+                                   determines the format
+        scatter_plot_name {str} -- the filename of the scatter plot, the 
+                                   extension determines the format
+    
+    Keyword Arguments:
+        bins {int}              -- the number of bins to use in the histogram
+                                   (default: {20})
+        range {list}            -- the range of the histogram (default: {None})
+    """
     with open(json_path, 'r') as json_file:
         results_data = json.load(json_file)
         weights_list = []
@@ -32,7 +53,7 @@ def print_weight_histogram_and_scatterplot(json_path, bins=20, range=None):
         # scatter plot
         fig, ax = plt.subplots()
         ax.scatter(weights_list[:, 0], weights_list[:, 1], alpha=0.5)
-        plt.savefig(os.path.join(dirname, "scatterplot.svg"))
+        plt.savefig(os.path.join(dirname, scatter_plot_name))
         plt.clf()
         # histogram
         fig, ax = plt.subplots()
@@ -40,15 +61,32 @@ def print_weight_histogram_and_scatterplot(json_path, bins=20, range=None):
         percentage_weights = normalized_weights
         ax.hist(percentage_weights[:, 0], range=range, bins=bins)
         ax.xaxis.set_major_formatter(FuncFormatter(lambda y, _: '{:.0%}'.format(y)))
-        dirname = os.path.dirname(json_path)
-        plt.savefig(os.path.join(dirname, "histogram.svg"))
+        plt.savefig(os.path.join(output_dir, hist_name))
 
 def print_weight_histogram_and_scatterplot_multi(json_paths,
-                                                 output_path,
+                                                 output_dir,
                                                  hist_name,
                                                  scatter_plot_name,
                                                  bins=20,
                                                  range=None):
+    """This functions merges the weights stored in the specified results files
+    into a single scatter plot and histogram.
+    
+    Arguments:
+        json_paths {dict}       -- {key: json_path} - key is used in the legend 
+                                   of the scatter plot and histogram
+
+        output_dir {str}        -- the directory where to store the results
+        hist_name {str}         -- the filename of the histogram, the extension 
+                                   determines the format
+        scatter_plot_name {str} -- the filename of the scatter plot, the 
+                                   extension determines the format
+    
+    Keyword Arguments:
+        bins {int}              -- the number of bins to use for the histogram 
+                                   (default: {20})
+        range {list}            -- the range of the histogram (default: {None})
+    """     
     scatter_fig = plt.figure(0)
     scatter_axs = scatter_fig.add_subplot(111)
     hist_fig = plt.figure(1)
@@ -74,11 +112,11 @@ def print_weight_histogram_and_scatterplot_multi(json_paths,
             hist_axs.plot(hist[1][:-1], hist[0], label=key)
 
     scatter_fig.legend(loc='upper right')
-    scatter_fig.savefig(os.path.join(output_path, scatter_plot_name))
+    scatter_fig.savefig(os.path.join(output_dir, scatter_plot_name))
     scatter_fig.clf()
     hist_axs.xaxis.set_major_formatter(FuncFormatter(lambda y, _: '{:.2%}'.format(y)))
     hist_fig.legend(loc='upper right')
-    hist_fig.savefig(os.path.join(output_path, hist_name))
+    hist_fig.savefig(os.path.join(output_dir, hist_name))
     hist_fig.clf()
 
 #TODO Fourier transform for images

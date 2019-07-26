@@ -70,7 +70,7 @@ class Trainer(AbstractTrainer):
         # In case that we predict the weights for the whole image we only
         # want to plot their histograms. In case that we predict the weights
         # on a per-pixel basis we store it as an image.
-        for i in weights.shape[0]:
+        for i in range(weights.shape[0]):
             weights_name = 'weights.subnet.{}'.format(i)
             if self.weight_mode == 'image':
                 self.writer.add_histogram(weights_name,

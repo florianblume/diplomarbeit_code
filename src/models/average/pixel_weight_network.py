@@ -94,19 +94,11 @@ class PixelWeightUNet(AbstractWeightNetwork):
             while (ymin < image.shape[0]):
                 patch = image[ymin:ymax, xmin:xmax]
                 _amalgamted_image, _sub_images, _weights = self.predict_patch(patch)
-                print(_sub_images.squeeze().shape)
-                print(_sub_images.squeeze()[:, ovTop:, ovLeft:].shape)
-                print(_sub_images[:, ovTop:, ovLeft:].shape)
-                print(_sub_images[:, ovTop:, ovLeft:][0].shape)
-                print(_sub_images[:, ovTop:, ovLeft:][0].squeeze().shape)
-                print(sub_images[:, ymin:ymax, xmin:xmax][:, ovTop:, ovLeft:].shape)
-                # Remove unnecessary dimensions that are still there
                 _amalgamted_image = _amalgamted_image.squeeze()
                 amalgamted_image[ymin:ymax, xmin:xmax][ovTop:, ovLeft:]\
                     = _amalgamted_image[ovTop:, ovLeft:]
                 sub_images[:, ymin:ymax, xmin:xmax][:, ovTop:, ovLeft:]\
-                    = [_sub_images[:, ovTop:, ovLeft:][0].squeeze(),
-                       _sub_images[:, ovTop:, ovLeft:][1].squeeze()]
+                    = _sub_images[:, ovTop:, ovLeft:]
                 weights[:, ymin:ymax, xmin:xmax][:, ovTop:, ovLeft:]\
                     = _weights[:, ovTop:, ovLeft:]
                 ymin = ymin-overlap+patch_size

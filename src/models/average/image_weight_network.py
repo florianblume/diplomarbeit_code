@@ -134,11 +134,6 @@ class ImageWeightUNet(AbstractWeightNetwork):
                 weights.append(np.log(self.predict_patch(patch)))
                 sub_outputs = np.array([subnet.predict_patch(patch)\
                                         for subnet in self.subnets])
-                print(sub_outputs.shape)
-                print(sub_outputs[:, ovTop:, ovLeft:].shape)
-                print(sub_outputs[:, ovTop:, ovLeft:][0].shape)
-                print(sub_outputs[:, ovTop:, ovLeft:][0].squeeze().shape)
-                print(sub_images[:, ymin:ymax, xmin:xmax][:, ovTop:, ovLeft:].shape)
                 sub_images[:, ymin:ymax, xmin:xmax][:, ovTop:, ovLeft:]\
                     = sub_outputs[:, ovTop:, ovLeft:]
                 ymin = ymin-overlap+patch_size
