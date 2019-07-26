@@ -47,7 +47,7 @@ class UNet(AbstractUNet):
         return x
 
     def training_predict(self, train_data, train_data_clean, data_counter, size, box_size, bs):
-        inputs, labels, masks = self.assemble_training__batch(bs, size, box_size, 
+        inputs, labels, masks = self.assemble_training__batch(bs, size, box_size,
                                     data_counter, train_data, train_data_clean)
 
         # Move to GPU
