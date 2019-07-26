@@ -54,7 +54,8 @@ class AbstractTrainer():
         # Virtual batch size
         self.vbatch = self.config['VIRTUAL_BATCH_SIZE']
         self.steps_per_epoch = self.config['STEPS_PER_EPOCH']
-        self.experiment_base_path = self.config.get('EXPERIMENT_BASE_PATH', self.config_path)
+        self.experiment_base_path = self.config.get('EXPERIMENT_BASE_PATH', 
+                                                    self.config_path)
         if self.experiment_base_path == "":
             self.experiment_base_path = self.config_path
         # don't need config path anymore
@@ -77,10 +78,11 @@ class AbstractTrainer():
         self.loader = dataloader.DataLoader(self.config['DATA_BASE_PATH'])
         # In case the ground truth data path was not set we pass '' to
         # the loader which returns None to us
-        data_raw, data_gt, self.data_train, self.data_train_gt, self.data_val, self.data_val_gt = self.loader.load_training_data(
-            self.config['DATA_TRAIN_RAW_PATH'],
-            self.config.get('DATA_TRAIN_GT_PATH', ''),
-            self.config.get('CONVERT_DATA_TO', None))
+        data_raw, data_gt, self.data_train, self.data_train_gt, self.data_val,\
+            self.data_val_gt = self.loader.load_training_data(
+                self.config['DATA_TRAIN_RAW_PATH'],
+                self.config.get('DATA_TRAIN_GT_PATH', ''),
+                self.config.get('CONVERT_DATA_TO', None))
         
 
         ################## TODO #####################
