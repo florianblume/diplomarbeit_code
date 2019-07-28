@@ -44,10 +44,33 @@ class RandomFlip():
             raw_image = np.flip(raw_image)
         return {'raw' : raw_image}
 
-class AbstractActionTransformation():
-    """Base class for a transformation that is to be executed on training and
-    prediction data. I.e. it is not clear whether there is a gt image, as
-    prediciton can be run without one.
+class RandomRotation():
+    """Transformation that randomly rotates the data in the sample.
+    """
+
+    @staticmethod
+    def _numpy_action(image):
+        rot = np.random.randint(0, 4)
+        return np.rot90(image, rot)
+
+    def __call__(self, sample):
+        raw_image = sample['raw']
+        rot = np.random.randint(0, 4)
+        if 'gt' in sample:
+            gt_image = sample['gt']
+            raw_image = np.rot90(raw_image, rot)
+            gt_image = np.rot90(gt_image, rot)
+            return {'raw' : raw_image, 'gt' : gt_image}
+        if np.random.choice((True, False)):
+            raw_image = np.rot90(raw_image, rot)
+        return {'raw' : raw_image}
+
+class SingleActionTransformation():
+    """Base class for a transformation that apply actions to raw and ground-truth
+    images. It is important that only transformations subclass this class that
+    do not need their action carried out symmetrically on raw and ground-truth
+    data. If you e.g. want to flip images randomly it might occur that in this
+    class the raw image gets flipped but the ground-truth not.
     """
 
     def __init__(self, action):
@@ -59,25 +82,12 @@ class AbstractActionTransformation():
         if 'gt' in sample:
             gt_image = sample['gt']
             gt_image = self.action(gt_image)
-            has_gt = True
             # Prediction with clean images or training
             return {'raw' : raw_image, 'gt' : gt_image}
         # Prediction without clean images
         return {'raw' : raw_image}
 
-class RandomRotation(AbstractActionTransformation):
-    """Transformation that randomly rotates the data in the sample.
-    """
-
-    @staticmethod
-    def _numpy_action(image):
-        rot = np.random.randint(0, 4)
-        return np.array(np.rot90(image, rot))
-
-    def __init__(self):
-        super(RandomRotation, self).__init__(RandomRotation._numpy_action)
-
-class ConvertToFormat(AbstractActionTransformation):
+class ConvertToFormat(SingleActionTransformation):
     """Class ConvertToFormat converts the contents of the sample to the specified
     numpy format. Check the numpy documentation to see available formats.
     Conversion might be lossy.
@@ -91,7 +101,7 @@ class ConvertToFormat(AbstractActionTransformation):
         self._to_format = to_format
         super(ConvertToFormat, self).__init__(self._action)
 
-class ToTensor(AbstractActionTransformation):
+class ToTensor(SingleActionTransformation):
     """Class ToTensor takes in a training or prediction sample, converts it to
     the format required by PyTorch (C, H, W) and returns it as a tensor. It can
     be used both for training and for prediction as ToTensor automatically

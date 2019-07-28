@@ -25,7 +25,51 @@ def raw_gt_3():
 
 # Tests for class RandomCrop
 
+def test_random_crop(raw_gt):
+    raw_image = raw_gt['raw'].copy()
+    gt_image = raw_gt['gt'].copy()
+    np.random.seed(2)
+    width = 2
+    height = 2
+    # resulting x from the width for seed 2
+    x = 0
+    # resulting y from the height for seed 2
+    y = 1
+    raw_cropped = raw_image[y:y+height, x:x+width]
+    gt_cropped = gt_image[y:y+height, x:x+width]
+    result = RandomCrop(width, height)(raw_gt)
+    result_raw = result['raw']
+    result_gt = result['gt']
+    print(result_gt)
+    print(gt_cropped)
+    assert np.array_equal(raw_cropped, result_raw)
+    assert np.array_equal(gt_cropped, result_gt)
+
 # Test for class RandomRotation
+
+def test_random_rotation_raw(raw):
+    raw_image = raw['raw'].copy()
+    # 2 is np.random.randint(0, 4) for seed 4
+    raw_image_rotated = np.rot90(raw_image, 2)
+    np.random.seed(4)
+    result = RandomRotation()(raw)['raw']
+    assert np.array_equal(raw_image_rotated, result)
+
+def test_random_rotation_raw_gt(raw_gt):
+    raw_image = raw_gt['raw'].copy()
+    gt_image = raw_gt['gt'].copy()
+    # np.random.randint(0, 4)=2 for seed 3, but calling np.random.randint(0, 4)
+    # again gives 0 -> sometimes calling two times gives the same number for a
+    # seed which would mean we would not detect a problem of rotating the raw
+    # image but not the ground-truth one
+    raw_image_rotated = np.rot90(raw_image, 2)
+    gt_image_rotated = np.rot90(gt_image, 2)
+    np.random.seed(3)
+    result = RandomRotation()(raw_gt)
+    result_raw_rot = result['raw']
+    result_gt_rot = result['gt']
+    assert np.array_equal(raw_image_rotated, result_raw_rot)
+    assert np.array_equal(gt_image_rotated, result_gt_rot)
 
 # Tests for class RandomFlip
 
