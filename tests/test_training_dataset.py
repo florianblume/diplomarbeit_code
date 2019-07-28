@@ -37,3 +37,4 @@ def teardown_module(test_training_dataset):
 def test_num_images():
     dataset = TrainingDataset('tmp/testdata/raw', val_ratio=0.3)
     assert len(dataset) == 2
+    assert dataset.get_validation_images().shape[0] == 1

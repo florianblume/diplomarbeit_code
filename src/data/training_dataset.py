@@ -32,8 +32,7 @@ class TrainingDataset(Dataset):
             self._gt_images_dir = raw_images_dir
             self._gt_images = self._raw_images
 
-        self._mean, self._std = TrainingDataset\
-                                    ._compute_mean_and_std(self._raw_images)
+        self._mean, self._std = self._compute_mean_and_std()
 
         self._transform = transform
         self._num_pixels = num_pixels
@@ -46,10 +45,25 @@ class TrainingDataset(Dataset):
         self._gt_images_train = self._gt_images[:val_index].copy()
         self._gt_images_val = self._gt_images[val_index:].copy()
 
-    @staticmethod
-    def _compute_mean_and_std(images):
-        # mean can be computed sequentially
-        pass
+    def _compute_mean_and_std(self):
+        means = []
+        std = 0
+        for raw_image in self._raw_images:
+            image = np.load(os.path.join(self._raw_images_dir, raw_image))
+            means.append(np.mean(image))
+        mean = np.mean(means)
+        for raw_image in self._raw_images:
+            image = np.load(os.path.join(self._raw_images_dir, raw_image))
+            tmp = np.sum((image - mean)**2) / float(image.shape[0] * image.shape[1] - 1))
+            std += tmp
+
+        return mean, np.sqrt(std)
+
+    def mean(self):
+        return self._mean
+
+    def std(self):
+        return self._std
 
     def __len__(self):
         return len(self._raw_images_train)
@@ -171,5 +185,5 @@ class TrainingDataset(Dataset):
                                             self._gt_images_val[i]))
             images.append({'raw' : raw_image,
                             'gt'  : gt_image})
-        return images
+        return np.array(images)
         
