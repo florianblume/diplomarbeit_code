@@ -89,7 +89,10 @@ class AbstractTrainer():
         #### Just a temporary fix, maybe we need data_raw again in the future
         #### But this way we avoid memory errors and we don't need data_raw
         self.raw_example = data_raw[0]
-        self.gt_example = data_gt[0]
+        if data_gt is not None:
+            self.gt_example = data_gt[0]
+        else:
+            self.gt_example = None
 
     def _load_network(self):
         raise NotImplementedError

@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -8,6 +9,7 @@ from tests.torchtest import assert_vars_change
 from tests import base_test
 from models.average import ImageWeightUNet
 
+@pytest.mark.skip(reason="Average model test deactivated for the sake of speed.")
 def test_average_model():
     inputs = np.random.randn(1, 100, 100)
     targets = Variable(torch.randn((20, 20)))

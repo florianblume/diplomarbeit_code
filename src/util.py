@@ -1,5 +1,5 @@
-import numpy as np
 import os
+import numpy as np
 
 
 def normal_dense(x, m_=0.0, std_=None):
@@ -13,7 +13,12 @@ def normal_dense(x, m_=0.0, std_=None):
 
 def img_to_tensor(img):
     import torchvision
-    img.shape = (img.shape[0], img.shape[1], 1)
+    if len(img.shape) == 2:
+        img.shape = (img.shape[0], img.shape[1], 1)
+    else:
+        assert len(img.shape) == 3
+        # RGB image
+        assert img.shape[2] == 3
     # torch expects channels as the first dimension - this function automatically
     # permuates the dimensions correctly
     imgOut = torchvision.transforms.functional.to_tensor(img)
@@ -72,7 +77,8 @@ def shuffle(inA, seed=None):
     if seed is not None:
         print('Seeding numpy with {}'.format(seed))
         np.random.seed(seed)
-    return np.random.shuffle(inA)
+    np.random.shuffle(inA)
+    return inA
 
 def random_crop_fri(data, width, height, box_size, dataClean=None, counter=None,
                     augment_data=True):
@@ -127,8 +133,8 @@ def random_crop(img, width, height, box_size, imgClean=None,
             roiMinB = max(b-2, 0)
             roiMaxB = min(b+3, maxB)
             roi = imgOut[roiMinB:roiMaxB, roiMinA:roiMaxA]
-          #  print(roi.shape,b ,a)
-         #   print(b-2,b+3 ,a-2,a+3)
+            #print(roi.shape,b ,a)
+            #print(b-2,b+3 ,a-2,a+3)
             a_ = 2
             b_ = 2
             while a_ == 2 and b_ == 2:

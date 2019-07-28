@@ -5,7 +5,7 @@ DATA_BASE_PATH: "data/processed/fish/"
 
 # Set GT path to "" if N2V is to be performed
 DATA_TRAIN_RAW_PATH: "avg8/training_big_raw.npy"
-DATA_TRAIN_GT_PATH: "gt/training_big_GT.npy"
+#DATA_TRAIN_GT_PATH: "gt/training_big_GT.npy"
 
 DATA_PRED_RAW_PATH: "avg8/test_noisy.npy"
 DATA_PRED_GT_PATH: "gt/test_gt.npy"

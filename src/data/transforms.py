@@ -2,36 +2,72 @@ import numpy as np
 import torchvision
 
 class RandomCrop():
+    """Class RandomCrop is a transformation that randomly crops out a part of
+    the input data in the sample. It is only applicable to training data as it
+    expects the gt data to be present.
+    """
 
-    def __init__(self, width: int, height: int, hot_pixels=64):
+    def __init__(self, width: int, height: int):
         self.width = width
         self.height = height
-        self.hot_pixels = hot_pixels
 
     def __call__(self, sample):
-        pass
+        # We are in training so there is a gt image, even if it has been set
+        # to the raw image earlier
+        raw_image = sample['raw']
+        gt_image = sample['gt']
+        assert raw_image.shape[0] >= self.height
+        assert raw_image.shape[1] >= self.width
+        assert raw_image.shape == gt_image.shape
 
-class AbstractNumpyAction():
+        x = np.random.randint(0, raw_image.shape[1] - self.width)
+        y = np.random.randint(0, raw_image.shape[0] - self.height)
 
-    def __init__(self, numpy_action):
-        self.numpy_action = numpy_action
+        cropped_raw_image = raw_image[y:y+self.height, x:x+self.width].copy()
+        cropped_gt_image = gt_image[y:y+self.height, x:x+self.width].copy()
+
+        return {'raw' : cropped_raw_image, 'gt' : cropped_gt_image}
+
+class RandomFlip():
+    """Transformation that randomly flips the data in the sample.
+    """
 
     def __call__(self, sample):
         raw_image = sample['raw']
-        raw_image = np.array(self.numpy_action(raw_image))
-        mask = sample['mask']
-        mask = np.array(self.numpy_action(mask))
         if 'gt' in sample:
-            # N2C training
             gt_image = sample['gt']
-            gt_image = np.array(self.numpy_action(gt_image))
-        else:
-            # N2V training
-            gt_image = raw_image
+            if np.random.choice((True, False)):
+                raw_image = np.flip(raw_image)
+                gt_image = np.flip(gt_image)
+            return {'raw' : raw_image, 'gt' : gt_image}
+        if np.random.choice((True, False)):
+            raw_image = np.flip(raw_image)
+        return {'raw' : raw_image}
 
-        return {'raw' : raw_image, 'gt' : gt_image, 'mask' : mask}
+class AbstractActionTransformation():
+    """Base class for a transformation that is to be executed on training and
+    prediction data. I.e. it is not clear whether there is a gt image, as
+    prediciton can be run without one.
+    """
 
-class RandomRotation(AbstractNumpyAction):
+    def __init__(self, action):
+        self.action = action
+
+    def __call__(self, sample):
+        raw_image = sample['raw']
+        raw_image = self.action(raw_image)
+        if 'gt' in sample:
+            gt_image = sample['gt']
+            gt_image = self.action(gt_image)
+            has_gt = True
+            # Prediction with clean images or training
+            return {'raw' : raw_image, 'gt' : gt_image}
+        # Prediction without clean images
+        return {'raw' : raw_image}
+
+class RandomRotation(AbstractActionTransformation):
+    """Transformation that randomly rotates the data in the sample.
+    """
 
     @staticmethod
     def _numpy_action(image):
@@ -41,56 +77,21 @@ class RandomRotation(AbstractNumpyAction):
     def __init__(self):
         super(RandomRotation, self).__init__(RandomRotation._numpy_action)
 
-class RandomFlip(AbstractNumpyAction):
-
-    def __init__(self):
-        super(RandomFlip, self).__init__(np.flip)
-
-class TrainingAndPredictionAction():
-
-    def __init__(self, action, mask_action):
-        self.action = action
-        self.mask_action = mask_action
-
-    def __call__(self, sample):
-        raw_image = sample['raw']
-        raw_image = self.action(raw_image)
-        has_gt, has_mask = False, False
-        if 'mask' in sample:
-            mask = sample['mask']
-            mask = self.mask_action(mask)
-            has_mask = True
-        if 'gt' in sample:
-            gt_image = sample['gt']
-            gt_image = self.action(gt_image)
-            has_gt = True
-        elif has_mask:
-            # We have a mask i.e. are training, if no gt_image is present
-            # we train N2V style and need to set the gt image to the training
-            # image
-            gt_image = raw_image
-        if has_mask:
-            # Training
-            return {'raw' : raw_image, 'gt' : gt_image, 'mask' : mask}
-        if has_gt:
-            # Prediction with clean target
-            return {'raw' : raw_image, 'gt' : gt_image}
-        # Prediction without clean target
-        return {'raw' : raw_image}
-
-class ConvertToFormat(TrainingAndPredictionAction):
+class ConvertToFormat(AbstractActionTransformation):
+    """Class ConvertToFormat converts the contents of the sample to the specified
+    numpy format. Check the numpy documentation to see available formats.
+    Conversion might be lossy.
+    """
 
     def _action(self, image):
-        image.astype(np.dtype(self.to_format))
-
-    def _mask_action(self, mask):
-        return mask
+        image = image.astype(self._to_format)
+        return image
 
     def __init__(self, to_format):
-        self.to_format = to_format
-        super(ConvertToFormat, self).__init__(self._action, self._mask_action)
+        self._to_format = to_format
+        super(ConvertToFormat, self).__init__(self._action)
 
-class ToTensor(TrainingAndPredictionAction):
+class ToTensor(AbstractActionTransformation):
     """Class ToTensor takes in a training or prediction sample, converts it to
     the format required by PyTorch (C, H, W) and returns it as a tensor. It can
     be used both for training and for prediction as ToTensor automatically
@@ -105,11 +106,6 @@ class ToTensor(TrainingAndPredictionAction):
         image = torchvision.transforms.functional.to_tensor(image)
         return image
 
-    @staticmethod
-    def _mask_action(image):
-        return ToTensor._action(image)
-
-    def __init__(self, to_format):
-        self.to_format = to_format
-        super(ToTensor, self).__init__(ToTensor._action, ToTensor._mask_action)
+    def __init__(self):
+        super(ToTensor, self).__init__(ToTensor._action)
         

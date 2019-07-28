@@ -124,7 +124,7 @@ class DataLoader():
         data_val = data_raw[val_raw_index:].copy()
         print('Using {} raw images for training and {} raw images for validation.'\
                     .format(data_train.shape[0], data_val.shape[0]))
-        if data_train_gt.shape[0] > 0:
+        if data_train_gt is not None and data_train_gt.shape[0] > 0:
             print('Using {} gt images for training and {} gt images for validation.'\
                 .format(data_train_gt.shape[0], data_val_gt.shape[0]))
         else:

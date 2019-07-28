@@ -8,6 +8,7 @@ https://medium.com/@keeper6928/mltest-automatically-test-neural-network-models-i
 torchtest is sort of a pytorch port of mltest (which was written for tensorflow models).
 """
 
+import pytest
 import numpy as np
 import torch
 
@@ -399,6 +400,7 @@ def assert_never_inf(tensor):
         raise InfTensorException("There was an Inf value in tensor")
 
 
+@pytest.mark.skip(reason="No actual test.")
 def test_suite(model, loss_fn, optim, batch,
                output_range=None,
                train_vars=None,
