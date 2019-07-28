@@ -9,37 +9,50 @@ class TrainingDataset(Dataset):
                  val_ratio=0.1, transform=None, num_pixels=32.0):
         assert os.path.exists(raw_images_dir)
         assert os.path.isdir(raw_images_dir)
+        # Assert that val_ratio is a sensible value
+        assert 0.0 >= val_ratio <= 1.0
 
         self._raw_images_dir = raw_images_dir
         self._raw_images = glob.glob(os.path.join(raw_images_dir, "*.npy"))
+        self._raw_images = np.array(self._raw_images)
 
         # If there are no ground-truth images we learn the network
         # Noise2Void style, otherwise we train it Noise2Clean
         if gt_images_dir is not None:
             assert os.path.isdir(gt_images_dir)
+            self._train_mode = 'clean'
             self._gt_images_dir = gt_images_dir
             self._gt_images = glob.glob(os.path.join(gt_images_dir, "*.npy"))
+            self._gt_images = np.array(self._gt_images)
             # Same number of raw and ground-truth images
             assert len(self._raw_images) == len(self._gt_images)
-            self._train_mode = 'clean'
         else:
-            # If we want to train N2V style 
+            # If we want to train N2V style
+            self._train_mode = 'void'
             self._gt_images_dir = raw_images_dir
             self._gt_images = self._raw_images
-            self._train_mode = 'void'
 
-        TrainingDataset._compute_mean_and_std(self._raw_images)
+        self._mean, self._std = TrainingDataset\
+                                    ._compute_mean_and_std(self._raw_images)
 
-        self._val_ratio = val_ratio
         self._transform = transform
         self._num_pixels = num_pixels
 
+        # Create training and validation set
+        self._val_ratio = val_ratio
+        val_index = int((1 - val_ratio) * self._raw_images.shape[0])
+        self._raw_images_train = self._raw_images[:val_index].copy()
+        self._raw_images_val = self._raw_images[val_index:].copy()
+        self._gt_images_train = self._gt_images[:val_index].copy()
+        self._gt_images_val = self._gt_images[val_index:].copy()
+
     @staticmethod
     def _compute_mean_and_std(images):
+        # mean can be computed sequentially
         pass
 
     def __len__(self):
-        return len(self._raw_images)
+        return len(self._raw_images_train)
 
     @staticmethod
     def get_stratified_coords_2D(box_size, shape):
@@ -72,9 +85,9 @@ class TrainingDataset(Dataset):
 
     def __getitem__(self, idx):
         raw_image = np.load(os.path.join(self._raw_images_dir,
-                                         self._raw_images[idx]))
+                                         self._raw_images_train[idx]))
         gt_image = np.load(os.path.join(self._gt_images_dir,
-                                        self._gt_images[idx]))
+                                        self._gt_images_train[idx]))
         sample = {'raw' : raw_image, 'gt' : gt_image}
         if self._transform:
             sample = self._transform(sample)
@@ -146,4 +159,17 @@ class TrainingDataset(Dataset):
 
         sample['mask'] = mask
         return sample
+
+    def get_validation_images(self):
+        images = []
+        # We have fewer validation images than training images so we can just
+        # load them all and return them
+        for i, raw_image in self._raw_images_val:
+            raw_image = np.load(os.path.join(self._raw_images_dir,
+                                                raw_image))
+            gt_image = np.load(os.path.join(self._gt_images_dir,
+                                            self._gt_images_val[i]))
+            images.append({'raw' : raw_image,
+                            'gt'  : gt_image})
+        return images
         
