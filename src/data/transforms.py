@@ -48,11 +48,6 @@ class RandomRotation():
     """Transformation that randomly rotates the data in the sample.
     """
 
-    @staticmethod
-    def _numpy_action(image):
-        rot = np.random.randint(0, 4)
-        return np.rot90(image, rot)
-
     def __call__(self, sample):
         raw_image = sample['raw']
         rot = np.random.randint(0, 4)
@@ -61,8 +56,7 @@ class RandomRotation():
             raw_image = np.rot90(raw_image, rot)
             gt_image = np.rot90(gt_image, rot)
             return {'raw' : raw_image, 'gt' : gt_image}
-        if np.random.choice((True, False)):
-            raw_image = np.rot90(raw_image, rot)
+        raw_image = np.rot90(raw_image, rot)
         return {'raw' : raw_image}
 
 class SingleActionTransformation():

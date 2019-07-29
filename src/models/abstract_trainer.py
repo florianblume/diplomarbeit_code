@@ -1,10 +1,12 @@
 import os
+import numpy as np
 import torch
 import torch.optim as optim
-import numpy as np
-import memory_profiler
+from torch.utils.data import DataLoader
+from torchvision.transforms import Compose, Normalize
 
-from data import dataloader
+from data import TrainingDataset
+from data.transforms import *
 
 class AbstractTrainer():
     """Class AbstractTrainer is the base class of all trainers. It automatically
@@ -30,7 +32,7 @@ class AbstractTrainer():
         self.print_step = 0
 
         self._load_config_parameters()
-        self._load_data()
+        self._construct_dataset()
         self.net = self._load_network()
         # Optimizer is needed to load network weights 
         # that's why we create it first
@@ -72,27 +74,29 @@ class AbstractTrainer():
                 self.size * self.size / self.num_pix)).astype(np.int)
         self.write_tensorboard_data = self.config['WRITE_TENSORBOARD_DATA']
 
-    def _load_data(self):
-        # The actual loading of the images is performed by the util on demand
-        # here we only load the filenames
-        self.loader = dataloader.DataLoader(self.config['DATA_BASE_PATH'])
-        # In case the ground truth data path was not set we pass '' to
-        # the loader which returns None to us
-        data_raw, data_gt, self.data_train, self.data_train_gt, self.data_val,\
-            self.data_val_gt = self.loader.load_training_data(
-                self.config['DATA_TRAIN_RAW_PATH'],
-                self.config.get('DATA_TRAIN_GT_PATH', ''),
-                self.config.get('CONVERT_DATA_TO', None))
-        
-
-        ################## TODO #####################
-        #### Just a temporary fix, maybe we need data_raw again in the future
-        #### But this way we avoid memory errors and we don't need data_raw
-        self.raw_example = data_raw[0]
-        if data_gt is not None:
-            self.gt_example = data_gt[0]
+    def _construct_dataset(self):
+        self.dataset = TrainingDataset(self.config['DATA_TRAIN_RAW_PATH'],
+                                       self.config.get('DATA_TRAIN_GT_PATH', None),
+                                       self.config['VAL_RATIO'])
+        if 'CONVERT_DATA_TO' in self.config:
+            composite = Compose([RandomCrop(crop_width, crop_height),
+                                 RandomFlip(),
+                                 RandomRotation(),
+                                 ConvertToFormat(self.config['CONVERT_DATA_to']),
+                                 ToTensor(),
+                                 Normalize(self.dataset.mean(),
+                                           self.dataset.std())])
         else:
-            self.gt_example = None
+            composite = Compose([RandomCrop(crop_width, crop_height),
+                                 RandomFlip(),
+                                 RandomRotation(),
+                                 ToTensor(),
+                                 Normalize(self.dataset.mean(),
+                                           self.dataset.std())])
+        self.dataset.set_transform(composite)
+        self.raw_example, self.gt_example = self.dataset.const_training_example()
+        self.data_loader = DataLoader(self.dataset, self.config['BATCH_SIZE'],
+                                      shuffle=True, num_workers=os.cpu_count())
 
     def _load_network(self):
         raise NotImplementedError

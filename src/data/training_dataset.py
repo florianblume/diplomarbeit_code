@@ -3,10 +3,14 @@ import glob
 import numpy as np
 from torch.utils.data import Dataset
 
+import util
+import constants
+
 class TrainingDataset(Dataset):
 
     def __init__(self, raw_images_dir, gt_images_dir=None,
-                 val_ratio=0.1, transform=None, num_pixels=32.0):
+                 val_ratio=0.1, transform=None, num_pixels=32.0, 
+                 seed=constants.NP_RANDOM_SEED):
         assert os.path.exists(raw_images_dir)
         assert os.path.isdir(raw_images_dir)
         # Assert that val_ratio is a sensible value
@@ -37,6 +41,11 @@ class TrainingDataset(Dataset):
         self._transform = transform
         self._num_pixels = num_pixels
 
+        # Sjhuffle both before dividing into training and validation
+        self._raw_images, self._gt_images = util.joint_shuffle(self._raw_images, 
+                                                               self._gt_images,
+                                                               seed)
+
         # Create training and validation set
         self._val_ratio = val_ratio
         val_index = int((1 - val_ratio) * self._raw_images.shape[0])
@@ -44,6 +53,11 @@ class TrainingDataset(Dataset):
         self._raw_images_val = self._raw_images[val_index:].copy()
         self._gt_images_train = self._gt_images[:val_index].copy()
         self._gt_images_val = self._gt_images[val_index:].copy()
+
+        # One training example that is the same for all experiments
+        example_index = np.random.randint(len(self))
+        self._training_example = {'raw' : self._raw_images_train[example_index],
+                            'gt'  : self._gt_images_train[example_index]}
 
     def _compute_mean_and_std(self):
         means = []
@@ -58,6 +72,9 @@ class TrainingDataset(Dataset):
             std += tmp
 
         return mean, np.sqrt(std)
+
+    def set_transform(transform):
+        self._transform = transform
 
     def mean(self):
         return self._mean
@@ -103,7 +120,7 @@ class TrainingDataset(Dataset):
         gt_image = np.load(os.path.join(self._gt_images_dir,
                                         self._gt_images_train[idx]))
         sample = {'raw' : raw_image, 'gt' : gt_image}
-        if self._transform:
+        if self._transform is not None:
             sample = self._transform(sample)
 
         # Retrieve the transformed image
@@ -174,7 +191,7 @@ class TrainingDataset(Dataset):
         sample['mask'] = mask
         return sample
 
-    def get_validation_images(self):
+    def get_validation_samples(self):
         images = []
         # We have fewer validation images than training images so we can just
         # load them all and return them
@@ -187,3 +204,5 @@ class TrainingDataset(Dataset):
                             'gt'  : gt_image})
         return np.array(images)
         
+    def const_training_example(self):
+        return self._training_example
