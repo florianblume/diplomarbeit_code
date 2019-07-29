@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torchvision.transforms import Compose, Normalize
+from torchvision.transforms import Compose
 
 from data import TrainingDataset
 from data.transforms import *
@@ -75,25 +75,26 @@ class AbstractTrainer():
         self.write_tensorboard_data = self.config['WRITE_TENSORBOARD_DATA']
 
     def _construct_dataset(self):
+        crop_width = self.config['TRAIN_PATCH_SIZE']
+        crop_height = self.config['TRAIN_PATCH_SIZE']
+        if 'CONVERT_DATA_TO' in self.config:
+            transforms = [RandomCrop(crop_width, crop_height),
+                          RandomFlip(),
+                          RandomRotation(),
+                          ConvertToFormat(self.config['CONVERT_DATA_to']),
+                          ToTensor()]
+        else:
+            transforms = [RandomCrop(crop_width, crop_height),
+                          RandomFlip(),
+                          RandomRotation(),
+                          ToTensor()]
+        # We let the dataset automatically add a normalization term with the
+        # mean and std computed of the data
         self.dataset = TrainingDataset(self.config['DATA_TRAIN_RAW_PATH'],
                                        self.config.get('DATA_TRAIN_GT_PATH', None),
-                                       self.config['VAL_RATIO'])
-        if 'CONVERT_DATA_TO' in self.config:
-            composite = Compose([RandomCrop(crop_width, crop_height),
-                                 RandomFlip(),
-                                 RandomRotation(),
-                                 ConvertToFormat(self.config['CONVERT_DATA_to']),
-                                 ToTensor(),
-                                 Normalize(self.dataset.mean(),
-                                           self.dataset.std())])
-        else:
-            composite = Compose([RandomCrop(crop_width, crop_height),
-                                 RandomFlip(),
-                                 RandomRotation(),
-                                 ToTensor(),
-                                 Normalize(self.dataset.mean(),
-                                           self.dataset.std())])
-        self.dataset.set_transform(composite)
+                                       self.config['VAL_RATIO'],
+                                       transforms=transforms,
+                                       add_normalization_transform=True)
         self.raw_example, self.gt_example = self.dataset.const_training_example()
         self.data_loader = DataLoader(self.dataset, self.config['BATCH_SIZE'],
                                       shuffle=True, num_workers=os.cpu_count())

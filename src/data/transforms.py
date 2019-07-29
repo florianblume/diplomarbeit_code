@@ -1,6 +1,8 @@
 import numpy as np
 import torchvision
 
+import util
+
 class RandomCrop():
     """Class RandomCrop is a transformation that randomly crops out a part of
     the input data in the sample. It is only applicable to training data as it
@@ -94,6 +96,20 @@ class ConvertToFormat(SingleActionTransformation):
     def __init__(self, to_format):
         self._to_format = to_format
         super(ConvertToFormat, self).__init__(self._action)
+
+class Normalize(SingleActionTransformation):
+    """Class ConvertToFormat converts the contents of the sample to the specified
+    numpy format. Check the numpy documentation to see available formats.
+    Conversion might be lossy.
+    """
+
+    def _action(self, image):
+        return util.normalize(image, self._mean, self._std)
+
+    def __init__(self, mean, std):
+        self._mean = mean
+        self._std = std
+        super(Normalize, self).__init__(self._action)
 
 class ToTensor(SingleActionTransformation):
     """Class ToTensor takes in a training or prediction sample, converts it to

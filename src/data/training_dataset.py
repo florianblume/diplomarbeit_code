@@ -2,19 +2,21 @@ import os
 import glob
 import numpy as np
 from torch.utils.data import Dataset
+from torchvision.transforms import Compose
 
 import util
+from data.transforms import ToTensor, Normalize
 import constants
 
 class TrainingDataset(Dataset):
 
     def __init__(self, raw_images_dir, gt_images_dir=None,
-                 val_ratio=0.1, transform=None, num_pixels=32.0, 
-                 seed=constants.NP_RANDOM_SEED):
+                 val_ratio=0.1, transforms=None, add_normalization_transform=True,
+                 num_pixels=32.0, seed=constants.NP_RANDOM_SEED):
         assert os.path.exists(raw_images_dir)
         assert os.path.isdir(raw_images_dir)
         # Assert that val_ratio is a sensible value
-        assert 0.0 >= val_ratio <= 1.0
+        assert 0.0 <= val_ratio <= 1.0
 
         self._raw_images_dir = raw_images_dir
         self._raw_images = glob.glob(os.path.join(raw_images_dir, "*.npy"))
@@ -38,11 +40,19 @@ class TrainingDataset(Dataset):
 
         self._mean, self._std = self._compute_mean_and_std()
 
-        self._transform = transform
+        # If requested we append a normalization transform, this allows us to
+        # use the freshly computed mean and std
+        if add_normalization_transform:
+            self._add_normalize_transform(transforms)
+        elif transforms is not None:
+            self._transform = Compose(transforms)
+        else:
+            self._transform = None
+
         self._num_pixels = num_pixels
 
         # Sjhuffle both before dividing into training and validation
-        self._raw_images, self._gt_images = util.joint_shuffle(self._raw_images, 
+        self._raw_images, self._gt_images = util.joint_shuffle(self._raw_images,
                                                                self._gt_images,
                                                                seed)
 
@@ -57,7 +67,7 @@ class TrainingDataset(Dataset):
         # One training example that is the same for all experiments
         example_index = np.random.randint(len(self))
         self._training_example = {'raw' : self._raw_images_train[example_index],
-                            'gt'  : self._gt_images_train[example_index]}
+                                  'gt'  : self._gt_images_train[example_index]}
 
     def _compute_mean_and_std(self):
         means = []
@@ -68,12 +78,25 @@ class TrainingDataset(Dataset):
         mean = np.mean(means)
         for raw_image in self._raw_images:
             image = np.load(os.path.join(self._raw_images_dir, raw_image))
-            tmp = np.sum((image - mean)**2) / float(image.shape[0] * image.shape[1] - 1))
-            std += tmp
+            tmp = np.sum((image - mean)**2)
+            std += tmp / float(image.shape[0] * image.shape[1] - 1)
 
         return mean, np.sqrt(std)
 
-    def set_transform(transform):
+    def _add_normalize_transform(self, transforms):
+        normalize = Normalize(self._mean, self._std)
+        if transforms is None:
+            transforms = [normalize]
+        elif isinstance(transforms[-1], ToTensor):
+            # Last transform is ToTensor but Normalize expects numpy arrays so
+            # we have to add it before the ToTensor transform
+            transforms.insert(-1, normalize)
+        else:
+            # Last one isn't ToTensor i.e. we can just add the transform
+            transforms.append(normalize)
+        self._transform = Compose(transforms)
+
+    def set_transform(self, transform):
         self._transform = transform
 
     def mean(self):
@@ -125,19 +148,18 @@ class TrainingDataset(Dataset):
 
         # Retrieve the transformed image
         transformed_raw_image = sample['raw']
-        if transformed_raw_image.shape[0] == 3:
+        if transformed_raw_image.shape[0] == (1 or 3):
             # Image has been transformed into tensor already, thus shape is
             # now [C, H, W]
-            transformed_shape = (transformed_raw_image.shape[1],
-                                 transformed_raw_image.shape[2])
-        elif transformed_raw_image.shape[2] == 3:
+            transformed_shape = transformed_raw_image.shape[1:]
+        elif transformed_raw_image.shape[2] == (1 or 3):
             # Image has not been transformed into tensor already, thus shape is
             # still [H, W, C]
-            transformed_shape = (transformed_raw_image.shape[0],
-                                 transformed_raw_image.shape[1])
+            transformed_shape = transformed_raw_image.shape[:-1]
         else:
             raise ValueError('Unkown shape format. Neither [C, H, W] nor [H, W, C].')
 
+        print(transformed_raw_image.shape)
         if self._train_mode == 'void':
             # Makes no sense to want more hot pixels than pixels in the patch
             assert self._num_pixels <= transformed_shape[0] * transformed_shape[1]
@@ -163,24 +185,27 @@ class TrainingDataset(Dataset):
                 roi_min_y = max(y - 2, 0)
                 roi_max_y = min(y + 3, max_y)
                 # Cut out the ROI from the original image
-                roi = transformed_raw_image[roi_min_y:roi_max_y,
+                roi = transformed_raw_image[:,
+                                            roi_min_y:roi_max_y,
                                             roi_min_x:roi_max_x]
-
                 # Construct set of indices in the ROI excluding the hot pixel
-                x_indices, y_indices = np.mgrid[roi_min_x:roi_max_x:1,
-                                                roi_min_y:roi_max_y:1]
+                # roi.shape[0] are the channels
+                x_indices, y_indices = np.mgrid[0:roi.shape[2],
+                                                0:roi.shape[1]]
                 indices = np.vstack((x_indices.flatten(), y_indices.flatten())).T
                 indices_list = indices.tolist()
                 # [2, 2] are the hot pixel's coordinates, we don't want to
-                # sample it thus remove them from the list
-                indices_list.remove([2, 2])
+                # sample it thus remove them from the list (for very small
+                # ROIs [2, 2] is not in the list, thus the check)
+                if [2, 2] in indices_list:
+                    indices_list.remove([2, 2])
                 # Obtain random pixel to replace hot pixel with
                 x_, y_ = indices_list[np.random.randint(len(indices_list))]
 
                 # Obtain neighbor to replace hot pixel with
-                repl = roi[y_, x_]
+                repl = roi[:, y_, x_]
                 # Replace content of hot pixel
-                transformed_raw_image[y, x] = repl
+                transformed_raw_image[:, y, x] = repl
                 # Set hot pixel to active
                 mask[y, x] = 1.0
         else:
@@ -195,7 +220,7 @@ class TrainingDataset(Dataset):
         images = []
         # We have fewer validation images than training images so we can just
         # load them all and return them
-        for i, raw_image in self._raw_images_val:
+        for i, raw_image in enumerate(self._raw_images_val):
             raw_image = np.load(os.path.join(self._raw_images_dir,
                                                 raw_image))
             gt_image = np.load(os.path.join(self._gt_images_dir,
