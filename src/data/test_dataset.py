@@ -1,9 +1,8 @@
 import os
 import glob
 import numpy as np
+import natsort
 from torch.utils.data import Dataset
-
-import constants
 
 class TrainingDataset(Dataset):
 
@@ -13,8 +12,10 @@ class TrainingDataset(Dataset):
         assert os.path.isdir(raw_images_dir)
 
         self._raw_images_dir = raw_images_dir
-        self._raw_images = glob.glob(os.path.join(raw_images_dir, "*.npy"))
-        self._raw_images = np.array(self._raw_images)
+        raw_images = glob.glob(os.path.join(raw_images_dir, "*.npy"))
+        # Sort the unsorted files
+        raw_images = natsort.natsorted(raw_images)
+        self._raw_images = np.array(raw_images)
 
         # If there are no ground-truth images we learn the network
         # Noise2Void style, otherwise we train it Noise2Clean
@@ -22,8 +23,10 @@ class TrainingDataset(Dataset):
             assert os.path.isdir(gt_images_dir)
             self._test_mode = 'clean'
             self._gt_images_dir = gt_images_dir
-            self._gt_images = glob.glob(os.path.join(gt_images_dir, "*.npy"))
-            self._gt_images = np.array(self._gt_images)
+            gt_images = glob.glob(os.path.join(gt_images_dir, "*.npy"))
+            # Sort the unsorted files
+            gt_images = natsort.natsorted(gt_images)
+            self._gt_images = np.array(gt_images)
             # Same number of raw and ground-truth images
             assert len(self._raw_images) == len(self._gt_images)
         else:
@@ -37,9 +40,9 @@ class TrainingDataset(Dataset):
 
     def __getitem__(self, idx):
         raw_image = np.load(os.path.join(self._raw_images_dir,
-                                         self._raw_images_train[idx]))
+                                         self._raw_images[idx]))
         gt_image = np.load(os.path.join(self._gt_images_dir,
-                                        self._gt_images_train[idx]))
+                                        self._gt_images[idx]))
         sample = {'raw' : raw_image, 'gt' : gt_image}
         if self._transform is not None:
             sample = self._transform(sample)

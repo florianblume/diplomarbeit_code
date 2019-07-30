@@ -36,15 +36,11 @@ class RandomFlip():
 
     def __call__(self, sample):
         raw_image = sample['raw']
-        if 'gt' in sample:
-            gt_image = sample['gt']
-            if np.random.choice((True, False)):
-                raw_image = np.flip(raw_image)
-                gt_image = np.flip(gt_image)
-            return {'raw' : raw_image, 'gt' : gt_image}
+        gt_image = sample['gt']
         if np.random.choice((True, False)):
             raw_image = np.flip(raw_image)
-        return {'raw' : raw_image}
+            gt_image = np.flip(gt_image)
+        return {'raw' : raw_image, 'gt' : gt_image}
 
 class RandomRotation():
     """Transformation that randomly rotates the data in the sample.
@@ -53,13 +49,10 @@ class RandomRotation():
     def __call__(self, sample):
         raw_image = sample['raw']
         rot = np.random.randint(0, 4)
-        if 'gt' in sample:
-            gt_image = sample['gt']
-            raw_image = np.rot90(raw_image, rot)
-            gt_image = np.rot90(gt_image, rot)
-            return {'raw' : raw_image, 'gt' : gt_image}
+        gt_image = sample['gt']
         raw_image = np.rot90(raw_image, rot)
-        return {'raw' : raw_image}
+        gt_image = np.rot90(gt_image, rot)
+        return {'raw' : raw_image, 'gt' : gt_image}
 
 class SingleActionTransformation():
     """Base class for a transformation that apply actions to raw and ground-truth
@@ -123,6 +116,12 @@ class ToTensor(SingleActionTransformation):
         if len(image.shape) == 2:
             # (H, W) image but PyTorch expects (H, W, C) to convert to tensor
             image.shape = (image.shape[0], image.shape[1], 1)
+        # if there are transforms before this one that e.g. flip the image using
+        # numpy then numpy does something like image[..., ::-1] internally.
+        # Pytorch can't handle negative strides that's why we get rid of this
+        # by subtracting zeros. Discussion at 
+        # https://discuss.pytorch.org/t/torch-from-numpy-not-support-negative-strides/3663/10
+        image = image - np.zeros_like(image)
         image = torchvision.transforms.functional.to_tensor(image)
         return image
 

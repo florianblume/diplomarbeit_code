@@ -47,14 +47,6 @@ def test_random_crop(raw_gt):
 
 # Test for class RandomRotation
 
-def test_random_rotation_raw(raw):
-    raw_image = raw['raw'].copy()
-    # 2 is np.random.randint(0, 4) for seed 4
-    raw_image_rotated = np.rot90(raw_image, 2)
-    np.random.seed(4)
-    result = RandomRotation()(raw)['raw']
-    assert np.array_equal(raw_image_rotated, result)
-
 def test_random_rotation_raw_gt(raw_gt):
     raw_image = raw_gt['raw'].copy()
     gt_image = raw_gt['gt'].copy()
@@ -72,18 +64,6 @@ def test_random_rotation_raw_gt(raw_gt):
     assert np.array_equal(gt_image_rotated, result_gt_rot)
 
 # Tests for class RandomFlip
-
-def test_random_flip_raw(raw):
-    raw_image = raw['raw'].copy()
-    raw_image_flipped = np.array(np.flip(raw_image))
-    # Seed such that the flip is true
-    np.random.seed(0)
-    result = RandomFlip()(raw)['raw']
-    assert np.array_equal(raw_image_flipped, result)
-    # Seed such that the flip is false
-    np.random.seed(1)
-    result = RandomFlip()(raw)['raw']
-    assert np.array_equal(raw_image, result)
 
 def test_random_flip_raw_gt(raw_gt):
     raw_image = raw_gt['raw'].copy()

@@ -1,6 +1,7 @@
 import os
 import glob
 import numpy as np
+import natsort
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose
 
@@ -19,8 +20,10 @@ class TrainingDataset(Dataset):
         assert 0.0 <= val_ratio <= 1.0
 
         self._raw_images_dir = raw_images_dir
-        self._raw_images = glob.glob(os.path.join(raw_images_dir, "*.npy"))
-        self._raw_images = np.array(self._raw_images)
+        raw_images = glob.glob(os.path.join(raw_images_dir, "*.npy"))
+        # Sort the unsorted files
+        raw_images = natsort.natsorted(raw_images)
+        self._raw_images = np.array(raw_images)
 
         # If there are no ground-truth images we learn the network
         # Noise2Void style, otherwise we train it Noise2Clean
@@ -28,8 +31,10 @@ class TrainingDataset(Dataset):
             assert os.path.isdir(gt_images_dir)
             self._train_mode = 'clean'
             self._gt_images_dir = gt_images_dir
-            self._gt_images = glob.glob(os.path.join(gt_images_dir, "*.npy"))
-            self._gt_images = np.array(self._gt_images)
+            gt_images = glob.glob(os.path.join(gt_images_dir, "*.npy"))
+            # Sort the unsorted files
+            gt_images = natsort.natsorted(gt_images)
+            self._gt_images = np.array(gt_images)
             # Same number of raw and ground-truth images
             assert len(self._raw_images) == len(self._gt_images)
         else:
@@ -70,6 +75,10 @@ class TrainingDataset(Dataset):
                                   'gt'  : self._gt_images_train[example_index]}
 
     def _compute_mean_and_std(self):
+        """
+        This works approximately and can be used for large datasets that never
+        fit in memory.
+
         means = []
         std = 0
         for raw_image in self._raw_images:
@@ -79,9 +88,14 @@ class TrainingDataset(Dataset):
         for raw_image in self._raw_images:
             image = np.load(os.path.join(self._raw_images_dir, raw_image))
             tmp = np.sum((image - mean)**2)
-            std += tmp / float(image.shape[0] * image.shape[1] - 1)
+            std += tmp / float(self._raw_images.shape[0] * image.shape[0] * image.shape[1] - 1)
+        """
+        images = []
+        for raw_image in self._raw_images:
+            image = np.load(os.path.join(self._raw_images_dir, raw_image))
+            images.append(image)
 
-        return mean, np.sqrt(std)
+        return np.mean(images), np.std(images)
 
     def _add_normalize_transform(self, transforms):
         normalize = Normalize(self._mean, self._std)
@@ -148,21 +162,30 @@ class TrainingDataset(Dataset):
 
         # Retrieve the transformed image
         transformed_raw_image = sample['raw']
-        if transformed_raw_image.shape[0] == (1 or 3):
+        image_shape_len = len(transformed_raw_image.shape)
+        if image_shape_len < 2 or image_shape_len > 3:
+            # Only gray-scale or RGB images are supported as of now
+            raise ValueError('Unkown image shape.')
+
+        if image_shape_len == 2:
+            # Image has not been transformed into tensor already, thus shape is
+            # still [H, W]
+            transformed_shape = transformed_raw_image.shape
+            image_mode = 'hw'
+        elif transformed_raw_image.shape[0] == (1 or 3):
             # Image has been transformed into tensor already, thus shape is
             # now [C, H, W]
             transformed_shape = transformed_raw_image.shape[1:]
+            image_mode = 'chw'
         elif transformed_raw_image.shape[2] == (1 or 3):
             # Image has not been transformed into tensor already, thus shape is
             # still [H, W, C]
             transformed_shape = transformed_raw_image.shape[:-1]
+            image_mode = 'hwc'
         else:
             raise ValueError('Unkown shape format. Neither [C, H, W] nor [H, W, C].')
 
-        print(transformed_raw_image.shape)
         if self._train_mode == 'void':
-            # Makes no sense to want more hot pixels than pixels in the patch
-            assert self._num_pixels <= transformed_shape[0] * transformed_shape[1]
             # Noise2Void style training, we have to replace the masked pixel
             # with one of its neighbors so that the network can't learn the
             # identity function
@@ -184,14 +207,14 @@ class TrainingDataset(Dataset):
                 roi_max_x = min(x + 3, max_x)
                 roi_min_y = max(y - 2, 0)
                 roi_max_y = min(y + 3, max_y)
-                # Cut out the ROI from the original image
-                roi = transformed_raw_image[:,
-                                            roi_min_y:roi_max_y,
-                                            roi_min_x:roi_max_x]
+
+                roi_width = roi_max_x - roi_min_x
+                roi_height = roi_max_y - roi_min_y
+                                                
                 # Construct set of indices in the ROI excluding the hot pixel
                 # roi.shape[0] are the channels
-                x_indices, y_indices = np.mgrid[0:roi.shape[2],
-                                                0:roi.shape[1]]
+                x_indices, y_indices = np.mgrid[0:roi_width,
+                                                0:roi_height]
                 indices = np.vstack((x_indices.flatten(), y_indices.flatten())).T
                 indices_list = indices.tolist()
                 # [2, 2] are the hot pixel's coordinates, we don't want to
@@ -202,16 +225,35 @@ class TrainingDataset(Dataset):
                 # Obtain random pixel to replace hot pixel with
                 x_, y_ = indices_list[np.random.randint(len(indices_list))]
 
-                # Obtain neighbor to replace hot pixel with
-                repl = roi[:, y_, x_]
-                # Replace content of hot pixel
-                transformed_raw_image[:, y, x] = repl
+                if image_mode == 'hw':
+                    # Cut out the ROI from the original image
+                    roi = transformed_raw_image[roi_min_y:roi_max_y,
+                                                roi_min_x:roi_max_x]
+                    # Obtain neighbor to replace hot pixel with
+                    repl = roi[y_, x_]
+                    # Replace content of hot pixel
+                    transformed_raw_image[y, x] = repl
+                elif image_mode == 'chw':
+                    roi = transformed_raw_image[:,
+                                                roi_min_y:roi_max_y,
+                                                roi_min_x:roi_max_x]
+                    repl = roi[:, y_, x_]
+                    transformed_raw_image[:, y, x] = repl
+                elif image_mode == 'hwc':
+                    roi = transformed_raw_image[roi_min_y:roi_max_y,
+                                                roi_min_x:roi_max_x,
+                                                :]
+                    repl = roi[y_, x_, :]
+                    transformed_raw_image[y, x, :] = repl
+
                 # Set hot pixel to active
                 mask[y, x] = 1.0
+                # No need to update the image in the dict as we hold a 
+                # reference to it
         else:
             # Noise2Clean style training, we have ground-truth data available
             # and thus mask all pixels to be active
-            mask = np.ones(raw_image.shape)
+            mask = np.ones(transformed_shape)
 
         sample['mask'] = mask
         return sample
