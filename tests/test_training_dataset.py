@@ -1,4 +1,3 @@
-import os
 import shutil
 import tempfile
 import pytest
@@ -9,8 +8,7 @@ from tests import base_test
 
 import util
 from data import TrainingDataset
-from data.transforms import RandomCrop, RandomFlip, RandomRotation,\
-                            ConvertToFormat, ToTensor
+from data.transforms import RandomCrop, RandomFlip, RandomRotation, ToTensor
 import constants
 
 tmp_raw_dir = tempfile.TemporaryDirectory()
@@ -54,10 +52,12 @@ def test_raw_images_with_val():
     for i in range(len(dataset)):
         dataset_image = dataset[i]
         raw_image = dataset_image['raw']
+        gt_image = dataset_image['gt']
         # N2V i.e. some pixels have randomly been switched, we don't test for those
         mask = dataset_image['mask'].astype(np.bool)
         mask = np.invert(mask)
         assert np.array_equal(raw_image[mask], raw_images[i][mask])
+        assert np.array_equal(gt_image, raw_images[i])
 
 def test_raw_images_without_val():
     """This test case performs a simple test without transformations and checks
@@ -74,10 +74,12 @@ def test_raw_images_without_val():
     for i in range(len(dataset)):
         dataset_image = dataset[i]
         raw_image = dataset_image['raw']
+        gt_image = dataset_image['gt']
         # N2V i.e. some pixels have randomly been switched, we don't test for those
         mask = dataset_image['mask'].astype(np.bool)
         mask = np.invert(mask)
         assert np.array_equal(raw_image[mask], raw_images[i][mask])
+        assert np.array_equal(gt_image, raw_images[i])
 
 def test_raw_gt_images_with_val():
     """This test case performs a simple test without transformations and checks
