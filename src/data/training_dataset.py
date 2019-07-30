@@ -39,8 +39,7 @@ class TrainingDataset(Dataset):
             raw_images = natsort.natsorted(raw_images)
             # We need the full paths because we can't find out the base dir
             # later during image loading
-            self._raw_images.extend([os.path.join(raw_images_dir, raw_image)
-                                     for raw_image in raw_images])
+            self._raw_images.extend(raw_images)
 
             # If there are no ground-truth images we learn the network
             # Noise2Void style, otherwise we train it Noise2Clean
@@ -50,8 +49,7 @@ class TrainingDataset(Dataset):
                 gt_images = glob.glob(os.path.join(gt_images_dir, "*.tif"))
                 # Sort the unsorted files
                 gt_images = natsort.natsorted(gt_images)
-                self._gt_images.extend([os.path.join(gt_images_dir, gt_image)
-                                        for gt_image in gt_images])
+                self._gt_images.extend(gt_images)
                 # Same number of raw and ground-truth images
                 assert len(self._raw_images) == len(self._gt_images)
             else:

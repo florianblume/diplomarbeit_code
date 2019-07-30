@@ -3,10 +3,10 @@ import numpy as np
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torchvision.transforms import Compose
 
 from data import TrainingDataset
-from data.transforms import *
+from data.transforms import RandomCrop, RandomFlip, RandomRotation,\
+                            ConvertToFormat, ToTensor
 
 class AbstractTrainer():
     """Class AbstractTrainer is the base class of all trainers. It automatically
@@ -79,11 +79,21 @@ class AbstractTrainer():
                           RandomFlip(),
                           RandomRotation(),
                           ToTensor()]
+        data_base_dir = self._config['DATA_BASE_DIR']
+        data_train_raw_dirs = self._config['DATA_TRAIN_RAW_DIRS']
+        for i, data_train_raw_dir in enumerate(data_train_raw_dirs):
+            data_train_raw_dirs[i] = os.path.join(data_base_dir,
+                                                 data_train_raw_dir)
+        data_train_gt_dirs = self._config.get('DATA_TRAIN_GT_DIRS', None)
+        for i, data_train_gt_dir in enumerate(data_train_gt_dirs):
+            data_train_gt_dirs[i] = os.path.join(data_base_dir,
+                                                 data_train_gt_dir)
+
         # We let the dataset automatically add a normalization term with the
         # mean and std computed of the data
-        self._dataset = TrainingDataset(self._config['DATA_TRAIN_RAW_PATH'],
-                                       self._config.get('DATA_TRAIN_GT_PATH', None),
-                                       self._config['VAL_RATIO'],
+        self._dataset = TrainingDataset(data_train_raw_dirs,
+                                        data_train_gt_dirs,
+                                       self._config['VALIDATION_RATIO'],
                                        transforms=transforms,
                                        add_normalization_transform=True)
         self._raw_example, self._gt_example = self._dataset.const_training_example()

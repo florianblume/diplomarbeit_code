@@ -93,7 +93,6 @@ class Trainer(AbstractTrainer):
             # Iterate over virtual batch
             for _ in range(self.vbatch):
                 sample = next(iter(self._data_loader))
-                print(sample)
                 outputs, labels, masks = self._net.training_predict(sample)
 
                 self.train_loss = self._net.loss_function(outputs, labels, masks)
