@@ -17,7 +17,7 @@ class AbstractTrainer():
 
     def __init__(self, config, config_path):
         self.config_path = config_path
-        self.config = config
+        self._config = config
         
         # Need to set here because those values might get overwritten by
         # subclasses when loading a saved net for further training
@@ -33,14 +33,14 @@ class AbstractTrainer():
 
         self._load_config_parameters()
         self._construct_dataset()
-        self.net = self._load_network()
+        self._net = self._load_network()
         # Optimizer is needed to load network weights 
         # that's why we create it first
-        self.optimizer = optim.Adam(self.net.parameters(), lr=0.0001)
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, 'min', patience=10, factor=0.5, verbose=True)
+        self._optimizer = optim.Adam(self._net.parameters(), lr=0.0001)
+        self._scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            self._optimizer, 'min', patience=10, factor=0.5, verbose=True)
         self._load_network_state()
-        self.net.train(True)
+        self._net.train(True)
 
         # If tensorboard logs are requested create the writer
         if self.write_tensorboard_data:
@@ -50,38 +50,29 @@ class AbstractTrainer():
 
     def _load_config_parameters(self):
         # Set all parameters from the config
-        self.epochs = self.config['EPOCHS']
-        self.val_ratio = self.config['VALIDATION_RATIO']
-        self.val_size = self.config['VALIDATION_SIZE']
+        self.epochs = self._config['EPOCHS']
         # Virtual batch size
-        self.vbatch = self.config['VIRTUAL_BATCH_SIZE']
-        self.steps_per_epoch = self.config['STEPS_PER_EPOCH']
-        self.experiment_base_path = self.config.get('EXPERIMENT_BASE_PATH',
+        self.vbatch = self._config['VIRTUAL_BATCH_SIZE']
+        self.steps_per_epoch = self._config['STEPS_PER_EPOCH']
+        self.experiment_base_path = self._config.get('EXPERIMENT_BASE_PATH',
                                                     self.config_path)
         if self.experiment_base_path == "":
             self.experiment_base_path = self.config_path
         # don't need config path anymore
         del self.config_path
         # Needed for prediction every X training runs
-        self.ps = self.config['PRED_PATCH_SIZE']
-        self.overlap = self.config['OVERLAP']
-        self.bs = self.config['BATCH_SIZE']
-        self.size = self.config['TRAIN_PATCH_SIZE']
-        self.num_pix = self.size * self.size / 32.0
-        self.data_counter = None
-        self.box_size = np.round(
-            np.sqrt(
-                self.size * self.size / self.num_pix)).astype(np.int)
-        self.write_tensorboard_data = self.config['WRITE_TENSORBOARD_DATA']
+        self.ps = self._config['PRED_PATCH_SIZE']
+        self.overlap = self._config['OVERLAP']
+        self.write_tensorboard_data = self._config['WRITE_TENSORBOARD_DATA']
 
     def _construct_dataset(self):
-        crop_width = self.config['TRAIN_PATCH_SIZE']
-        crop_height = self.config['TRAIN_PATCH_SIZE']
-        if 'CONVERT_DATA_TO' in self.config:
+        crop_width = self._config['TRAIN_PATCH_SIZE']
+        crop_height = self._config['TRAIN_PATCH_SIZE']
+        if 'CONVERT_DATA_TO' in self._config:
             transforms = [RandomCrop(crop_width, crop_height),
                           RandomFlip(),
                           RandomRotation(),
-                          ConvertToFormat(self.config['CONVERT_DATA_to']),
+                          ConvertToFormat(self._config['CONVERT_DATA_to']),
                           ToTensor()]
         else:
             transforms = [RandomCrop(crop_width, crop_height),
@@ -90,13 +81,13 @@ class AbstractTrainer():
                           ToTensor()]
         # We let the dataset automatically add a normalization term with the
         # mean and std computed of the data
-        self.dataset = TrainingDataset(self.config['DATA_TRAIN_RAW_PATH'],
-                                       self.config.get('DATA_TRAIN_GT_PATH', None),
-                                       self.config['VAL_RATIO'],
+        self._dataset = TrainingDataset(self._config['DATA_TRAIN_RAW_PATH'],
+                                       self._config.get('DATA_TRAIN_GT_PATH', None),
+                                       self._config['VAL_RATIO'],
                                        transforms=transforms,
                                        add_normalization_transform=True)
-        self.raw_example, self.gt_example = self.dataset.const_training_example()
-        self.data_loader = DataLoader(self.dataset, self.config['BATCH_SIZE'],
+        self._raw_example, self._gt_example = self._dataset.const_training_example()
+        self._data_loader = DataLoader(self._dataset, self._config['BATCH_SIZE'],
                                       shuffle=True, num_workers=os.cpu_count())
 
     def _load_network(self):
@@ -127,7 +118,7 @@ class AbstractTrainer():
         self.avg_train_loss = np.mean(train_losses)
         self.train_hist.append(self.avg_train_loss)
 
-        self.net.train(False)
+        self._net.train(False)
         self.val_losses = []
         self.val_counter = 0
 
@@ -135,7 +126,7 @@ class AbstractTrainer():
 
         # Need to store on class because subclasses need the loss
         self.avg_val_loss = np.mean(self.val_losses)
-        self.net.train(True)
+        self._net.train(True)
 
         # Save the current best network
         if len(self.val_hist) == 0 or self.avg_val_loss < np.min(self.val_hist):
@@ -147,7 +138,7 @@ class AbstractTrainer():
         np.save(os.path.join(self.experiment_base_path, 'history.npy'),
                 (np.array([np.arange(self.epoch), self.train_hist, self.val_hist])))
 
-        self.scheduler.step(self.avg_val_loss)
+        self._scheduler.step(self.avg_val_loss)
 
         torch.save(
             self._create_checkpoint(),

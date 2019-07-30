@@ -46,9 +46,8 @@ class UNet(AbstractUNet):
         x = self.network_head(x)
         return x
 
-    def training_predict(self, train_data, train_data_clean, data_counter, size, box_size, bs):
-        inputs, labels, masks = self.assemble_training__batch(bs, size, box_size,
-                                    data_counter, train_data, train_data_clean)
+    def training_predict(self, sample):
+        inputs, labels, masks = sample['raw'], sample['gt'], sample['mask']
 
         # Move to GPU
         inputs, labels, masks = inputs.to(
@@ -56,7 +55,7 @@ class UNet(AbstractUNet):
 
         # Forward step
         outputs = self(inputs)
-        return outputs, labels, masks, data_counter
+        return outputs, labels, masks
 
     def predict(self, image, patch_size, overlap):
         means = np.zeros(image.shape)

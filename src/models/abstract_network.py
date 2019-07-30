@@ -264,22 +264,18 @@ class AbstractUNet(nn.Module):
         """
         raise NotImplementedError
 
-    def training_predict(self, train_data, train_data_clean,
-                            data_counter, size, box_size, bs):
+    def training_predict(self, sample):
         """Performs a forward step during training.
 
         Arguments:
-            train_data {np.array} -- the normalized raw training data
-            train_data_clean {np.array} -- the normalized ground-truth targets, if available
-            data_counter {int} -- the counter when to shuffle the training data
-            size {int} -- the patch size
-            bs {int} -- the batch size
+            train_data {dict} -- Dictionary containting at least the keys 'raw',
+                                 'gt' and 'mask'. Subclasses might require
+                                 additional keys.
 
         Returns:
             {np.array} -- outputs
             {np.array} -- labels
             {np.array} -- masks
-            {int} -- data_counter
         """
         raise NotImplementedError
 
