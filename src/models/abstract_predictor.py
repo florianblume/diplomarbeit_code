@@ -98,7 +98,7 @@ class AbstractPredictor():
             im = self.data_test[index]
             # Do not move after self._predict(im), the subclasses need this info
             # Not the nicest style but works...
-            pred_image_filename = '{}_pred'.format(str(index).zfill(4))
+            pred_image_filename = '{}_pred'.format(str(index).zfill(len(str(abs(self.data_test.shape[0])))))
 
             # This is the actual prediction
             print("\nPredicting on image {} with shape {}:".format(index, im.shape))

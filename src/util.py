@@ -210,7 +210,7 @@ def add_shot_noise_to_images(images, defect_ratio):
                   for i in image.shape]
         out[coords] = np.random.randint(255, size=len(coords[0]))
         result.append(out)
-    return result
+    return np.array(result)
 
 
 def add_gauss_noise_to_images(images, mean, std):
@@ -219,7 +219,7 @@ def add_gauss_noise_to_images(images, mean, std):
         noisy = image + np.random.normal(mean, std, image.shape)
         noisy = np.clip(noisy, 0, 255)
         result.append(noisy)
-    return result
+    return np.array(result)
 
 
 def merge_two_npy_datasets(dataset_path_1, dataset_path_2, output_path):

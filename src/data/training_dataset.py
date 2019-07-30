@@ -1,6 +1,7 @@
 import os
 import glob
 import numpy as np
+import tifffile as tif
 import natsort
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose
@@ -11,37 +12,55 @@ import constants
 
 class TrainingDataset(Dataset):
 
-    def __init__(self, raw_images_dir, gt_images_dir=None,
+    def __init__(self, raw_images_dirs: list, gt_images_dirs=None,
                  val_ratio=0.1, transforms=None, add_normalization_transform=True,
                  num_pixels=32.0, seed=constants.NP_RANDOM_SEED):
-        assert os.path.exists(raw_images_dir)
-        assert os.path.isdir(raw_images_dir)
         # Assert that val_ratio is a sensible value
         assert 0.0 <= val_ratio <= 1.0
+        if gt_images_dirs is not None:
+            assert len(raw_images_dirs) == len(gt_images_dirs)
 
-        self._raw_images_dir = raw_images_dir
-        raw_images = glob.glob(os.path.join(raw_images_dir, "*.npy"))
-        # Sort the unsorted files
-        raw_images = natsort.natsorted(raw_images)
-        self._raw_images = np.array(raw_images)
-
-        # If there are no ground-truth images we learn the network
-        # Noise2Void style, otherwise we train it Noise2Clean
-        if gt_images_dir is not None:
-            assert os.path.isdir(gt_images_dir)
+        self._raw_images_dirs = raw_images_dirs
+        self._raw_images = []
+        if gt_images_dirs is not None:
+            self._gt_images = []
+            self._gt_images_dirs = gt_images_dirs
             self._train_mode = 'clean'
-            self._gt_images_dir = gt_images_dir
-            gt_images = glob.glob(os.path.join(gt_images_dir, "*.npy"))
-            # Sort the unsorted files
-            gt_images = natsort.natsorted(gt_images)
-            self._gt_images = np.array(gt_images)
-            # Same number of raw and ground-truth images
-            assert len(self._raw_images) == len(self._gt_images)
         else:
-            # If we want to train N2V style
             self._train_mode = 'void'
-            self._gt_images_dir = raw_images_dir
-            self._gt_images = self._raw_images
+
+
+        for i, raw_images_dir in enumerate(raw_images_dirs):
+            assert os.path.exists(raw_images_dir)
+            assert os.path.isdir(raw_images_dir)
+
+            raw_images = glob.glob(os.path.join(raw_images_dir, "*.tif"))
+            # Sort the unsorted files
+            raw_images = natsort.natsorted(raw_images)
+            # We need the full paths because we can't find out the base dir
+            # later during image loading
+            self._raw_images.extend([os.path.join(raw_images_dir, raw_image)
+                                     for raw_image in raw_images])
+
+            # If there are no ground-truth images we learn the network
+            # Noise2Void style, otherwise we train it Noise2Clean
+            if gt_images_dirs is not None:
+                gt_images_dir = gt_images_dirs[i]
+                assert os.path.isdir(gt_images_dir)
+                gt_images = glob.glob(os.path.join(gt_images_dir, "*.tif"))
+                # Sort the unsorted files
+                gt_images = natsort.natsorted(gt_images)
+                self._gt_images.extend([os.path.join(gt_images_dir, gt_image)
+                                        for gt_image in gt_images])
+                # Same number of raw and ground-truth images
+                assert len(self._raw_images) == len(self._gt_images)
+            else:
+                # If we want to train N2V style
+                self._gt_images_dirs = raw_images_dirs
+                self._gt_images = self._raw_images
+
+        self._raw_images = np.array(self._raw_images)
+        self._gt_images = np.array(self._gt_images)
 
         self._mean, self._std = self._compute_mean_and_std()
 
@@ -82,17 +101,17 @@ class TrainingDataset(Dataset):
         means = []
         std = 0
         for raw_image in self._raw_images:
-            image = np.load(os.path.join(self._raw_images_dir, raw_image))
+            image = tif.imread(os.path.join(self._raw_images_dir, raw_image))
             means.append(np.mean(image))
         mean = np.mean(means)
         for raw_image in self._raw_images:
-            image = np.load(os.path.join(self._raw_images_dir, raw_image))
+            image = tif.imread(os.path.join(self._raw_images_dir, raw_image))
             tmp = np.sum((image - mean)**2)
             std += tmp / float(self._raw_images.shape[0] * image.shape[0] * image.shape[1] - 1)
         """
         images = []
         for raw_image in self._raw_images:
-            image = np.load(os.path.join(self._raw_images_dir, raw_image))
+            image = tif.imread(raw_image)
             images.append(image)
 
         return np.mean(images), np.std(images)
@@ -152,10 +171,8 @@ class TrainingDataset(Dataset):
         return coords
 
     def __getitem__(self, idx):
-        raw_image = np.load(os.path.join(self._raw_images_dir,
-                                         self._raw_images_train[idx]))
-        gt_image = np.load(os.path.join(self._gt_images_dir,
-                                        self._gt_images_train[idx]))
+        raw_image = tif.imread(self._raw_images_train[idx])
+        gt_image = tif.imread(self._gt_images_train[idx])
         sample = {'raw' : raw_image, 'gt' : gt_image}
         if self._transform is not None:
             sample = self._transform(sample)
@@ -263,13 +280,14 @@ class TrainingDataset(Dataset):
         # We have fewer validation images than training images so we can just
         # load them all and return them
         for i, raw_image in enumerate(self._raw_images_val):
-            raw_image = np.load(os.path.join(self._raw_images_dir,
-                                                raw_image))
-            gt_image = np.load(os.path.join(self._gt_images_dir,
-                                            self._gt_images_val[i]))
+            raw_image = tif.imread(raw_image)
+            gt_image = tif.imread(self._gt_images_val[i])
             images.append({'raw' : raw_image,
                             'gt'  : gt_image})
         return np.array(images)
         
     def const_training_example(self):
-        return self._training_example
+        raw_image = tif.imread(self._training_example['raw'])
+        gt_image = tif.imread(self._training_example['gt'])
+        return {'raw' : raw_image,
+                'gt'  : gt_image}
