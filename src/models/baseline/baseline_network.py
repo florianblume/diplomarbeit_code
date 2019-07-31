@@ -47,18 +47,11 @@ class UNet(AbstractUNet):
         x = self.network_head(x)
         return x
 
-<<<<<<< Updated upstream
-    def training_predict(self, train_data, train_data_clean, data_counter, size, box_size, bs):
-        inputs, labels, masks = self.assemble_training__batch(bs, size, box_size, 
-                                    data_counter, train_data, train_data_clean)
-
-=======
     def training_predict(self, sample):
         inputs, labels, masks = sample['raw'], sample['gt'], sample['mask']
         tif.imsave('test.tif', inputs.cpu().detach().numpy())
         raise ValueError
         
->>>>>>> Stashed changes
         # Move to GPU
         inputs, labels, masks = inputs.to(
             self.device), labels.to(self.device), masks.to(self.device)

@@ -61,10 +61,10 @@ class Trainer(AbstractTrainer):
 
         self.net.train(False)
         # Predict for one example image
-        raw = self.data_raw[0]
+        raw = self._raw_example
         prediction = self.net.predict(raw, self.ps, self.overlap)
         self.net.train(True)
-        gt = self.data_gt[0]
+        gt = self._gt_example
         gt = util.denormalize(gt, self.loader.mean(), self.loader.std())
         psnr = util.PSNR(gt, prediction, 255)
         self.writer.add_scalar('psnr', psnr, self.print_step)
