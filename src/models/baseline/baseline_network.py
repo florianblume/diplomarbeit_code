@@ -48,6 +48,7 @@ class UNet(AbstractUNet):
 
     def training_predict(self, sample):
         inputs, labels, masks = sample['raw'], sample['gt'], sample['mask']
+        print(inputs[0])
         
         # Move to GPU
         inputs, labels, masks = inputs.to(

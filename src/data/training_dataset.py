@@ -75,6 +75,8 @@ class TrainingDataset(Dataset):
         self._gt_images = np.array(self._gt_images)
 
         self._mean, self._std = self._compute_mean_and_std()
+        print('Dataset has mean {} and standard deviation {}.'\
+                                .format(self._mean, self._std))
 
         # If requested we append a normalization transform, this allows us to
         # use the freshly computed mean and std
