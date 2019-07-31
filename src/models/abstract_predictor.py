@@ -6,8 +6,6 @@ import matplotlib.pyplot as plt
 import tifffile as tif
 
 import util
-from data import dataloader
-
 
 class AbstractPredictor():
     """Class AbstractPredictor is the base class for all predictor classes. It

@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from torch.utils.data.sampler import SubsetRandomSampler
 
 from data import TrainingDataset
 from data.transforms import RandomCrop, RandomFlip, RandomRotation,\
@@ -66,19 +67,22 @@ class AbstractTrainer():
         self.write_tensorboard_data = self._config['WRITE_TENSORBOARD_DATA']
 
     def _construct_dataset(self):
+        print('Constructing dataset...')
         crop_width = self._config['TRAIN_PATCH_SIZE']
         crop_height = self._config['TRAIN_PATCH_SIZE']
+
         if 'CONVERT_DATA_TO' in self._config:
             transforms = [RandomCrop(crop_width, crop_height),
                           RandomFlip(),
                           RandomRotation(),
-                          ConvertToFormat(self._config['CONVERT_DATA_to']),
+                          ConvertToFormat(self._config['CONVERT_DATA_TO']),
                           ToTensor()]
         else:
             transforms = [RandomCrop(crop_width, crop_height),
                           RandomFlip(),
                           RandomRotation(),
                           ToTensor()]
+
         data_base_dir = self._config['DATA_BASE_DIR']
         data_train_raw_dirs = self._config['DATA_TRAIN_RAW_DIRS']
         for i, data_train_raw_dir in enumerate(data_train_raw_dirs):
@@ -96,9 +100,16 @@ class AbstractTrainer():
                                        self._config['VALIDATION_RATIO'],
                                        transforms=transforms,
                                        add_normalization_transform=True)
-        self._raw_example, self._gt_example = self._dataset.const_training_example()
-        self._data_loader = DataLoader(self._dataset, self._config['BATCH_SIZE'],
-                                      shuffle=True, num_workers=os.cpu_count())
+        self._raw_example = self._dataset.const_training_example()['raw']
+        self._gt_example = self._dataset.const_training_example()['gt']
+        train_sampler = SubsetRandomSampler(self._dataset.train_indices())
+        val_sampler = SubsetRandomSampler(self._dataset.val_indices())
+        self._train_loader = DataLoader(self._dataset, self._config['BATCH_SIZE'],
+                                        num_workers=os.cpu_count(),
+                                        sampler=train_sampler)
+        self._val_loader = DataLoader(self._dataset, self._config['BATCH_SIZE'],
+                                      num_workers=os.cpu_count(),
+                                      sampler=val_sampler)
 
     def _load_network(self):
         raise NotImplementedError

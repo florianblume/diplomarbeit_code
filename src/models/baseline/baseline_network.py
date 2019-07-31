@@ -25,7 +25,7 @@ class UNet(AbstractUNet):
         outs = outputs[:, 0, ...]
         # print(outs.shape,labels.shape,masks.shape)
         # Simple L2 loss
-        loss = torch.sum(masks*(labels-outs)**2)/torch.sum(masks)
+        loss = torch.sum(masks * (labels - outs)**2) / torch.sum(masks)
         return loss
 
     def forward(self, x):
@@ -48,7 +48,7 @@ class UNet(AbstractUNet):
 
     def training_predict(self, sample):
         inputs, labels, masks = sample['raw'], sample['gt'], sample['mask']
-
+        
         # Move to GPU
         inputs, labels, masks = inputs.to(
             self.device), labels.to(self.device), masks.to(self.device)

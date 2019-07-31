@@ -61,12 +61,12 @@ class Trainer(AbstractTrainer):
 
         self._net.train(False)
         # Predict for one example image
-        raw = self._raw_example
-        prediction = self._net.predict(raw, self.ps, self.overlap)
+        prediction = self._net.predict(self._raw_example, self.ps, self.overlap)
         self._net.train(True)
         if self._gt_example is not None:
-            gt = self._gt_example
-            gt = util.denormalize(gt, self._dataset.mean(), self._dataset.std())
+            gt = util.denormalize(self._gt_example, 
+                                  self._dataset.mean(), 
+                                  self._dataset.std())
             psnr = util.PSNR(gt, prediction, 255)
             self.writer.add_scalar('psnr', psnr, self.print_step)
 
@@ -78,7 +78,7 @@ class Trainer(AbstractTrainer):
                 name, param.clone().cpu().data.numpy(), self.print_step)
 
     def _perform_validation(self):
-        for sample in self._dataset.get_validation_samples():
+        for _, sample in enumerate(self._val_loader):
             outputs, labels, masks = self._net.training_predict(sample)
             # Needed by subclasses that's why we store val_loss on self
             self.val_loss = self._net.loss_function(outputs, labels, masks)
@@ -92,7 +92,7 @@ class Trainer(AbstractTrainer):
 
             # Iterate over virtual batch
             for _ in range(self.vbatch):
-                sample = next(iter(self._data_loader))
+                sample = next(iter(self._train_loader))
                 outputs, labels, masks = self._net.training_predict(sample)
 
                 self.train_loss = self._net.loss_function(outputs, labels, masks)

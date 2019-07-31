@@ -3,6 +3,8 @@ import glob
 import numpy as np
 import tifffile as tif
 import natsort
+import torch
+import torchvision
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose
 
@@ -13,19 +15,25 @@ import constants
 class TrainingDataset(Dataset):
 
     def __init__(self, raw_images_dirs: list, gt_images_dirs=None,
-                 val_ratio=0.1, transforms=None, add_normalization_transform=True,
+                 val_ratio=0.1, transforms=None, 
+                 add_normalization_transform=True,
                  num_pixels=32.0, seed=constants.NP_RANDOM_SEED):
-        # Assert that val_ratio is a sensible value
-        assert 0.0 <= val_ratio <= 1.0
+        assert 0 <= val_ratio <= 1
         if gt_images_dirs is not None:
             assert len(raw_images_dirs) == len(gt_images_dirs)
+        if transforms is not None:
+            assert isinstance(transforms, list),\
+                    'Expected list of transforms but got {} instead.'\
+                        .format(type(transforms))
 
         self._raw_images_dirs = raw_images_dirs
+        print('Adding raw images from: {}.'.format(raw_images_dirs))
         self._raw_images = []
         if gt_images_dirs is not None:
             self._gt_images = []
             self._gt_images_dirs = gt_images_dirs
             self._train_mode = 'clean'
+            print('Adding gt images from: {}.'.format(gt_images_dirs))
         else:
             self._train_mode = 'void'
 
@@ -57,6 +65,12 @@ class TrainingDataset(Dataset):
                 self._gt_images_dirs = raw_images_dirs
                 self._gt_images = self._raw_images
 
+        if self._train_mode == 'void':
+            print('Using {} raw images and no gt images for training.'
+                        .format(len(self._raw_images)))
+        else:
+            print('Using {} raw and {} gt images for training.'
+                        .format(len(self._raw_images), len(self._gt_images)))
         self._raw_images = np.array(self._raw_images)
         self._gt_images = np.array(self._gt_images)
 
@@ -73,23 +87,24 @@ class TrainingDataset(Dataset):
 
         self._num_pixels = num_pixels
 
-        # Sjhuffle both before dividing into training and validation
+        # Seeding is done in the util function
         self._raw_images, self._gt_images = util.joint_shuffle(self._raw_images,
                                                                self._gt_images,
                                                                seed)
-
-        # Create training and validation set
-        self._val_ratio = val_ratio
-        val_index = int((1 - val_ratio) * self._raw_images.shape[0])
-        self._raw_images_train = self._raw_images[:val_index].copy()
-        self._raw_images_val = self._raw_images[val_index:].copy()
-        self._gt_images_train = self._gt_images[:val_index].copy()
-        self._gt_images_val = self._gt_images[val_index:].copy()
-
         # One training example that is the same for all experiments
+        np.random.seed(seed)
         example_index = np.random.randint(len(self))
-        self._training_example = {'raw' : self._raw_images_train[example_index],
-                                  'gt'  : self._gt_images_train[example_index]}
+        self._training_example = {'raw' : self._raw_images[example_index],
+                                  'gt'  : self._gt_images[example_index]}
+
+        # Create training and validation indices
+        self._val_ratio = val_ratio
+        dataset_size = self._raw_images.shape[0]
+        indices = list(range(dataset_size))
+        split = int(val_ratio * dataset_size)
+        np.random.seed(seed)
+        np.random.shuffle(indices)
+        self._train_indices, self._val_indices = indices[split:], indices[:split]
 
     def _compute_mean_and_std(self):
         """
@@ -136,8 +151,14 @@ class TrainingDataset(Dataset):
     def std(self):
         return self._std
 
+    def train_indices(self):
+        return self._train_indices
+
+    def val_indices(self):
+        return self._val_indices
+
     def __len__(self):
-        return len(self._raw_images_train)
+        return len(self._raw_images)
 
     @staticmethod
     def get_stratified_coords_2D(box_size, shape):
@@ -169,8 +190,8 @@ class TrainingDataset(Dataset):
         return coords
 
     def __getitem__(self, idx):
-        raw_image = tif.imread(self._raw_images_train[idx])
-        gt_image = tif.imread(self._gt_images_train[idx])
+        raw_image = tif.imread(self._raw_images[idx])
+        gt_image = tif.imread(self._gt_images[idx])
         sample = {'raw' : raw_image, 'gt' : gt_image}
         if self._transform is not None:
             sample = self._transform(sample)
@@ -270,19 +291,17 @@ class TrainingDataset(Dataset):
             # and thus mask all pixels to be active
             mask = np.ones(transformed_shape)
 
+        # Need to convert to float32 as all other tensors are in float32
+        mask = mask.astype(np.float32)
+        if self._transform is not None\
+                and isinstance(self._transform.transforms[-1], ToTensor):
+            # In case that we convert the raw and gt image to a torch tensor
+            # then we have to convert the mask as well because the user wants
+            # it to be performed automatically
+            mask.shape = (mask.shape[0], mask.shape[1], 1)
+            mask = torchvision.transforms.functional.to_tensor(mask)
         sample['mask'] = mask
         return sample
-
-    def get_validation_samples(self):
-        images = []
-        # We have fewer validation images than training images so we can just
-        # load them all and return them
-        for i, raw_image in enumerate(self._raw_images_val):
-            raw_image = tif.imread(raw_image)
-            gt_image = tif.imread(self._gt_images_val[i])
-            images.append({'raw' : raw_image,
-                            'gt'  : gt_image})
-        return np.array(images)
         
     def const_training_example(self):
         raw_image = tif.imread(self._training_example['raw'])

@@ -12,11 +12,12 @@ from data import TrainingDataset
 from data.transforms import RandomCrop, RandomFlip, RandomRotation, ToTensor
 import constants
 
-def abstract_aw_images_test(val_ratio, train_size, val_size):
+def abstract_aw_images_test(all_size, val_ratio, train_size, val_size):
     dataset = TrainingDataset([conftest.tmp_raw_dir.name], val_ratio=val_ratio,
                               add_normalization_transform=False)
-    assert len(dataset) == train_size
-    assert dataset.get_validation_samples().shape[0] == val_size
+    assert len(dataset) == all_size
+    assert len(dataset.train_indices()) == train_size
+    assert len(dataset.val_indices()) == val_size
     raw_images = np.array(conftest.create_raw_images())
     np.random.seed(constants.NP_RANDOM_SEED)
     raw_images = util.shuffle(raw_images)
@@ -35,22 +36,23 @@ def test_raw_images_with_val():
     whether raw images are returned correctly when specifing
     a validation ratio of 0.3 and Noise2Void training.
     """
-    abstract_aw_images_test(0.3, 2, 1)
+    abstract_aw_images_test(3, 0.4, 2, 1)
 
 def test_raw_images_without_val():
     """This test case performs a simple test without transformations and checks
     whether raw images are returned correctly when specifing
     a validation ratio of 0 and Noise2Void training.
     """
-    abstract_aw_images_test(0.0, 3, 0)
+    abstract_aw_images_test(3, 0.0, 3, 0)
 
-def abstract_raw_gt_images_test(val_ratio, train_size, val_size):
+def abstract_raw_gt_images_test(all_size, val_ratio, train_size, val_size):
     dataset = TrainingDataset([conftest.tmp_raw_dir.name],
                               [conftest.tmp_gt_dir.name],
-                              val_ratio=val_ratio, 
+                              val_ratio=val_ratio,
                               add_normalization_transform=False)
-    assert len(dataset) == train_size
-    assert dataset.get_validation_samples().shape[0] == val_size
+    assert len(dataset) == all_size
+    assert len(dataset.train_indices()) == train_size
+    assert len(dataset.val_indices()) == val_size
     raw_images = np.array(conftest.create_raw_images())
     gt_images = np.array(conftest.create_gt_images())
     # Same seed that the dataset uses
@@ -72,14 +74,14 @@ def test_raw_gt_images_with_val():
     whether raw and ground-truth images are returned correctly when specifing
     a validation ratio of 0.3.
     """
-    abstract_raw_gt_images_test(0.3, 2, 1)
+    abstract_raw_gt_images_test(3, 0.4, 2, 1)
 
 def test_raw_gt_num_images_without_val():
     """This test case performs a simple test without transformations and checks
     whether raw and ground-truth images are returned correctly when specifing
     a validation ratio of 0.
     """
-    abstract_raw_gt_images_test(0.0, 3, 0)
+    abstract_raw_gt_images_test(3, 0.0, 3, 0)
 
 def test_raw_mean_std():
     """This test case tests whether mean and standard deviation of the data
@@ -137,7 +139,7 @@ def test_raw_transforms():
         raw_image = converted_image['raw'].numpy()
         # Squeeze to get rid of unnecessary torch dimensions
         raw_image = np.squeeze(raw_image)
-        mask = converted_image['mask'].astype(np.bool)
+        mask = converted_image['mask'].numpy().squeeze().astype(np.bool)
         mask = np.invert(mask)
         # We only check equality where the mask is false because the other pixels
         # are the hot pixels that have been replaced
@@ -204,7 +206,7 @@ def test_raw_gt_transforms():
         # Squeeze to get rid of unnecessary torch dimensions
         raw_image = np.squeeze(raw_image)
         gt_image = np.squeeze(gt_image)
-        mask = converted_image['mask'].astype(np.bool)
+        mask = converted_image['mask'].numpy().squeeze().astype(np.bool)
         mask_test = np.ones_like(mask)
         assert np.array_equal(mask, mask_test)
         mask = np.invert(mask)

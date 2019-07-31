@@ -1,7 +1,7 @@
 ##### Network and data configuration
 
 #### Data paths
-DATA_BASE_DIR: ["data/processed/fish/"]
+DATA_BASE_DIR: "data/processed/fish/"
 
 # Set GT path to "" if N2V is to be performed
 DATA_TRAIN_RAW_DIRS: ["avg8/train"]
@@ -13,7 +13,7 @@ DATA_PRED_GT_DIRS: ["gt/test"]
 ### Network configuration
 MODEL: "baseline"
 DEPTH: 3
-BATCH_SIZE: 1
+BATCH_SIZE: 24
 TRAIN_PATCH_SIZE: 100
 PRED_PATCH_SIZE: 128
 VIRTUAL_BATCH_SIZE: 1
