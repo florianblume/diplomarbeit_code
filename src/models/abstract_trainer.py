@@ -71,17 +71,16 @@ class AbstractTrainer():
         crop_width = self._config['TRAIN_PATCH_SIZE']
         crop_height = self._config['TRAIN_PATCH_SIZE']
 
+        transforms = []
+        if self._config['AUGMENT_DATA']:
+            transforms = [RandomCrop(crop_width, crop_height),
+                        RandomFlip(),
+                        RandomRotation()]
         if 'CONVERT_DATA_TO' in self._config:
-            transforms = [RandomCrop(crop_width, crop_height),
-                          RandomFlip(),
-                          RandomRotation(),
-                          ConvertToFormat(self._config['CONVERT_DATA_TO']),
-                          ToTensor()]
+            transforms.extend([ConvertToFormat(self._config['CONVERT_DATA_TO']),
+                              ToTensor()])
         else:
-            transforms = [RandomCrop(crop_width, crop_height),
-                          RandomFlip(),
-                          RandomRotation(),
-                          ToTensor()]
+            transforms.append(ToTensor())
 
         data_base_dir = self._config['DATA_BASE_DIR']
         data_train_raw_dirs = self._config['DATA_TRAIN_RAW_DIRS']
@@ -175,6 +174,7 @@ class AbstractTrainer():
         """This method performs training of this network using the earlier
         set configuration and parameters.
         """
+        print('Starting training...')
         self._perform_epochs()
 
         if self.write_tensorboard_data:

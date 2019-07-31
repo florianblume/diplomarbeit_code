@@ -5,6 +5,7 @@ from torch.autograd import Variable
 from collections import OrderedDict
 from torch.nn import init
 import numpy as np
+import tifffile as tif
 
 import util
 from models import AbstractUNet
@@ -25,6 +26,8 @@ class UNet(AbstractUNet):
         outs = outputs[:, 0, ...]
         # print(outs.shape,labels.shape,masks.shape)
         # Simple L2 loss
+        print(torch.sum(labels))
+        print(torch.sum(outs))
         loss = torch.sum(masks * (labels - outs)**2) / torch.sum(masks)
         return loss
 
@@ -48,8 +51,7 @@ class UNet(AbstractUNet):
 
     def training_predict(self, sample):
         inputs, labels, masks = sample['raw'], sample['gt'], sample['mask']
-        print(inputs[0])
-        
+
         # Move to GPU
         inputs, labels, masks = inputs.to(
             self.device), labels.to(self.device), masks.to(self.device)

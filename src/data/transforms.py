@@ -22,8 +22,8 @@ class RandomCrop():
         assert raw_image.shape[1] >= self.width
         assert raw_image.shape == gt_image.shape
 
-        x = np.random.randint(0, raw_image.shape[1] - self.width)
-        y = np.random.randint(0, raw_image.shape[0] - self.height)
+        x = np.random.randint(0, raw_image.shape[1] - self.width + 1)
+        y = np.random.randint(0, raw_image.shape[0] - self.height + 1)
 
         cropped_raw_image = raw_image[y:y+self.height, x:x+self.width].copy()
         cropped_gt_image = gt_image[y:y+self.height, x:x+self.width].copy()

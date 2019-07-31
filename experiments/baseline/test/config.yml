@@ -4,8 +4,8 @@
 DATA_BASE_DIR: "data/processed/fish/"
 
 # Set GT path to "" if N2V is to be performed
-DATA_TRAIN_RAW_DIRS: ["avg8/train"]
-DATA_TRAIN_GT_DIRS: ["gt/train"]
+DATA_TRAIN_RAW_DIRS: ["test/raw"]
+DATA_TRAIN_GT_DIRS: ["test/gt"]
 
 DATA_PRED_RAW_DIRS: ["avg8/test"]
 DATA_PRED_GT_DIRS: ["gt/test"]
@@ -14,17 +14,19 @@ DATA_PRED_GT_DIRS: ["gt/test"]
 MODEL: "baseline"
 DEPTH: 3
 BATCH_SIZE: 24
-TRAIN_PATCH_SIZE: 100
+TRAIN_PATCH_SIZE: 512
 PRED_PATCH_SIZE: 128
-VIRTUAL_BATCH_SIZE: 1
+VIRTUAL_BATCH_SIZE: 20
 OVERLAP: 48
 # How much of training data should be used for validation
 VALIDATION_RATIO: 0.1
-STEPS_PER_EPOCH: 1
-EPOCHS: 2
+# Number of images to compute the validation loss with after a backpropagation step
+VALIDATION_SIZE: 20
+STEPS_PER_EPOCH: 5
+EPOCHS: 1000
 # Number of classes, in case of Probabilistic N2V we have 800, 1 otherwise
 NUM_CLASSES: 1
-AUGMENT_DATA: True
+AUGMENT_DATA: False
 
 # Base path for the experiment, the paths below are all relative to this one
 # Can be left out or set to "" if the experiment folder is the same containting

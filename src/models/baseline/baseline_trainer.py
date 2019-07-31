@@ -1,6 +1,7 @@
 import os
 import torch
 import numpy as np
+import tifffile as tif
 
 import util
 from models import AbstractTrainer
@@ -64,8 +65,8 @@ class Trainer(AbstractTrainer):
         prediction = self._net.predict(self._raw_example, self.ps, self.overlap)
         self._net.train(True)
         if self._gt_example is not None:
-            gt = util.denormalize(self._gt_example, 
-                                  self._dataset.mean(), 
+            gt = util.denormalize(self._gt_example,
+                                  self._dataset.mean(),
                                   self._dataset.std())
             psnr = util.PSNR(gt, prediction, 255)
             self.writer.add_scalar('psnr', psnr, self.print_step)
@@ -78,7 +79,9 @@ class Trainer(AbstractTrainer):
                 name, param.clone().cpu().data.numpy(), self.print_step)
 
     def _perform_validation(self):
-        for _, sample in enumerate(self._val_loader):
+        for i, sample in enumerate(self._val_loader):
+            if i == self._config['VALIDATION_SIZE']:
+                break
             outputs, labels, masks = self._net.training_predict(sample)
             # Needed by subclasses that's why we store val_loss on self
             self.val_loss = self._net.loss_function(outputs, labels, masks)
@@ -93,6 +96,7 @@ class Trainer(AbstractTrainer):
             # Iterate over virtual batch
             for _ in range(self.vbatch):
                 sample = next(iter(self._train_loader))
+                print(sample['raw'].shape)
                 outputs, labels, masks = self._net.training_predict(sample)
 
                 self.train_loss = self._net.loss_function(outputs, labels, masks)
