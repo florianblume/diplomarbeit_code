@@ -5,6 +5,7 @@ from torch.autograd import Variable
 from collections import OrderedDict
 from torch.nn import init
 import numpy as np
+import tifffile as tif
 
 import util
 from models import AbstractUNet
