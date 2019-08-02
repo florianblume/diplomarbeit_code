@@ -14,7 +14,7 @@ DATA_PRED_GT_DIRS: ["gt/test"]
 MODEL: "baseline"
 DEPTH: 3
 BATCH_SIZE: 24
-TRAIN_PATCH_SIZE: 512
+TRAIN_PATCH_SIZE: 100
 PRED_PATCH_SIZE: 128
 VIRTUAL_BATCH_SIZE: 20
 OVERLAP: 48
@@ -26,7 +26,7 @@ STEPS_PER_EPOCH: 5
 EPOCHS: 1000
 # Number of classes, in case of Probabilistic N2V we have 800, 1 otherwise
 NUM_CLASSES: 1
-AUGMENT_DATA: False
+AUGMENT_DATA: True
 
 # Base path for the experiment, the paths below are all relative to this one
 # Can be left out or set to "" if the experiment folder is the same containting

@@ -5,9 +5,10 @@ import numpy as np
 import tifffile as tif
 
 tmp_raw_dir = tempfile.TemporaryDirectory()
-tmp_raw_dir_2 = tempfile.TemporaryDirectory()
 tmp_gt_dir = tempfile.TemporaryDirectory()
+tmp_raw_dir_2 = tempfile.TemporaryDirectory()
 tmp_gt_dir_2 = tempfile.TemporaryDirectory()
+tmp_single_gt_dir = tempfile.TemporaryDirectory()
 
 def create_raw_images():
     raw_image_1 = np.arange(900).reshape(30, 30)
@@ -33,6 +34,10 @@ def create_gt_images_2():
     gt_image_3 = np.arange(5 * 900, 6 * 900).reshape(30, 30) - 1
     return [gt_image_1, gt_image_2, gt_image_3]
 
+def create_single_gt_image():
+    gt_image = np.arange(7 * 900, 8 * 900).reshape(30, 30)
+    return gt_image
+
 @pytest.fixture(scope='session', autouse=True)
 def setup_module():
     raw_images = create_raw_images()
@@ -44,6 +49,8 @@ def setup_module():
         tif.imsave(tmp_gt_dir.name + '/gt{}.tif'.format(i), gt_images[i])
         tif.imsave(tmp_raw_dir_2.name + '/raw{}.tif'.format(i), raw_images_2[i])
         tif.imsave(tmp_gt_dir_2.name + '/gt{}.tif'.format(i), gt_images_2[i])
+    single_gt_image = create_single_gt_image()
+    tif.imsave(tmp_single_gt_dir.name + '/gt.tif', single_gt_image)
     def fin():
         shutil.rmtree(tmp_raw_dir.name)
         shutil.rmtree(tmp_gt_dir.name)

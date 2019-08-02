@@ -17,12 +17,6 @@ def expand_cells_dataset(base_dir, identifier):
     gt_files = ['test_gt.npy', 'training_big_GT.npy']
     gauss_noises = [15, 30]
 
-    # Multiple raw images have one shared corresponding ground-truth image
-    # thus we need to save the amount of raw images to repeat the gt images
-    # later. But test and training have a different ratio so store them
-    # individually.
-    raw_counts = [0, 0]
-
     # Extract raw images
     for raw_sub_folder in raw_sub_folders:
         for i, raw_file in enumerate(raw_files):
@@ -31,10 +25,6 @@ def expand_cells_dataset(base_dir, identifier):
                                         identifier,
                                         raw_sub_folder,
                                         raw_file))
-            if raw_counts[i] == 0:
-                raw_counts[i] = data.shape[0]
-            else:
-                assert raw_counts[i] == data.shape[0]
             for j, image in enumerate(data):
                 # Insert as many leading 0s as there are digits in the number of
                 # images in the data, e.g. 001 instead of 1 for up to 999 images
@@ -78,8 +68,6 @@ def expand_cells_dataset(base_dir, identifier):
                                     identifier,
                                     'gt',
                                     gt_file))
-        factor = raw_counts[i] / data.shape[0]
-        data = np.repeat(data, factor, axis=0)
         for j, image in enumerate(data):
             # Insert as many leading 0s as there are digits in the number of
             # images in the data, e.g. 001 instead of 1 for up to 999 images

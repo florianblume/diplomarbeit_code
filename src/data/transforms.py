@@ -21,7 +21,7 @@ class RandomCrop():
         assert raw_image.shape[0] >= self.height
         assert raw_image.shape[1] >= self.width
         assert raw_image.shape == gt_image.shape
-
+        
         x = np.random.randint(0, raw_image.shape[1] - self.width + 1)
         y = np.random.randint(0, raw_image.shape[0] - self.height + 1)
 

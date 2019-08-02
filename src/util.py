@@ -79,6 +79,7 @@ def shuffle(inA, seed=None):
         np.random.seed(seed)
     indices = np.arange(inA.shape[0])
     np.random.shuffle(indices)
+    print(indices)
     return inA[indices]
 
 def random_crop_fri(data, width, height, box_size, dataClean=None, counter=None,

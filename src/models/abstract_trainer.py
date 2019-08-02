@@ -35,7 +35,7 @@ class AbstractTrainer():
         self._load_config_parameters()
         self._construct_dataset()
         self._net = self._load_network()
-        # Optimizer is needed to load network weights 
+        # Optimizer is needed to load network weights
         # that's why we create it first
         self._optimizer = optim.Adam(self._net.parameters(), lr=0.0001)
         self._scheduler = optim.lr_scheduler.ReduceLROnPlateau(
@@ -74,8 +74,8 @@ class AbstractTrainer():
         transforms = []
         if self._config['AUGMENT_DATA']:
             transforms = [RandomCrop(crop_width, crop_height),
-                        RandomFlip(),
-                        RandomRotation()]
+                          RandomFlip(),
+                          RandomRotation()]
         if 'CONVERT_DATA_TO' in self._config:
             transforms.extend([ConvertToFormat(self._config['CONVERT_DATA_TO']),
                               ToTensor()])

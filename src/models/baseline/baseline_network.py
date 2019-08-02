@@ -23,12 +23,9 @@ class UNet(AbstractUNet):
 
     @staticmethod
     def loss_function(outputs, labels, masks):
-        outs = outputs[:, 0, ...]
-        # print(outs.shape,labels.shape,masks.shape)
-        # Simple L2 loss
-        print(torch.sum(labels))
-        print(torch.sum(outs))
-        loss = torch.sum(masks * (labels - outs)**2) / torch.sum(masks)
+        mask_sum = torch.sum(masks, dim=0)
+        loss = torch.sum(masks * (labels - outputs)**2, dim=0) / mask_sum
+        loss = torch.mean(loss)
         return loss
 
     def forward(self, x):
@@ -61,7 +58,7 @@ class UNet(AbstractUNet):
         return outputs, labels, masks
 
     def predict(self, image, patch_size, overlap):
-        means = np.zeros(image.shape)
+        result = np.zeros(image.shape)
         # We have to use tiling because of memory constraints on the GPU
         xmin = 0
         ymin = 0
@@ -72,7 +69,7 @@ class UNet(AbstractUNet):
             ovTop = 0
             while (ymin < image.shape[0]):
                 a = self.predict_patch(image[ymin:ymax, xmin:xmax])
-                means[ymin:ymax, xmin:xmax][ovTop:,
+                result[ymin:ymax, xmin:xmax][ovTop:,
                                             ovLeft:] = a[ovTop:, ovLeft:]
                 ymin = ymin-overlap+patch_size
                 ymax = ymin+patch_size
@@ -82,7 +79,7 @@ class UNet(AbstractUNet):
             xmin = xmin-overlap+patch_size
             xmax = xmin+patch_size
             ovLeft = overlap//2
-        return means
+        return result
 
     def predict_patch(self, patch):
         # In case of Probabilistic Noise2Void we would have samples from
