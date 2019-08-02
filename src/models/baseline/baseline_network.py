@@ -1,9 +1,4 @@
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
-from collections import OrderedDict
-from torch.nn import init
 import numpy as np
 import tifffile as tif
 
@@ -15,6 +10,8 @@ class UNet(AbstractUNet):
     """Baseline network that is only a simple UNet. This network is used to
     compare the performance of more complex network structures.
     """
+
+    counter = 0
     
     def _build_network_head(self, outs):
         # TODO actually output should be self.num_channels x self.num_classes
@@ -22,9 +19,10 @@ class UNet(AbstractUNet):
         self.network_head = conv1x1(outs, 1)
 
     @staticmethod
-    def loss_function(outputs, labels, masks):
-        mask_sum = torch.sum(masks, dim=0)
-        loss = torch.sum(masks * (labels - outputs)**2, dim=0) / mask_sum
+    def loss_function(result):
+        output, gt, mask = result['output'], result['gt'], result['mask']
+        mask_sum = torch.sum(mask, dim=0)
+        loss = torch.sum(mask * (gt - output)**2, dim=0) / mask_sum
         loss = torch.mean(loss)
         return loss
 
@@ -47,15 +45,20 @@ class UNet(AbstractUNet):
         return x
 
     def training_predict(self, sample):
-        inputs, labels, masks = sample['raw'], sample['gt'], sample['mask']
+        raw, gt, mask = sample['raw'], sample['gt'], sample['mask']
+        tif.imsave('raw{}.tif'.format(UNet.counter), raw.cpu().detach().numpy())
+        tif.imsave('gt{}.tif'.format(UNet.counter), gt.cpu().detach().numpy())
+        UNet.counter += 1
 
         # Move to GPU
-        inputs, labels, masks = inputs.to(
-            self.device), labels.to(self.device), masks.to(self.device)
+        raw, gt, mask = raw.to(
+            self.device), gt.to(self.device), mask.to(self.device)
 
         # Forward step
-        outputs = self(inputs)
-        return outputs, labels, masks
+        output = self(raw)
+        return {'output' : output,
+                'gt'     : gt,
+                'mask'   : mask}
 
     def predict(self, image, patch_size, overlap):
         result = np.zeros(image.shape)
@@ -79,7 +82,7 @@ class UNet(AbstractUNet):
             xmin = xmin-overlap+patch_size
             xmax = xmin+patch_size
             ovLeft = overlap//2
-        return result
+        return {'result' : result}
 
     def predict_patch(self, patch):
         # In case of Probabilistic Noise2Void we would have samples from
@@ -92,15 +95,11 @@ class UNet(AbstractUNet):
         # copy to GPU
         inputs = inputs.to(self.device)
         output = self(inputs)
-        # Permute batch and samples
-        samples = (output).permute(1, 0, 2, 3)
 
-        # In contrast to probabilistic N2V we only have one sample
-        means = samples[0, ...]
         # Get data from GPU
-        means = means.cpu().detach().numpy()
+        image = output.cpu().detach().numpy()
         # Reshape to 2D images and remove padding
-        means.shape = (output.shape[2], output.shape[3])
+        image = image.squeeze()
         # Denormalize
-        means = util.denormalize(means, self.mean, self.std)
-        return means
+        image = util.denormalize(image, self.mean, self.std)
+        return image

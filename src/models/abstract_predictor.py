@@ -4,8 +4,12 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 import tifffile as tif
+from torch.utils.data import DataLoader
+from torch.utils.data.sampler import SequentialSampler
 
 import util
+from data import PredictionDataset
+from data.transforms import ConvertToFormat, Normalize, ToTensor
 
 class AbstractPredictor():
     """Class AbstractPredictor is the base class for all predictor classes. It
@@ -17,11 +21,10 @@ class AbstractPredictor():
         self.config_path = config_path
         self.config = config
         self._load_config_parameters()
-        self.loader = dataloader.DataLoader(self.config['DATA_BASE_PATH'])
-        self.net = None
         # Load saved network
         print("Loading network from {}".format(self.network_path))
         self.net = self._load_net()
+        self._load_data()
         # To set dropout and batchnormalization (which we don't have but maybe in the future)
         # to inference mode.
         self.net.eval()
@@ -48,6 +51,32 @@ class AbstractPredictor():
         self.ps = self.config['PRED_PATCH_SIZE']
         self.overlap = self.config['OVERLAP']
 
+    def _load_data(self):
+        data_base_dir = self.config['DATA_BASE_DIR']
+        if 'DATA_TRAIN_GT_DIRS' in self.config:
+            data_train_gt_dirs = []
+            for data_train_gt_dir in self.config['DATA_TRAIN_GT_DIRS']:
+                data_train_gt_dir = os.path.join(data_base_dir,
+                                                 data_train_gt_dir)
+                data_train_gt_dirs.append(data_train_gt_dir)
+            self.with_gt = True
+        else:
+            data_train_gt_dir = None
+            self.with_gt = False
+        transforms = []
+        if 'CONVERT_DATA_TO' in self.config:
+            transforms.append(ConvertToFormat(self.config['CONVERT_DATA_TO']))
+        transforms.append(Normalize(self.net.mean, self.net.std))
+        transforms.append(ToTensor())
+
+        self.dataset = PredictionDataset(self.config['DATA_PRED_RAW_DIRS'],
+                                         data_train_gt_dirs,
+                                         transform=transforms)
+        sampler = SequentialSampler(self.dataset)
+        self.dataloader = DataLoader(self.dataset, self.config['BATCH_SIZE'],
+                                        num_workers=os.cpu_count(),
+                                        sampler=sampler)
+
     def _load_net(self):
         raise NotImplementedError
 
@@ -62,7 +91,7 @@ class AbstractPredictor():
         Arguments:
             output_path {str} -- the folder where to store prediction
             artifacts
-            image_name_base {str} -- the base of the name of the currently 
+            image_name_base {str} -- the base of the name of the currently
                                      processed image, e.g. 0000_pred
         """
         raise NotImplementedError
@@ -74,41 +103,28 @@ class AbstractPredictor():
         raise NotImplementedError
 
     def predict(self):
-        self.data_test, self.data_gt = self.loader.load_test_data(
-            self.config['DATA_PRED_RAW_PATH'], self.config['DATA_PRED_GT_PATH'],
-            self.net.mean, self.net.std, self.config.get('CONVERT_DATA_TO', None))
-        print(self.data_test.shape)
-        print(self.data_gt.shape)
-
-        if self.data_gt is None:
-            print(
-                'No ground-truth data provided. Images will be denoised but PSNR is not computable.')
-
         results = {}
-        num_images = self.data_test.shape[0]
         # To compute standard deviation of PSNR, if available
         psnr_values = []
         mse_values = []
         running_times = []
 
-        print('Predicting on {} images.'.format(num_images))
-        for index in range(num_images):
-            im = self.data_test[index]
+        print('Predicting on {} images.'.format(len(self.dataset)))
+        fill = len(str(abs(self.dataset)))
+        for i, sample in enumerate(self.dataloader):
+            raw = sample['raw']
             # Do not move after self._predict(im), the subclasses need this info
             # Not the nicest style but works...
-            pred_image_filename = '{}_pred'.format(str(index).zfill(len(str(abs(self.data_test.shape[0])))))
+            pred_image_filename = '{}_pred'.format(str(i).zfill(fill))
 
             # This is the actual prediction
-            print("\nPredicting on image {} with shape {}:".format(index, im.shape))
+            print("\nPredicting on image {} with shape {}:".format(i, raw.shape))
             start = time.time()
-            prediction = self._predict(im)
+            prediction = self._predict(raw)
             end = time.time()
             diff = end - start
             running_times.append(diff)
             print('...took {:.4f} seconds.'.format(diff))
-
-            # If we want to store the unnoised test image we have to normalize it
-            im = util.denormalize(im, self.net.mean, self.net.std)
             #im_filename = 'im_' + str(index).zfill(4) + '.png'
             if self.pred_output_path:
                 if 'tif' in self.config['OUTPUT_IMAGE_FORMATS']:
@@ -126,19 +142,17 @@ class AbstractPredictor():
                 self._write_data_to_output_path(self.pred_output_path,
                                                 pred_image_filename)
 
-
-            # Can be None, if no ground-truth data has been specified
-            if self.data_gt is not None:
-                # X images get 1 GT image together (due to creation of data set)
-                factor = int(self.data_test.shape[0] / self.data_gt.shape[0])
-                ground_truth = self.data_gt[int(index / factor)]
+            if self.with_gt:
+                ground_truth = sample['gt']
                 psnr = util.PSNR(ground_truth, prediction, 255)
                 psnr_values.append(psnr)
                 mse = util.MSE(ground_truth, prediction)
                 mse_values.append(mse)
                 results[pred_image_filename] = {'psnr' : psnr,
                                                 'mse'  : mse}
-                print("PSNR raw {:.4f}".format(util.PSNR(ground_truth, im, 255)))
+                raw = util.denormalize(raw, self.net.mean, self.net.std)
+                #TODO 255 might not be correct for SimSim data
+                print("PSNR raw {:.4f}".format(util.PSNR(ground_truth, raw, 255)))
                 print("PSNR denoised {:.4f}".format(psnr))  # Without info from masked pixel
                 print('MSE {:.4f}'.format(mse))
                 # Weights etc only get stored if ground-truth data is available
@@ -152,7 +166,7 @@ class AbstractPredictor():
         avg_runtime = np.mean(running_times)
         print("Average runtime per image: {:.4f}".format(avg_runtime))
 
-        if self.data_gt is not None:
+        if self.with_gt:
             psnr_average = np.mean(np.array(psnr_values))
             mse_average = np.mean(np.array(mse_values))
             std = np.std(psnr_values)

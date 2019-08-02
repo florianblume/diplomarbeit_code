@@ -235,13 +235,13 @@ class AbstractUNet(nn.Module):
             init.constant_(m.bias, 0)
 
     @staticmethod
-    def loss_function(outputs, labels, masks):
+    def loss_function(result):
         """The loss function of this network.
         
         Arguments:
-            outputs {np.array} -- the outputs that the network produces
-            labels {np.array} -- the target outputs that the network should have produced
-            masks {np.array} -- the mask of the active pixels
+            result {dict} -- dictionary containting at least the keys 'output',
+                             'gt', 'mask'. Might contain more keys depending
+                             one the implementation of the subclass.
         """
         raise NotImplementedError
 

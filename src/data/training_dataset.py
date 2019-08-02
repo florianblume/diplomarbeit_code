@@ -27,6 +27,9 @@ class TrainingDataset(Dataset):
         # This is important as we want to keep all images in memory and some
         # don't need float32 precision because they were uint8 originally
         self._convert_to_format = convert_to_format
+        # If set to train, transforms are applied to data when loading, if set
+        # to 'eval' not
+        self._mode = 'train'
 
         self._load_raw_images(raw_images_dir)
         self._train_mode = self._load_gt_images(gt_images_dir)
@@ -122,6 +125,10 @@ class TrainingDataset(Dataset):
     def _init_transform(self, requested_transforms, add_normalization_transform,
                         data_format):
         transforms = requested_transforms
+        # We need a different set of transforms for evaluation as we do not
+        # want to randomly crop, rotate and flip images
+        eval_transforms = []
+
         # We have to go this special way for conversion because if the user
         # specifies to keep the data in memory then the data is converted to
         # the desired format during loading to save memory (the sole purpose of
@@ -129,6 +136,8 @@ class TrainingDataset(Dataset):
         if data_format is not None:
             transforms = self._add_convert_to_format_transform(requested_transforms,
                                                                     data_format)
+            eval_transforms.append(ConvertToFormat(data_format))
+
         # From now on we can be sure that self.transform is a Compose or None
         # If requested we append a normalization transform, this allows us to
         # use the freshly computed mean and std
@@ -138,10 +147,21 @@ class TrainingDataset(Dataset):
                 transforms.insert(-1, Normalize(self.mean, self.std))
             elif transforms:
                 transforms.append(Normalize(self.mean, self.std))
+            eval_transforms.append(Normalize(self.mean, self.std))
+
         if transforms is not None:
             self.transforms = Compose(transforms)
         else:
             self.transforms = None
+
+        if len(eval_transforms) > 0:
+            if isinstance(transforms[-1], ToTensor):
+                # If we have a ToTensor transform for train mode we need the
+                # same for eval mode
+                eval_transforms.append(ToTensor())
+            self.eval_transforms = Compose(eval_transforms)
+        else:
+            self.eval_transforms = None
 
     def _add_convert_to_format_transform(self, transforms, data_format):
         convert_to_format = ConvertToFormat(data_format)
@@ -188,6 +208,12 @@ class TrainingDataset(Dataset):
     def __len__(self):
         # Use paths because in non-memory mode raw_images are not loaded
         return len(self.raw_image_paths)
+
+    def train(self):
+        self._mode = 'train'
+
+    def eval(self):
+        self._mode = 'eval'
 
     @staticmethod
     def get_stratified_coords_2D(box_size, shape):
@@ -296,8 +322,10 @@ class TrainingDataset(Dataset):
             gt_image = tif.imread(self.gt_image_paths[int(idx / self._factor)])
 
         sample = {'raw' : raw_image, 'gt' : gt_image}
-        if self.transforms is not None:
+        if self.transforms is not None and self._mode == 'train':
             sample = self.transforms(sample)
+        elif self._mode == 'eval':
+            sample = self.eval_transforms(sample)
 
         # Retrieve the transformed image
         transformed_raw_image = sample['raw']
