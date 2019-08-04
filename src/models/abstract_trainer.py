@@ -1,4 +1,6 @@
 import os
+import time
+import logging
 import numpy as np
 import torch
 import torch.optim as optim
@@ -9,7 +11,6 @@ import util
 from data import TrainingDataset
 from data.transforms import RandomCrop, RandomFlip, RandomRotation,\
                             ConvertToFormat, ToTensor
-from models.training_run import TrainingRun
 
 class AbstractTrainer():
     """Class AbstractTrainer is the base class of all trainers. It automatically
@@ -19,8 +20,10 @@ class AbstractTrainer():
     """
 
     def __init__(self, config, config_path):
+        self._init_run_attributes()
         self.config = config
-        self.run = TrainingRun.from_config(config, config_path)
+        self.config_path = config_path
+        self._load_config_params()
         self._construct_dataset()
         self.net = self._load_network()
         # Optimizer is needed to load network weights
@@ -28,14 +31,51 @@ class AbstractTrainer():
         self.optimizer = optim.Adam(self.net.parameters(), lr=0.0001)
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer, 'min', patience=10, factor=0.5, verbose=True)
-        self._load_network_state_from_checkpoint()
+        self._load_state_from_checkpoint()
         self.net.train(True)
 
         # If tensorboard logs are requested create the writer
-        if self.run.write_tensorboard_data:
+        if self.write_tensorboard_data:
             from torch.utils.tensorboard import SummaryWriter
             self.writer = SummaryWriter(os.path.join(
-                self.run.experiment_base_path, 'tensorboard'))
+                self.experiment_base_path, 'tensorboard'))
+
+    def _init_run_attributes(self):
+        self.experiment_base_path = None
+
+        self.epochs = 0
+        self.virtual_batch_size = 0
+        self.steps_per_epoch = 0
+        self.patch_size = 0
+        self.overlap = 0
+        self.write_tensorboard_data = False
+
+        self.current_epoch = 0
+        self.running_loss = 0.0
+
+        self.train_loss = None
+        self.avg_train_loss = 0.0
+        self.train_hist = []
+        self.train_losses = []
+
+        self.val_loss = None
+        self.avg_val_loss = 0.0
+        self.val_hist = []
+        self.val_losses = []
+        self.val_counter = 0
+
+    def _load_config_params(self):
+        self.experiment_base_path = self.config.get('EXPERIMENT_BASE_PATH',
+                                                    self.config_path)
+        if self.experiment_base_path == "":
+            self.experiment_base_path = self.config_path
+
+        self.epochs = self.config['EPOCHS']
+        self.virtual_batch_size = self.config['VIRTUAL_BATCH_SIZE']
+        self.steps_per_epoch = self.config['STEPS_PER_EPOCH']
+        self.patch_size = self.config['PRED_PATCH_SIZE']
+        self.overlap = self.config['OVERLAP']
+        self.write_tensorboard_data = self.config['WRITE_TENSORBOARD_DATA']
 
     def _construct_dataset(self):
         print('Constructing dataset...')
@@ -65,7 +105,7 @@ class AbstractTrainer():
         # We let the dataset automatically add a normalization term with the
         # mean and std computed of the data
         self.dataset = TrainingDataset(data_train_raw_dir,
-                                        data_train_gt_dir,
+                                       data_train_gt_dir,
                                        self.config['VALIDATION_RATIO'],
                                        transforms=transforms,
                                        add_normalization_transform=True)
@@ -73,44 +113,83 @@ class AbstractTrainer():
         self.gt_example = self.dataset.training_example()['gt']
         train_sampler = SubsetRandomSampler(self.dataset.train_indices)
         val_sampler = SubsetRandomSampler(self.dataset.val_indices)
+        # NOTE setting a high number of worker somehow results in a slower
+        # execution of the training
         self.train_loader = DataLoader(self.dataset, self.config['BATCH_SIZE'],
-                                        num_workers=os.cpu_count(),
-                                        sampler=train_sampler)
+                                       num_workers=4,
+                                       sampler=train_sampler)
         self.val_loader = DataLoader(self.dataset, 1,
-                                      num_workers=os.cpu_count(),
-                                      sampler=val_sampler)
+                                     num_workers=4,
+                                     sampler=val_sampler)
 
     def _load_network(self):
         raise NotImplementedError
 
-    def _load_network_state_from_checkpoint(self):
-        raise NotImplementedError
+    def _load_custom_states_from_checkpoint(self):
+        # Can be overwritten by subclasses
+        pass
+
+    def _load_state_from_checkpoint(self):
+        train_network_path = self.config.get('TRAIN_NETWORK_PATH', None)
+        if train_network_path is not None:
+            train_network_path = os.path.join(self.experiment_base_path,
+                                              self.config.get(
+                                                  'TRAIN_NETWORK_PATH', None))
+            checkpoint = torch.load(train_network_path)
+            self.net.load_state_dict(checkpoint['model_state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizier_state_dict'])
+            self.epoch = checkpoint['epoch']
+            self.mean = checkpoint['mean']
+            self.std = checkpoint['std']
+            self.running_loss = checkpoint['running_loss']
+            self.train_loss = checkpoint['train_loss']
+            self.train_hist = checkpoint['train_hist']
+            self.val_loss = checkpoint['val_loss']
+            self.val_hist = checkpoint['val_hist']
+            self._load_custom_states_from_checkpoint()
+
+    def _create_custom_checkpoint(self):
+        # Can be overwritten by subclasses
+        return {}
 
     def _create_checkpoint(self):
-        raise NotImplementedError
+        default_dict = {'model_state_dict': self.net.state_dict(),
+                        'optimizier_state_dict': self.optimizer.state_dict(),
+                        'epoch': self.current_epoch,
+                        'mean': self.dataset.mean,
+                        'std': self.dataset.std,
+                        'running_loss': self.running_loss,
+                        'train_loss': self.train_loss,
+                        'train_hist' : self.train_hist,
+                        'val_loss': self.val_loss,
+                        'val_hist': self.val_hist}
+        default_dict.update(self._create_custom_checkpoint())
+        return default_dict
 
     def _write_custom_tensorboard_data(self):
+        # Can be overwritten by subclasses
         pass
 
     def _write_tensorboard_data(self):
-        print_step = self.run.current_step + 1
+        # +1 because epochs start at 0
+        print_step = self.current_epoch + 1
         self.writer.add_scalar('train_loss',
-                               self.run.avg_train_loss, 
+                               self.avg_train_loss,
                                print_step)
-        self.writer.add_scalar('val_loss', self.run.avg_val_loss, print_step)
+        self.writer.add_scalar('val_loss', self.avg_val_loss, print_step)
 
         self.net.train(False)
         # Predict for one example image
         result = self.net.predict(self.raw_example,
-                                  self.run.patch_size,
-                                  self.run.overlap)
-        prediction = result['result']
+                                  self.patch_size,
+                                  self.overlap)
+        prediction = result['output']
         self.net.train(True)
         if self.gt_example is not None:
-            gt = util.denormalize(self.gt_example,
-                                  self.dataset.mean,
-                                  self.dataset.std)
-            psnr = util.PSNR(gt, prediction, 255)
+            ground_truh = util.denormalize(self.gt_example,
+                                           self.dataset.mean,
+                                           self.dataset.std)
+            psnr = util.PSNR(ground_truh, prediction, 255)
             self.writer.add_scalar('psnr', psnr, print_step)
 
         prediction = prediction.astype(np.uint8)
@@ -120,61 +199,59 @@ class AbstractTrainer():
             self.writer.add_histogram(
                 name, param.clone().cpu().data.numpy(), print_step)
 
-    def _validation(self):
+    def _perform_eval(self):
+        # Perform evaluation
+        self.net.train(False)
+        self.val_losses = []
+        self.val_counter = 0
         self.dataset.eval()
         for i, sample in enumerate(self.val_loader):
             if i == self.config['VALIDATION_SIZE']:
                 break
             result = self.net.training_predict(sample)
             # Needed by subclasses that's why we store val_loss on self
-            self.run.val_loss = self.net.loss_function(result)
-            self.run.val_losses.append(self.run.val_loss.item())
-        print("Validation loss: {}".format(self.run.val_loss.item()))
+            self.val_loss = self.net.loss_function(result)
+            self.val_losses.append(self.val_loss.item())
+        print("Validation loss: {}".format(self.val_loss.item()))
         self.dataset.train()
 
-    def _on_epoch_end(self, step, train_losses):
-        # Needed by subclasses
-        print_step = self.run.current_step + 1
-        running_loss = (np.mean(train_losses))
-        print("Step:",print_step, "| Avg. epoch loss:", running_loss)
-        train_losses = np.array(train_losses)
-        print("Avg. loss: "+str(np.mean(train_losses))+"+-" +
-            str(np.std(train_losses)/np.sqrt(train_losses.size)))
-        # Average loss for the current iteration
         # Need to store on class because subclasses need the loss
-        self.run.avg_train_loss = np.mean(train_losses)
-        self.run.train_hist.append(self.run.avg_train_loss)
-
-        self.net.train(False)
-        self.run.val_losses = []
-        self.run.val_counter = 0
-
-        self._validation()
-
-        # Need to store on class because subclasses need the loss
-        self.run.avg_val_loss = np.mean(self.run.val_losses)
+        self.avg_val_loss = np.mean(self.val_losses)
         self.net.train(True)
 
         # Save the current best network
-        if len(self.run.val_hist) == 0 or\
-           self.run.avg_val_loss < np.min(self.run.val_hist):
+        if len(self.val_hist) == 0 or\
+           self.avg_val_loss < np.min(self.val_hist):
             torch.save(
                 self._create_checkpoint(),
-                os.path.join(self.run.experiment_base_path, 'best.net'))
-        self.run.val_hist.append(self.run.avg_val_loss)
+                os.path.join(self.experiment_base_path, 'best.net'))
+        self.val_hist.append(self.avg_val_loss)
 
-        np.save(os.path.join(self.run.experiment_base_path, 'history.npy'),
-                (np.array([np.arange(self.epoch),
-                           self.run.train_hist,
-                           self.run.val_hist])))
-
-        self.scheduler.step(self.run.avg_val_loss)
-
+        np.save(os.path.join(self.experiment_base_path, 'history.npy'),
+                (np.array([np.arange(self.current_epoch),
+                           self.train_hist,
+                           self.val_hist])))
         torch.save(
             self._create_checkpoint(),
-            os.path.join(self.run.experiment_base_path, 'last.net'))
+            os.path.join(self.experiment_base_path, 'last.net'))
 
-        if self.run.write_tensorboard_data:
+        self.scheduler.step(self.avg_val_loss)
+
+    def _on_epoch_end(self):
+        # Needed by subclasses
+        self.running_loss = (np.mean(self.train_losses))
+        print("Epoch:", self.current_epoch, "| Avg. epoch loss:", self.running_loss)
+        self.train_losses = np.array(self.train_losses)
+        print("Avg. loss: "+str(np.mean(self.train_losses))+"+-" +
+            str(np.std(self.train_losses)/np.sqrt(self.train_losses.size)))
+        # Average loss for the current iteration
+        # Need to store on class because subclasses need the loss
+        self.avg_train_loss = np.mean(self.train_losses)
+        self.train_hist.append(self.avg_train_loss)
+
+        self._perform_eval()
+
+        if self.write_tensorboard_data:
             self._write_tensorboard_data()
             self._write_custom_tensorboard_data()
 
@@ -184,25 +261,34 @@ class AbstractTrainer():
         """
         print('Training...')
         # loop over the dataset multiple times
-        for step in range(self.run.epochs):
+        for step in range(self.epochs):
             self.train_losses = []
             self.optimizer.zero_grad()
 
             # Iterate over virtual batch
-            for _ in range(self.run.virtual_batch_size):
+            start = time.clock()
+            for _ in range(self.virtual_batch_size):
                 sample = next(iter(self.train_loader))
                 result = self.net.training_predict(sample)
-                self.run.train_loss = self.net.loss_function(result)
-                self.run.train_loss.backward()
-                self.run.running_loss += self.run.train_loss.item()
-                self.run.train_losses.append(self.run.train_loss.item())
+                self.train_loss = self.net.loss_function(result)
+                self.train_loss.backward()
+                self.running_loss += self.train_loss.item()
+                self.train_losses.append(self.train_loss.item())
+            logging.debug('Training {} virtual batches took {:.4f}s.'
+                          .format(self.virtual_batch_size, time.clock() - start))
 
+            start = time.clock()
             self.optimizer.step()
-            if step % self.run.steps_per_epoch == self.run.steps_per_epoch-1:
-                self.epoch = step / self.run.steps_per_epoch
-                self._on_epoch_end(step, self.train_losses)
+            logging.debug('Optimization step took {:.4f}s.'
+                          .format(time.clock() - start))
+            if step % self.steps_per_epoch == self.steps_per_epoch - 1:
+                start = time.clock()
+                self.current_epoch = step / (self.steps_per_epoch - 1)
+                self._on_epoch_end()
+                logging.debug('Validation took {:.4f}s'
+                              .format(time.clock() - start))
 
-        if self.run.write_tensorboard_data:
+        if self.write_tensorboard_data:
             # The graph is nonsense and otherwise we have to
             # store the outputs on the class
             #self.writer.add_graph(self.net, outputs)

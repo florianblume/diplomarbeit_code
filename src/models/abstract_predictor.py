@@ -53,12 +53,16 @@ class AbstractPredictor():
 
     def _load_data(self):
         data_base_dir = self.config['DATA_BASE_DIR']
+        data_pred_raw_dirs = []
+        for data_pred_raw_dir in self.config['DATA_PRED_RAW_DIRS']:
+            data_pred_raw_dirs.append(os.path.join(data_base_dir,
+                                                   data_pred_raw_dir))
         if 'DATA_TRAIN_GT_DIRS' in self.config:
-            data_train_gt_dirs = []
+            data_pred_gt_dirs = []
             for data_train_gt_dir in self.config['DATA_TRAIN_GT_DIRS']:
                 data_train_gt_dir = os.path.join(data_base_dir,
                                                  data_train_gt_dir)
-                data_train_gt_dirs.append(data_train_gt_dir)
+                data_pred_gt_dirs.append(data_train_gt_dir)
             self.with_gt = True
         else:
             data_train_gt_dir = None
@@ -68,19 +72,11 @@ class AbstractPredictor():
             transforms.append(ConvertToFormat(self.config['CONVERT_DATA_TO']))
         transforms.append(Normalize(self.net.mean, self.net.std))
         transforms.append(ToTensor())
-
-        self.dataset = PredictionDataset(self.config['DATA_PRED_RAW_DIRS'],
-                                         data_train_gt_dirs,
+        self.dataset = PredictionDataset(data_pred_raw_dirs,
+                                         data_pred_gt_dirs,
                                          transform=transforms)
-        sampler = SequentialSampler(self.dataset)
-        self.dataloader = DataLoader(self.dataset, self.config['BATCH_SIZE'],
-                                        num_workers=os.cpu_count(),
-                                        sampler=sampler)
 
     def _load_net(self):
-        raise NotImplementedError
-
-    def _predict(self, image):
         raise NotImplementedError
 
     def _write_data_to_output_path(self, output_path, image_name_base):
@@ -94,13 +90,13 @@ class AbstractPredictor():
             image_name_base {str} -- the base of the name of the currently
                                      processed image, e.g. 0000_pred
         """
-        raise NotImplementedError
+        pass
 
     def _store_additional_intermediate_results(self, image_name, results):
-        raise NotImplementedError
+        pass
 
     def _store_additional_results(self, results):
-        raise NotImplementedError
+        pass
 
     def predict(self):
         results = {}
@@ -110,21 +106,24 @@ class AbstractPredictor():
         running_times = []
 
         print('Predicting on {} images.'.format(len(self.dataset)))
-        fill = len(str(abs(self.dataset)))
-        for i, sample in enumerate(self.dataloader):
+        fill = len(str(len(self.dataset)))
+        for i, sample in enumerate(self.dataset):
             raw = sample['raw']
             # Do not move after self._predict(im), the subclasses need this info
             # Not the nicest style but works...
             pred_image_filename = '{}_pred'.format(str(i).zfill(fill))
 
             # This is the actual prediction
-            print("\nPredicting on image {} with shape {}:".format(i, raw.shape))
+            # Permute because our images are already in Pytorch format [C, H, W]
+            print("\nPredicting on image {} with shape {}:"
+                  .format(i, list(raw.permute(1, 2, 0).size())))
             start = time.time()
-            prediction = self._predict(raw)
+            result = self.net.predict(raw, self.ps, self.overlap)
             end = time.time()
             diff = end - start
             running_times.append(diff)
             print('...took {:.4f} seconds.'.format(diff))
+            prediction = result['output'].squeeze()
             #im_filename = 'im_' + str(index).zfill(4) + '.png'
             if self.pred_output_path:
                 if 'tif' in self.config['OUTPUT_IMAGE_FORMATS']:
@@ -143,7 +142,9 @@ class AbstractPredictor():
                                                 pred_image_filename)
 
             if self.with_gt:
-                ground_truth = sample['gt']
+                # We get Pytorch tensors from the dataset
+                ground_truth = sample['gt'].cpu().detach().numpy()
+                raw = raw.cpu().detach().numpy()
                 psnr = util.PSNR(ground_truth, prediction, 255)
                 psnr_values.append(psnr)
                 mse = util.MSE(ground_truth, prediction)

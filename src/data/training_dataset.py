@@ -93,7 +93,9 @@ class TrainingDataset(Dataset):
         # If there are no ground-truth images we learn the network
         # Noise2Void style, otherwise we train it Noise2Clean
         train_mode = ""
-        if gt_images_dir is not None:
+        # We also check if the user set raw and ground-truth dir to
+        # the same path to achieve N2V
+        if gt_images_dir is not None and gt_images_dir != self.raw_images_dir:
             assert os.path.isdir(gt_images_dir)
             print('Adding ground-truth images from: {}.'.format(gt_images_dir))
             self.gt_images_dir = gt_images_dir
@@ -120,6 +122,7 @@ class TrainingDataset(Dataset):
                 # in Noise2Void
                 self.gt_images = self.raw_images.copy()
             train_mode = 'void'
+        print('Performing Noise2{} training.'.format(train_mode.capitalize())) 
         return train_mode
 
     def _init_transform(self, requested_transforms, add_normalization_transform,
@@ -145,7 +148,9 @@ class TrainingDataset(Dataset):
             # We need to ensure that the Normalize operation is before ToTensor
             if transforms and isinstance(transforms[-1], ToTensor):
                 transforms.insert(-1, Normalize(self.mean, self.std))
-            elif transforms:
+            else:
+                if not transforms:
+                    transforms = []
                 transforms.append(Normalize(self.mean, self.std))
             eval_transforms.append(Normalize(self.mean, self.std))
 
@@ -153,9 +158,10 @@ class TrainingDataset(Dataset):
             self.transforms = Compose(transforms)
         else:
             self.transforms = None
-
-        if len(eval_transforms) > 0:
-            if isinstance(transforms[-1], ToTensor):
+        if eval_transforms:
+            # No need to check if self.transforms is None as it gets only set
+            # if self.transforms is not None
+            if isinstance(self.transforms.transforms[-1], ToTensor):
                 # If we have a ToTensor transform for train mode we need the
                 # same for eval mode
                 eval_transforms.append(ToTensor())

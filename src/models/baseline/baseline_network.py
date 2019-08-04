@@ -10,19 +10,19 @@ class UNet(AbstractUNet):
     """Baseline network that is only a simple UNet. This network is used to
     compare the performance of more complex network structures.
     """
-
-    counter = 0
     
     def _build_network_head(self, outs):
-        # TODO actually output should be self.num_channels x self.num_classes
-        # to account for RGB images and Probabilistic Noise2Void
-        self.network_head = conv1x1(outs, 1)
+        self.network_head = conv1x1(outs, self.in_channels)
 
     @staticmethod
     def loss_function(result):
-        output, gt, mask = result['output'], result['gt'], result['mask']
-        mask_sum = torch.sum(mask, dim=0)
-        loss = torch.sum(mask * (gt - output)**2, dim=0) / mask_sum
+        output, ground_truth, mask = result['output'], result['gt'], result['mask']
+        mask_sum = torch.sum(mask, dim=(1, 2, 3))
+        difference = torch.sum(mask * (ground_truth - output)**2, dim=(1, 2, 3))
+        # NOTE: if the config for the network is wrong and no hot pixels were
+        # selected to be replaced during N2V training, we divide by 0 because
+        # of mask_sum resulting in NaN loss.
+        loss = difference / mask_sum
         loss = torch.mean(loss)
         return loss
 
@@ -46,9 +46,6 @@ class UNet(AbstractUNet):
 
     def training_predict(self, sample):
         raw, gt, mask = sample['raw'], sample['gt'], sample['mask']
-        tif.imsave('raw{}.tif'.format(UNet.counter), raw.cpu().detach().numpy())
-        tif.imsave('gt{}.tif'.format(UNet.counter), gt.cpu().detach().numpy())
-        UNet.counter += 1
 
         # Move to GPU
         raw, gt, mask = raw.to(
@@ -61,19 +58,20 @@ class UNet(AbstractUNet):
                 'mask'   : mask}
 
     def predict(self, image, patch_size, overlap):
-        result = np.zeros(image.shape)
+        output = np.zeros(image.shape)
         # We have to use tiling because of memory constraints on the GPU
         xmin = 0
         ymin = 0
         xmax = patch_size
         ymax = patch_size
         ovLeft = 0
-        while (xmin < image.shape[1]):
+        # Image is in [C, H, W] shape
+        while (xmin < image.shape[2]):
             ovTop = 0
-            while (ymin < image.shape[0]):
-                a = self.predict_patch(image[ymin:ymax, xmin:xmax])
-                result[ymin:ymax, xmin:xmax][ovTop:,
-                                            ovLeft:] = a[ovTop:, ovLeft:]
+            while (ymin < image.shape[1]):
+                a = self.predict_patch(image[:, ymin:ymax, xmin:xmax])
+                output[:, ymin:ymax, xmin:xmax][:, ovTop:,
+                                                ovLeft:] = a[:, ovTop:, ovLeft:]
                 ymin = ymin-overlap+patch_size
                 ymax = ymin+patch_size
                 ovTop = overlap//2
@@ -82,24 +80,21 @@ class UNet(AbstractUNet):
             xmin = xmin-overlap+patch_size
             xmax = xmin+patch_size
             ovLeft = overlap//2
-        return {'result' : result}
+        # Transpose image back from [C, H, W] Pytorch format to [H, W, C]
+        output = np.transpose(output, (1, 2, 0))
+        return {'output' : output}
 
     def predict_patch(self, patch):
-        # In case of Probabilistic Noise2Void we would have samples from
-        # multiple Gaussian distributions and inputs[0, :, :, :] would become
-        # inputs[num_classes, :, :, :]
-        # Shape of inputs is [num_classes, channels, H, W]
-        inputs = torch.zeros(1, 1, patch.shape[0], patch.shape[1])
-        inputs[0, :, :, :] = util.img_to_tensor(patch)
+        # Add one dimension for the batch size which is 1 during prediction
+        inputs = torch.zeros((1,) + patch.size())
+        inputs[0, :, :, :] = patch
 
         # copy to GPU
         inputs = inputs.to(self.device)
-        output = self(inputs)
+        output = self(inputs)[0]
 
         # Get data from GPU
         image = output.cpu().detach().numpy()
-        # Reshape to 2D images and remove padding
-        image = image.squeeze()
         # Denormalize
         image = util.denormalize(image, self.mean, self.std)
         return image
