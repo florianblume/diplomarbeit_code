@@ -383,5 +383,8 @@ class TrainingDataset(Dataset):
     def training_example(self):
         raw_image = tif.imread(self._training_example['raw'])
         gt_image = tif.imread(self._training_example['gt'])
-        return {'raw' : raw_image,
-                'gt'  : gt_image}
+        sample = {'raw' : raw_image,
+                  'gt'  : gt_image}
+        if self.transforms is not None:
+            sample = self.transforms(sample)
+        return sample

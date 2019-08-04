@@ -186,14 +186,22 @@ class AbstractTrainer():
         prediction = result['output']
         self.net.train(True)
         if self.gt_example is not None:
-            ground_truh = util.denormalize(self.gt_example,
+            # Print examples are torch tensors already so we must detach them
+            gt_example = self.gt_example.cpu().detach().numpy()
+            ground_truh = util.denormalize(gt_example,
                                            self.dataset.mean,
                                            self.dataset.std)
             psnr = util.PSNR(ground_truh, prediction, 255)
             self.writer.add_scalar('psnr', psnr, print_step)
 
         prediction = prediction.astype(np.uint8)
-        self.writer.add_image('pred', prediction, print_step, dataformats='HW')
+        if prediction.shape[-1] == 1:
+            prediction = prediction.squeeze()
+            self.writer.add_image('pred', prediction, 
+                                  print_step, dataformats='HW')
+        else:
+            self.writer.add_image('pred', prediction, 
+                                  print_step, dataformats='HWC')
 
         for name, param in self.net.named_parameters():
             self.writer.add_histogram(
@@ -283,7 +291,7 @@ class AbstractTrainer():
                           .format(time.clock() - start))
             if step % self.steps_per_epoch == self.steps_per_epoch - 1:
                 start = time.clock()
-                self.current_epoch = step / (self.steps_per_epoch - 1)
+                self.current_epoch = (step + 1) / self.steps_per_epoch
                 self._on_epoch_end()
                 logging.debug('Validation took {:.4f}s'
                               .format(time.clock() - start))

@@ -26,8 +26,8 @@ AUGMENT_DATA: True
 VALIDATION_RATIO: 0.1
 # Number of images to compute the validation loss with after a backpropagation step
 VALIDATION_SIZE: 20
-STEPS_PER_EPOCH: 5
-EPOCHS: 1000
+STEPS_PER_EPOCH: 1
+EPOCHS: 2
 # Number of classes, in case of Probabilistic N2V we have 800, 1 otherwise
 NUM_CLASSES: 1
 
