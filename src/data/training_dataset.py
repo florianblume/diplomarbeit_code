@@ -4,24 +4,70 @@ import numpy as np
 import tifffile as tif
 import natsort
 import torch
-from torch.utils.data import Dataset
 from torchvision.transforms import Compose, functional
 
 import util
 from data.transforms import ToTensor, Normalize, ConvertToFormat
 import constants
 
-class TrainingDataset(Dataset):
+class TrainingDataset():
 
-    def __init__(self, raw_images_dir, gt_images_dir=None, batch_size=24,
-                 val_ratio=0.1, transforms=None, convert_to_format=None,
+    # How samples are drawn from the the specified datasets (i.e. image dirs)
+    # 'even' means even and 'proportional' according to dataset size
+    distribution_modes = ['even', 'proportional']
+
+    num_datasets = 0
+    # list of list of loaded raw images, if keep in memory is true
+    raw_images = []
+    gt_images = []
+    # list of folders with raw images
+    raw_images_dirs = []
+    # list of lists of full paths to raw images
+    raw_image_paths = []
+    # analogously
+    gt_images_dirs = []
+    gt_image_paths = []
+    # individual raw to gt factors
+    factors = []
+    # list of lists of indices
+    train_indices = []
+    # currently remaining train indices, gets filled up when all have been
+    # returned once
+    current_train_indices = []
+    val_indices = []
+    current_val_indices = []
+    # we store one exapmle per dataset
+    _training_examples = []
+
+    def __init__(self, raw_images_dirs, gt_images_dirs=None, batch_size=24,
+                 distribution_mode='proportional', val_ratio=0.1,
+                 transforms=None, convert_to_format=None,
                  add_normalization_transform=True, keep_in_memory=True,
                  num_pixels=32.0, seed=constants.NP_RANDOM_SEED):
-        assert 0.0 <= val_ratio <= 1.0
+        assert isinstance(raw_images_dirs, list),\
+                'Expected list of raw image dirs but got {} instead.'\
+                    .format(type(transforms))
+        if gt_images_dirs is not None:
+            assert isinstance(gt_images_dirs, list),\
+                    'Expected list of gt image dirs but got {} instead.'\
+                        .format(type(transforms))
+            self._train_mode = 'clean'
+        else:
+            self._train_mode = 'void'
+        print('Performing Noise2{} training.'.format(self._train_mode.capitalize()))
         if transforms is not None:
             assert isinstance(transforms, list),\
                     'Expected list of transforms but got {} instead.'\
                         .format(type(transforms))
+        assert batch_size > 0
+        if distribution_mode not in self.distribution_modes:
+            raise ValueError('Illegal distribution mode \"{}\". Possible \
+                             choices are{}'.format(distribution_mode,
+                                                   self.distribution_modes))
+        self.distribution_mode = distribution_mode
+        print('Using dataset distribution mode \"{}\".'.format(distribution_mode))
+        assert 0.0 <= val_ratio <= 1.0
+        assert num_pixels > 0
 
         self._keep_in_memory = keep_in_memory
         self.num_pixels = num_pixels
@@ -32,21 +78,21 @@ class TrainingDataset(Dataset):
         # If set to train, transforms are applied to data when loading, if set
         # to 'eval' not
         self._mode = 'train'
+        self._val_ratio = val_ratio
+        self.raw_images_dirs = raw_images_dirs
+        self.num_datasets = len(raw_images_dirs)
+        self.gt_images_dirs = gt_images_dirs
 
-        self._load_raw_images(raw_images_dir)
-        self._train_mode = self._load_gt_images(gt_images_dir)
-        # Not sure if we keep in memory thus use the number of paths
-        self._factor = len(self.raw_image_paths) / len(self.gt_image_paths)
-        assert self._factor.is_integer(), 'Number of raw images needs to be ' +\
-                                          'divisible by the number of ground-' +\
-                                          'truth images.'
+        self._load_datasets(seed)
 
+        raws_size = len(np.array(self.raw_image_paths).flatten())
         if self._train_mode == 'void':
             print('Using {} raw images and no gt images for training.'
-                   .format(len(self.raw_image_paths)))
+                   .format(raws_size))
         else:
             print('Using {} raw and {} gt images for training.'
-                  .format(len(self.raw_image_paths), len(self.gt_image_paths)))
+                  .format(raws_size,
+                          len(np.array(self.gt_image_paths).flatten())))
 
         self.mean, self.std = self._compute_mean_and_std()
         print('Dataset has mean {} and standard deviation {}.'\
@@ -54,80 +100,106 @@ class TrainingDataset(Dataset):
 
         self._init_transform(transforms, add_normalization_transform,
                              convert_to_format)
+        self.image_shape = self._get_sample(0, 0)['raw'].shape
 
-        # One training example that is the same for all experiments
-        np.random.seed(seed)
-        example_index = np.random.randint(len(self))
-        self._training_example = {'raw' : self.raw_image_paths[example_index],
-                                  'gt'  : self.gt_image_paths[example_index]}
+    def _load_datasets(self, seed):
+        for i, raw_images_dir in enumerate(self.raw_images_dirs):
+            raw_image_paths, raw_images = self._load_raw_images(raw_images_dir)
+            gt_images_dir, gt_image_paths, gt_images =\
+                    self._load_gt_images(self.gt_images_dirs[i], raw_images_dir,
+                                         raw_image_paths, raw_images)
+            if gt_images is not None:
+                factor = len(raw_image_paths) / len(gt_image_paths)
+                assert factor.is_integer(), 'Number of raw images needs to be '+\
+                                            'divisible by the number of ground-'+\
+                                            'truth images.'
 
-        # Create training and validation indices
-        self._val_ratio = val_ratio
-        dataset_size = len(self.raw_image_paths)
-        indices = np.array(range(dataset_size))
-        split = int(val_ratio * dataset_size)
-        # Seed numpy so that train and validation set are always the same for
-        # all experiments
-        indices = util.shuffle(indices, seed)
-        self.train_indices, self.val_indices = indices[split:], indices[:split]
+            self.raw_image_paths.append(raw_image_paths)
+            if raw_images is not None:
+                self.raw_images.append(raw_images)
+            # Need to update as gt_images_dir gets set to raw_images_dir for
+            # N2V training
+            self.gt_images_dirs[i] = gt_images_dir
+            self.gt_image_paths.append(gt_image_paths)
+            if gt_images is not None:
+                self.gt_images.append(gt_images)
+                self.factors.append(factor)
 
-        self._init_indices()
+            # One training example that is the same for all experiments
+            np.random.seed(seed)
+            example_index = np.random.randint(len(raw_image_paths))
+            training_example = {'raw' : raw_image_paths[example_index],
+                                'gt'  : gt_image_paths[example_index]}
+            self._training_examples.append(training_example)
+
+            # Create training and validation indices
+            dataset_size = len(raw_image_paths)
+            indices = np.array(range(dataset_size))
+            split = int(self._val_ratio * dataset_size)
+            # Seed numpy so that train and validation set are always the same for
+            # all experiments
+            indices = util.shuffle(indices, seed)
+            train_indices, val_indices = indices[split:], indices[:split]
+            self.train_indices.append(train_indices)
+            # We call tolist() here because the current indices get altered
+            # a lot during sample retrieval which is faster for plain
+            # Python lists
+            self.current_train_indices.append(train_indices.copy().tolist())
+            self.val_indices.append(val_indices)
+            self.current_val_indices.append(val_indices.copy().tolist())
 
     def _load_raw_images(self, raw_images_dir):
         assert os.path.exists(raw_images_dir)
         assert os.path.isdir(raw_images_dir)
         print('Adding raw images from: {}.'.format(raw_images_dir))
-        self.raw_images_dir = raw_images_dir
         raw_image_paths = glob.glob(os.path.join(raw_images_dir, "*.tif"))
         # Sort the unsorted files
         raw_image_paths = natsort.natsorted(raw_image_paths)
         # We need the full paths because we can't find out the base dir
         # later during image loading
-        self.raw_image_paths = np.array(raw_image_paths)
+        raw_image_paths = np.array(raw_image_paths)
         if self._keep_in_memory:
             raw_images = [tif.imread(raw_image_path) for raw_image_path
                           in raw_image_paths]
-            self.raw_images = np.array(raw_images)
+            raw_images = np.array(raw_images)
             if self.convert_to_format is not None:
                 # We convert the data here as this saves memory if the data
                 # does not need to be stored in float32
-                self.raw_images = self.raw_images.astype(self.convert_to_format)
+                raw_images = raw_images.astype(self.convert_to_format)
+        else:
+            raw_images = None
+        return raw_image_paths, raw_images
 
-    def _load_gt_images(self, gt_images_dir):
-        # If there are no ground-truth images we learn the network
-        # Noise2Void style, otherwise we train it Noise2Clean
-        train_mode = ""
-        # We also check if the user set raw and ground-truth dir to
+    def _load_gt_images(self, gt_images_dir, corresponding_raw_images_dir,
+                        corresponding_raw_image_paths, corresponding_raw_images):
+        # We check if the user set raw and ground-truth dir to
         # the same path to achieve N2V
-        if gt_images_dir is not None and gt_images_dir != self.raw_images_dir:
+        if gt_images_dir is not None and gt_images_dir != corresponding_raw_images_dir:
             assert os.path.isdir(gt_images_dir)
             print('Adding ground-truth images from: {}.'.format(gt_images_dir))
-            self.gt_images_dir = gt_images_dir
             gt_image_paths = glob.glob(os.path.join(gt_images_dir, "*.tif"))
             # Sort the unsorted files
             gt_image_paths = natsort.natsorted(gt_image_paths)
-            self.gt_image_paths = np.array(gt_image_paths)
+            gt_image_paths = np.array(gt_image_paths)
             if self._keep_in_memory:
                 gt_images = [tif.imread(gt_image_path) for gt_image_path
                           in gt_image_paths]
-                self.gt_images = np.array(gt_images)
+                gt_images = np.array(gt_images)
                 if self.convert_to_format is not None:
                     # We convert the data here as this saves memory if the data
                     # does not need to be stored in float32
-                    self.raw_images = self.raw_images.astype(
-                                                        self.convert_to_format)
-            train_mode = 'clean'
+                    gt_images = gt_images.astype(self.convert_to_format)
+            else:
+                gt_images = None
         else:
             # If we want to train N2V style
-            self.gt_images_dir = self.raw_images_dir
-            self.gt_image_paths = self.raw_image_paths
+            gt_images_dir = corresponding_raw_images_dir
+            gt_image_paths = corresponding_raw_image_paths
             if self._keep_in_memory:
                 # Need to copy because pixels in raw data get replaced
                 # in Noise2Void
-                self.gt_images = self.raw_images.copy()
-            train_mode = 'void'
-        print('Performing Noise2{} training.'.format(train_mode.capitalize())) 
-        return train_mode
+                gt_images = corresponding_raw_images.copy()
+        return gt_images_dir, gt_image_paths, gt_images
 
     def _init_transform(self, requested_transforms, add_normalization_transform,
                         data_format):
@@ -206,22 +278,15 @@ class TrainingDataset(Dataset):
             return np.mean(self.raw_images), np.std(self.raw_images)
         else:
             images = []
-            for raw_image_path in self.raw_image_paths:
-                image = tif.imread(raw_image_path)
-                images.append(image)
+            for raw_image_paths in self.raw_image_paths:
+                for raw_image_path in raw_image_paths:
+                    image = tif.imread(raw_image_path)
+                    images.append(image)
 
             mean, std = np.mean(images), np.std(images)
             # Make sure the images get deleted right away
             del images
             return mean, std
-
-    def _init_indices(self):
-        self.current_train_indices = self.train_indices.copy()
-        self.current_val_indices = self.val_indices.copy()
-
-    def __len__(self):
-        # Use paths because in non-memory mode raw_images are not loaded
-        return len(self.raw_image_paths)
 
     def train(self):
         self._mode = 'train'
@@ -234,12 +299,12 @@ class TrainingDataset(Dataset):
         """This function computes the indices of the hot pixels within the
         specified shape. The box size is used as a box around each hot pixel
         where no other hot pixel can reside in.
-        
+
         Arguments:
             box_size {int} -- box size around each hot pixel where there can be
                               no other hot pixel in
             shape {tuple} -- the shape of the area to compute the hot pixels for
-        
+
         Returns:
             np.array -- the indices of the hot pixels
         """
@@ -327,13 +392,15 @@ class TrainingDataset(Dataset):
         # it thus gets updated directly
         return mask
 
-    def __getitem__(self, idx):
+    def _get_sample(self, dataset_index, sample_index):
         if self._keep_in_memory:
-            raw_image = self.raw_images[idx]
-            gt_image = self.gt_images[int(idx / self._factor)]
+            raw_image = self.raw_images[dataset_index][sample_index]
+            gt_image = self.gt_images[dataset_index]\
+                            [int(sample_index / self.factors[dataset_index])]
         else:
-            raw_image = tif.imread(self.raw_image_paths[idx])
-            gt_image = tif.imread(self.gt_image_paths[int(idx / self._factor)])
+            raw_image = tif.imread(self.raw_image_paths[dataset_index][sample_index])
+            gt_image = tif.imread(self.gt_image_paths[dataset_index]\
+                                    [int(sample_index / self.factors[dataset_index])])
 
         sample = {'raw' : raw_image, 'gt' : gt_image}
         if self.transforms is not None and self._mode == 'train':
@@ -388,20 +455,82 @@ class TrainingDataset(Dataset):
         sample['mask'] = mask
         return sample
 
+    def _refill_indices_if_needed(self, dataset_index):
+        if self._mode == 'train' and not self.current_train_indices[dataset_index]:
+            # We used up all the indices, thus refill the array
+            train_indices = self.train_indices.copy()
+            train_indices = np.random.permutation(train_indices)
+            self.current_train_indices = train_indices.tolist()
+        elif self._mode and not self.current_val_indices[dataset_index]:
+            val_indices = self.val_indices.copy()
+            val_indices = np.random.permutation(val_indices)
+            self.current_val_indices = val_indices
+
     def __iter__(self):
         return self
     
     def __next__(self):
-        pass
-        
-    def training_example(self):
-        raw_image = tif.imread(self._training_example['raw'])
-        raw_image = util.normalize(raw_image, self.mean, self.std)
-        raw_image = util.img_to_tensor(raw_image)
-        gt_image = tif.imread(self._training_example['gt'])
-        if len(gt_image.shape) == 2:
-            # for compatibility
-            gt_image.shape = gt_image.shape + (1,)
-        sample = {'raw' : raw_image,
-                  'gt'  : gt_image}
-        return sample
+        raw = torch.zeros((self.batch_size,) + self.image_shape)
+        gt = torch.zeros((self.batch_size,) + self.image_shape)
+        mask = torch.zeros((self.batch_size,) + self.image_shape)
+        for i in range(self.batch_size):
+            if self.distribution_mode == 'even':
+                dataset_index = np.random.randint(self.num_datasets)
+                self._refill_indices_if_needed(dataset_index)
+                # Shuffled already, we just take the first one
+                sample_index = self.current_train_indices[0]
+                self.current_train_indices.remove(0)
+                sample = self._get_sample(dataset_index, sample_index)
+            else:
+                # We globally draw a random sample and infer the corresponding
+                # dataset afterwards
+                zip_indices = []
+                for dataset_index in range(self.num_datasets):
+                    # Can't refill indices at beginning of function because
+                    # the 'even' branch only needs to do this for one dataset
+                    self._refill_indices_if_needed(dataset_index)
+                    zip_indices.extend([(dataset_index, sample_index) for\
+                                        sample_index in\
+                                        self.current_train_indices[dataset_index]])
+                index = zip_indices[np.random.randint(len(zip_indices))]
+                self.current_train_indices[index[0]].remove(index[1])
+                sample = self._get_sample(index[0], index[1])
+        raw[i] = sample['raw']
+        gt[i] = sample['gt']
+        mask[i] = sample['mask']
+        return {'raw' : raw,
+                'gt'  : gt,
+                'mask': mask}
+
+    def validation_samples(self):
+        samples = []
+        for dataset_index, val_indices in enumerate(self.val_indices):
+            for val_index in val_indices:
+                if self._keep_in_memory:
+                    raw_image = self.raw_images[dataset_index][val_index]
+                    gt_image = self.gt_images[dataset_index][val_index]
+                else:
+                    raw_image = tif.imread(self.raw_image_paths[dataset_index][val_index])
+                    gt_image = tif.imread(self.gt_image_paths[dataset_index][val_index])
+                raw_image = torch.stack([util.img_to_tensor(raw_image)])
+                gt_image = torch.stack([util.img_to_tensor(gt_image)])
+                mask = torch.ones(raw_image.shape)
+                samples.append({'raw' : raw_image,
+                                'gt'  : gt_image,
+                                'mask': mask})
+        return samples
+
+    def training_examples(self):
+        samples = []
+        for training_example in self._training_examples:
+            raw_image = tif.imread(training_example['raw'])
+            raw_image = util.normalize(raw_image, self.mean, self.std)
+            raw_image = util.img_to_tensor(raw_image)
+            gt_image = tif.imread(training_example['gt'])
+            if len(gt_image.shape) == 2:
+                # for compatibility
+                gt_image.shape = gt_image.shape + (1,)
+            sample = {'raw' : raw_image,
+                      'gt'  : gt_image}
+            samples.append(sample)
+        return samples

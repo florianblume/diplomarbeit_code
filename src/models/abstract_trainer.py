@@ -5,8 +5,6 @@ import numpy as np
 import tifffile as tif
 import torch
 import torch.optim as optim
-from torch.utils.data import DataLoader
-from torch.utils.data.sampler import SubsetRandomSampler
 
 import util
 from data import TrainingDataset
@@ -85,41 +83,34 @@ class AbstractTrainer():
         if self.config['AUGMENT_DATA']:
             transforms = [RandomCrop(crop_width, crop_height),
                           RandomFlip(),
-                          RandomRotation()]
-        if 'CONVERT_DATA_TO' in self.config:
-            transforms.extend([ConvertToFormat(self.config['CONVERT_DATA_TO']),
-                              ToTensor()])
-        else:
-            transforms.append(ToTensor())
+                          RandomRotation(),
+                          ToTensor()]
 
         data_base_dir = self.config['DATA_BASE_DIR']
-        data_train_raw_dir = os.path.join(data_base_dir,
-                                          self.config['DATA_TRAIN_RAW_DIRS'][0])
+        data_train_raw_dirs = []
+        for data_train_raw_dir in self.config['DATA_TRAIN_RAW_DIRS']:
+            data_train_raw_dir = os.path.join(data_base_dir, data_train_raw_dir)
+            data_train_raw_dirs.append(data_train_raw_dir)
         if 'DATA_TRAIN_GT_DIRS' in self.config:
-            data_train_gt_dir = os.path.join(data_base_dir,
-                                             self.config['DATA_TRAIN_GT_DIRS'][0])
+            data_train_gt_dirs = []
+            for data_train_gt_dir in self.config['DATA_TRAIN_GT_DIRS']:
+                data_train_gt_dir = os.path.join(data_base_dir, data_train_gt_dir)
+                data_train_gt_dirs.append(data_train_gt_dir)
         else:
-            data_train_gt_dir = None
+            data_train_gt_dirs = None
 
         # We let the dataset automatically add a normalization term with the
         # mean and std computed of the data
-        self.dataset = TrainingDataset(data_train_raw_dir,
-                                       data_train_gt_dir,
+        self.dataset = TrainingDataset(data_train_raw_dirs,
+                                       data_train_gt_dirs,
+                                       self.config['BATCH_SIZE'],
+                                       self.config['DISTRIBUTION_MODE'],
                                        self.config['VALIDATION_RATIO'],
                                        transforms=transforms,
-                                       add_normalization_transform=True)
-        self.raw_example = self.dataset.training_example()['raw']
-        self.gt_example = self.dataset.training_example()['gt']
-        train_sampler = SubsetRandomSampler(self.dataset.train_indices)
-        val_sampler = SubsetRandomSampler(self.dataset.val_indices)
-        # NOTE setting a high number of worker somehow results in a slower
-        # execution of the training
-        self.train_loader = DataLoader(self.dataset, self.config['BATCH_SIZE'],
-                                       num_workers=1,
-                                       sampler=train_sampler)
-        self.val_loader = DataLoader(self.dataset, 1,
-                                     num_workers=4,
-                                     sampler=val_sampler)
+                                       convert_to_format=self.config['CONVERT_DATA_TO'],
+                                       add_normalization_transform=True,
+                                       keep_in_memory=True)
+        self.training_examples = self.dataset.training_examples()
 
     def _load_network(self):
         raise NotImplementedError
@@ -178,25 +169,30 @@ class AbstractTrainer():
         self.writer.add_scalar('val_loss', self.avg_val_loss, print_step)
 
         self.net.train(False)
-        # Predict for one example image
-        result = self.net.predict(self.raw_example,
-                                  self.patch_size,
-                                  self.overlap)
-        prediction = result['output']
+        psnrs = []
+        for i, training_example in enumerate(self.training_examples):
+            # Predict for one example image
+            result = self.net.predict(training_example['raw'],
+                                      self.patch_size,
+                                      self.overlap)
+            prediction = result['output']
+            if 'gt' in training_example:
+                ground_truth = training_example['gt']
+                psnr = util.PSNR(ground_truth, prediction, 255)
+                psnrs.append(psnr)
+            prediction = prediction.astype(np.uint8)
+            if prediction.shape[-1] == 1:
+                prediction = prediction.squeeze()
+                self.writer.add_image('pred_example_{}'.format(i), prediction,
+                                      print_step, dataformats='HW')
+            else:
+                self.writer.add_image('pred_example_{}'.format(i), prediction,
+                                      print_step, dataformats='HWC')
+        mean_psnr = np.mean(psnrs)
+        print('Avg. PSNR on {} examples'.format(len(self.training_examples)),
+              mean_psnr)
+        self.writer.add_scalar('mean_psnr', mean_psnr, print_step)
         self.net.train(True)
-        if self.gt_example is not None:
-            psnr = util.PSNR(self.gt_example, prediction, 255)
-            print('PSNR on one example', psnr)
-            self.writer.add_scalar('psnr', psnr, print_step)
-
-        prediction = prediction.astype(np.uint8)
-        if prediction.shape[-1] == 1:
-            prediction = prediction.squeeze()
-            self.writer.add_image('pred', prediction,
-                                  print_step, dataformats='HW')
-        else:
-            self.writer.add_image('pred', prediction,
-                                  print_step, dataformats='HWC')
 
         for name, param in self.net.named_parameters():
             self.writer.add_histogram(
@@ -208,8 +204,11 @@ class AbstractTrainer():
         self.val_losses = []
         self.val_counter = 0
         self.dataset.eval()
-        for i, sample in enumerate(self.val_loader):
+        validation_samples = self.dataset.validation_samples()
+        for i, sample in enumerate(validation_samples):
             if i == self.config['VALIDATION_SIZE']:
+                print('Ran validation for only {} of {} available images.'\
+                      .format(i, len(validation_samples)))
                 break
             result = self.net.training_predict(sample)
             # Needed by subclasses that's why we store val_loss on self
@@ -274,7 +273,7 @@ class AbstractTrainer():
 
             # Iterate over virtual batch
             start = time.clock()
-            iterator = iter(self.train_loader)
+            iterator = iter(self.dataset)
             for _ in range(self.virtual_batch_size):
                 sample = next(iterator)
                 result = self.net.training_predict(sample)
