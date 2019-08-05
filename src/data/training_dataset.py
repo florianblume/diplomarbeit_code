@@ -3,6 +3,7 @@ import glob
 import numpy as np
 import tifffile as tif
 import natsort
+import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose, functional
 
@@ -395,9 +396,12 @@ class TrainingDataset(Dataset):
         
     def training_example(self):
         raw_image = tif.imread(self._training_example['raw'])
+        raw_image = util.normalize(raw_image, self.mean, self.std)
+        raw_image = util.img_to_tensor(raw_image)
         gt_image = tif.imread(self._training_example['gt'])
+        if len(gt_image.shape) == 2:
+            # for compatibility
+            gt_image.shape = gt_image.shape + (1,)
         sample = {'raw' : raw_image,
                   'gt'  : gt_image}
-        if self.transforms is not None:
-            sample = self.transforms(sample)
         return sample

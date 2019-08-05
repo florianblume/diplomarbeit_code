@@ -14,7 +14,7 @@ def normal_dense(x, m_=0.0, std_=None):
 def img_to_tensor(img):
     import torchvision
     if len(img.shape) == 2:
-        img.shape = (img.shape[0], img.shape[1], 1)
+        img.shape = img.shape + (1,)
     else:
         assert len(img.shape) == 3
         # RGB image

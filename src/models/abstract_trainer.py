@@ -19,9 +19,31 @@ class AbstractTrainer():
     It establishes a training loop and lets the subclasses perform the actual
     training iterations.
     """
+    
+    experiment_base_path = None
+
+    epochs = 0
+    virtual_batch_size = 0
+    steps_per_epoch = 0
+    patch_size = 0
+    overlap = 0
+    write_tensorboard_data = False
+
+    current_epoch = 0
+    running_loss = 0.0
+
+    train_loss = None
+    avg_train_loss = 0.0
+    train_hist = []
+    train_losses = []
+
+    val_loss = None
+    avg_val_loss = 0.0
+    val_hist = []
+    val_losses = []
+    val_counter = 0
 
     def __init__(self, config, config_path):
-        self._init_run_attributes()
         self.config = config
         self.config_path = config_path
         self._load_config_params()
@@ -40,30 +62,6 @@ class AbstractTrainer():
             from torch.utils.tensorboard import SummaryWriter
             self.writer = SummaryWriter(os.path.join(
                 self.experiment_base_path, 'tensorboard'))
-
-    def _init_run_attributes(self):
-        self.experiment_base_path = None
-
-        self.epochs = 0
-        self.virtual_batch_size = 0
-        self.steps_per_epoch = 0
-        self.patch_size = 0
-        self.overlap = 0
-        self.write_tensorboard_data = False
-
-        self.current_epoch = 0
-        self.running_loss = 0.0
-
-        self.train_loss = None
-        self.avg_train_loss = 0.0
-        self.train_hist = []
-        self.train_losses = []
-
-        self.val_loss = None
-        self.avg_val_loss = 0.0
-        self.val_hist = []
-        self.val_losses = []
-        self.val_counter = 0
 
     def _load_config_params(self):
         self.experiment_base_path = self.config.get('EXPERIMENT_BASE_PATH',
@@ -187,12 +185,8 @@ class AbstractTrainer():
         prediction = result['output']
         self.net.train(True)
         if self.gt_example is not None:
-            # Print examples are torch tensors already so we must detach them
-            gt_example = self.gt_example.cpu().detach().numpy()
-            ground_truth = util.denormalize(gt_example,
-                                           self.dataset.mean,
-                                           self.dataset.std)
-            psnr = util.PSNR(ground_truth, prediction, 255)
+            psnr = util.PSNR(self.gt_example, prediction, 255)
+            print('PSNR on one example', psnr)
             self.writer.add_scalar('psnr', psnr, print_step)
 
         prediction = prediction.astype(np.uint8)
@@ -248,8 +242,9 @@ class AbstractTrainer():
 
     def _on_epoch_end(self):
         # Needed by subclasses
-        self.running_loss = (np.mean(self.train_losses))
-        print("Epoch:", self.current_epoch, "| Avg. epoch loss:", self.running_loss)
+        #self.running_loss = (np.mean(self.train_losses))
+        print("Epoch:", self.current_epoch,
+              "| Avg. epoch loss:", np.mean(self.train_losses))
         self.train_losses = np.array(self.train_losses)
         print("Avg. loss: "+str(np.mean(self.train_losses))+"+-" +
             str(np.std(self.train_losses)/np.sqrt(self.train_losses.size)))
@@ -264,11 +259,14 @@ class AbstractTrainer():
             self._write_tensorboard_data()
             self._write_custom_tensorboard_data()
 
+        print('')
+
     def train(self):
         """This method performs training of this network using the earlier
         set configuration and parameters.
         """
         print('Training...')
+        print('')
         # loop over the dataset multiple times
         for step in range(self.epochs):
             self.train_losses = []
@@ -276,8 +274,9 @@ class AbstractTrainer():
 
             # Iterate over virtual batch
             start = time.clock()
-            for i in range(self.virtual_batch_size):
-                sample = next(iter(self.train_loader))
+            iterator = iter(self.train_loader)
+            for _ in range(self.virtual_batch_size):
+                sample = next(iterator)
                 result = self.net.training_predict(sample)
                 self.train_loss = self.net.loss_function(result)
                 self.train_loss.backward()
