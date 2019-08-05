@@ -17,13 +17,12 @@ class UNet(AbstractUNet):
     @staticmethod
     def loss_function(result):
         output, ground_truth, mask = result['output'], result['gt'], result['mask']
-        mask_sum = torch.sum(mask, dim=(1, 2, 3))
-        difference = torch.sum(mask * (ground_truth - output)**2, dim=(1, 2, 3))
+        mask_sum = torch.sum(mask)
+        difference = torch.sum(mask * (ground_truth - output)**2)
         # NOTE: if the config for the network is wrong and no hot pixels were
-        # selected to be replaced during N2V training, we divide by 0 because
-        # of mask_sum resulting in NaN loss.
+        # selected to be replaced during N2V training, we get a NaN loss because
+        # of division by 0 (mask_sum).
         loss = difference / mask_sum
-        loss = torch.mean(loss)
         return loss
 
     def forward(self, x):
@@ -48,8 +47,7 @@ class UNet(AbstractUNet):
         raw, gt, mask = sample['raw'], sample['gt'], sample['mask']
 
         # Move to GPU
-        raw, gt, mask = raw.to(
-            self.device), gt.to(self.device), mask.to(self.device)
+        raw, gt, mask = raw.to(self.device), gt.to(self.device), mask.to(self.device)
 
         # Forward step
         output = self(raw)

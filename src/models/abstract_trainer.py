@@ -2,6 +2,7 @@ import os
 import time
 import logging
 import numpy as np
+import tifffile as tif
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -116,7 +117,7 @@ class AbstractTrainer():
         # NOTE setting a high number of worker somehow results in a slower
         # execution of the training
         self.train_loader = DataLoader(self.dataset, self.config['BATCH_SIZE'],
-                                       num_workers=4,
+                                       num_workers=1,
                                        sampler=train_sampler)
         self.val_loader = DataLoader(self.dataset, 1,
                                      num_workers=4,
@@ -188,19 +189,19 @@ class AbstractTrainer():
         if self.gt_example is not None:
             # Print examples are torch tensors already so we must detach them
             gt_example = self.gt_example.cpu().detach().numpy()
-            ground_truh = util.denormalize(gt_example,
+            ground_truth = util.denormalize(gt_example,
                                            self.dataset.mean,
                                            self.dataset.std)
-            psnr = util.PSNR(ground_truh, prediction, 255)
+            psnr = util.PSNR(ground_truth, prediction, 255)
             self.writer.add_scalar('psnr', psnr, print_step)
 
         prediction = prediction.astype(np.uint8)
         if prediction.shape[-1] == 1:
             prediction = prediction.squeeze()
-            self.writer.add_image('pred', prediction, 
+            self.writer.add_image('pred', prediction,
                                   print_step, dataformats='HW')
         else:
-            self.writer.add_image('pred', prediction, 
+            self.writer.add_image('pred', prediction,
                                   print_step, dataformats='HWC')
 
         for name, param in self.net.named_parameters():
@@ -275,7 +276,7 @@ class AbstractTrainer():
 
             # Iterate over virtual batch
             start = time.clock()
-            for _ in range(self.virtual_batch_size):
+            for i in range(self.virtual_batch_size):
                 sample = next(iter(self.train_loader))
                 result = self.net.training_predict(sample)
                 self.train_loss = self.net.loss_function(result)
@@ -291,7 +292,7 @@ class AbstractTrainer():
                           .format(time.clock() - start))
             if step % self.steps_per_epoch == self.steps_per_epoch - 1:
                 start = time.clock()
-                self.current_epoch = (step + 1) / self.steps_per_epoch
+                self.current_epoch = (step + 1) // self.steps_per_epoch
                 self._on_epoch_end()
                 logging.debug('Validation took {:.4f}s'
                               .format(time.clock() - start))

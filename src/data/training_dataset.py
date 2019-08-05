@@ -12,7 +12,7 @@ import constants
 
 class TrainingDataset(Dataset):
 
-    def __init__(self, raw_images_dir, gt_images_dir=None,
+    def __init__(self, raw_images_dir, gt_images_dir=None, batch_size=24,
                  val_ratio=0.1, transforms=None, convert_to_format=None,
                  add_normalization_transform=True, keep_in_memory=True,
                  num_pixels=32.0, seed=constants.NP_RANDOM_SEED):
@@ -23,10 +23,11 @@ class TrainingDataset(Dataset):
                         .format(type(transforms))
 
         self._keep_in_memory = keep_in_memory
-        self._num_pixels = num_pixels
+        self.num_pixels = num_pixels
+        self.batch_size = batch_size
         # This is important as we want to keep all images in memory and some
         # don't need float32 precision because they were uint8 originally
-        self._convert_to_format = convert_to_format
+        self.convert_to_format = convert_to_format
         # If set to train, transforms are applied to data when loading, if set
         # to 'eval' not
         self._mode = 'train'
@@ -69,6 +70,8 @@ class TrainingDataset(Dataset):
         indices = util.shuffle(indices, seed)
         self.train_indices, self.val_indices = indices[split:], indices[:split]
 
+        self._init_indices()
+
     def _load_raw_images(self, raw_images_dir):
         assert os.path.exists(raw_images_dir)
         assert os.path.isdir(raw_images_dir)
@@ -84,10 +87,10 @@ class TrainingDataset(Dataset):
             raw_images = [tif.imread(raw_image_path) for raw_image_path
                           in raw_image_paths]
             self.raw_images = np.array(raw_images)
-            if self._convert_to_format is not None:
+            if self.convert_to_format is not None:
                 # We convert the data here as this saves memory if the data
                 # does not need to be stored in float32
-                self.raw_images = self.raw_images.astype(self._convert_to_format)
+                self.raw_images = self.raw_images.astype(self.convert_to_format)
 
     def _load_gt_images(self, gt_images_dir):
         # If there are no ground-truth images we learn the network
@@ -107,11 +110,11 @@ class TrainingDataset(Dataset):
                 gt_images = [tif.imread(gt_image_path) for gt_image_path
                           in gt_image_paths]
                 self.gt_images = np.array(gt_images)
-                if self._convert_to_format is not None:
+                if self.convert_to_format is not None:
                     # We convert the data here as this saves memory if the data
                     # does not need to be stored in float32
                     self.raw_images = self.raw_images.astype(
-                                                        self._convert_to_format)
+                                                        self.convert_to_format)
             train_mode = 'clean'
         else:
             # If we want to train N2V style
@@ -210,6 +213,10 @@ class TrainingDataset(Dataset):
             # Make sure the images get deleted right away
             del images
             return mean, std
+
+    def _init_indices(self):
+        self.current_train_indices = self.train_indices.copy()
+        self.current_val_indices = self.val_indices.copy()
 
     def __len__(self):
         # Use paths because in non-memory mode raw_images are not loaded
@@ -359,7 +366,7 @@ class TrainingDataset(Dataset):
             raise ValueError('Unkown shape format. Neither [C, H, W] nor [H, W, C].')
 
         if self._train_mode == 'void':
-            mask = TrainingDataset._noise_to_void_preparation(self._num_pixels,
+            mask = TrainingDataset._noise_to_void_preparation(self.num_pixels,
                                                               transformed_raw_image,
                                                               transformed_shape,
                                                               image_mode)
@@ -379,6 +386,12 @@ class TrainingDataset(Dataset):
             mask = functional.to_tensor(mask)
         sample['mask'] = mask
         return sample
+
+    def __iter__(self):
+        return self
+    
+    def __next__(self):
+        pass
         
     def training_example(self):
         raw_image = tif.imread(self._training_example['raw'])

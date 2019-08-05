@@ -57,9 +57,9 @@ class AbstractPredictor():
         for data_pred_raw_dir in self.config['DATA_PRED_RAW_DIRS']:
             data_pred_raw_dirs.append(os.path.join(data_base_dir,
                                                    data_pred_raw_dir))
-        if 'DATA_TRAIN_GT_DIRS' in self.config:
+        if 'DATA_PRED_GT_DIRS' in self.config:
             data_pred_gt_dirs = []
-            for data_train_gt_dir in self.config['DATA_TRAIN_GT_DIRS']:
+            for data_train_gt_dir in self.config['DATA_PRED_GT_DIRS']:
                 data_train_gt_dir = os.path.join(data_base_dir,
                                                  data_train_gt_dir)
                 data_pred_gt_dirs.append(data_train_gt_dir)
@@ -144,13 +144,17 @@ class AbstractPredictor():
             if self.with_gt:
                 # We get Pytorch tensors from the dataset
                 ground_truth = sample['gt'].cpu().detach().numpy()
-                raw = raw.cpu().detach().numpy()
+                # Ground-truth is normalized in dataset
+                ground_truth = util.denormalize(ground_truth,
+                                                self.net.mean,
+                                                self.net.std)
                 psnr = util.PSNR(ground_truth, prediction, 255)
                 psnr_values.append(psnr)
                 mse = util.MSE(ground_truth, prediction)
                 mse_values.append(mse)
                 results[pred_image_filename] = {'psnr' : psnr,
                                                 'mse'  : mse}
+                raw = raw.cpu().detach().numpy()
                 raw = util.denormalize(raw, self.net.mean, self.net.std)
                 #TODO 255 might not be correct for SimSim data
                 print("PSNR raw {:.4f}".format(util.PSNR(ground_truth, raw, 255)))
