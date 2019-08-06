@@ -18,30 +18,32 @@ class AbstractTrainer():
     training iterations.
     """
     
-    experiment_base_path = None
+    def _init_attributes(self):
+        self.experiment_base_path = None
 
-    epochs = 0
-    virtual_batch_size = 0
-    steps_per_epoch = 0
-    patch_size = 0
-    overlap = 0
-    write_tensorboard_data = False
+        self.epochs = 0
+        self.virtual_batch_size = 0
+        self.steps_per_epoch = 0
+        self.patch_size = 0
+        self.overlap = 0
+        self.write_tensorboard_data = False
 
-    current_epoch = 0
-    running_loss = 0.0
+        self.current_epoch = 0
+        self.running_loss = 0.0
 
-    train_loss = None
-    avg_train_loss = 0.0
-    train_hist = []
-    train_losses = []
+        self.train_loss = None
+        self.avg_train_loss = 0.0
+        self.train_hist = []
+        self.train_losses = []
 
-    val_loss = None
-    avg_val_loss = 0.0
-    val_hist = []
-    val_losses = []
-    val_counter = 0
+        self.val_loss = None
+        self.avg_val_loss = 0.0
+        self.val_hist = []
+        self.val_losses = []
+        self.val_counter = 0
 
     def __init__(self, config, config_path):
+        self._init_attributes()
         self.config = config
         self.config_path = config_path
         self._load_config_params()

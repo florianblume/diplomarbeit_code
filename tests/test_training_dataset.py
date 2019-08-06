@@ -1,4 +1,6 @@
 import numpy as np
+import pytest
+import torch
 
 from tests import base_test
 from tests import conftest
@@ -6,280 +8,312 @@ from tests import conftest
 import util
 from data import TrainingDataset
 from data.transforms import RandomCrop, RandomFlip, RandomRotation, ToTensor
-import constants
 
-def abstract_raw_images_test(all_size, val_ratio, train_size, val_size,
-                             keep_in_memory):
-    dataset = TrainingDataset(conftest.tmp_raw_dir.name, val_ratio=val_ratio,
-                              add_normalization_transform=False,
-                              keep_in_memory=keep_in_memory)
-    assert len(dataset) == all_size
-    assert len(dataset.train_indices) == train_size
-    assert len(dataset.val_indices) == val_size
-    raw_images = np.array(conftest.create_raw_images())
+CURRENT_MULTI_DATASET = 0
+CURRENT_DATASET = 0
+
+def joint_shuffle(inA, inB):
+    return inA, inB
+
+def shuffle(inA, seed):
+    return inA
+
+def _example_index(length):
+    return 0
+
+def _stratified_coord_x(max):
+    return np.random.randint(max)
+
+def _stratified_coord_y(max):
+    return np.random.randint(max)
+
+def _hot_pixel_replacement_index(length):
+    return np.random.randint(length)
+
+def _train_indices_permutation(indices):
+    return indices
+
+def _val_indices_permutation(indices):
+    return indices
+
+def _dataset_index_even_single_dataset(num_datasets):
+    return 0
+
+def _dataset_index_even_multi_dataset(num_datasets):
+    global CURRENT_DATASET
+    index = CURRENT_DATASET
+    CURRENT_DATASET += 1
+    CURRENT_DATASET %= num_datasets
+    return index
+
+def _dataset_index_proportional_single_dataset(num_indices):
+    # Return 0 here as we only have one dataset and want to use up the indices
+    return 0
+
+def _dataset_index_proportional_multi_dataset_wihtout_val(num_indices):
+    global CURRENT_MULTI_DATASET
+    if CURRENT_MULTI_DATASET < 4:
+        return 0
+    elif CURRENT_MULTI_DATASET < 6:
+        # now all indices of first dataset have been used up and refilled, i.e.
+        # we need to continued at len(dataset_1)
+        return 4
+    elif CURRENT_MULTI_DATASET < 9:
+        # now all indices of the second dataset have been used up and refilled,
+        # i.e. we need to continue at len(dataset_1) + len(dataset_2)
+        return 6
+    raise ValueError
+
+@pytest.fixture(scope='module', autouse=True)
+def setup_module():
+    """We need to remove the randomness of the dataset in order to test it
+    properly.
+    """
+    util.joint_shuffle = joint_shuffle
+    util.shuffle = shuffle
+    TrainingDataset._example_index = _example_index
+    TrainingDataset._stratified_coord_x = _stratified_coord_x
+    TrainingDataset._stratified_coord_y = _stratified_coord_y
+    TrainingDataset._hot_pixel_replacement_index = _hot_pixel_replacement_index
+    TrainingDataset._train_indices_permutation = _train_indices_permutation
+    TrainingDataset._val_indices_permutation = _val_indices_permutation
+    #TrainingDataset._dataset_index_even = _dataset_index_even
+
+##################################
+############# Single dataset tests
+##################################
+
+##### Probabilities proportional to dataset size tests
+
+def abstract_test_single_dataset_mean_std(in_memory):
+    # Dataset 1 has 4 raw images and 2 gt images
+    dataset_1_raw = conftest.dataset_1_raw_images()
+    dataset = TrainingDataset([conftest.dataset_1_raw_dir.name], batch_size=2,
+                              val_ratio=0.5, add_normalization_transform=False,
+                              keep_in_memory=in_memory)
+    assert dataset.mean == np.mean(dataset_1_raw)
+    assert dataset.std == np.std(dataset_1_raw)
+
+def test_single_dataset_mean_std_in_memory():
+    abstract_test_single_dataset_mean_std(True)
+
+def test_single_dataset_mean_std_on_demand():
+    abstract_test_single_dataset_mean_std(False)
+
+def abstract_test_single_dataset_iteration_raw_only_with_val(in_memory):
+    # Dataset 1 has 4 raw images and 2 gt images
+    dataset_1_raw = conftest.dataset_1_raw_images()
+    # Batch size doesn't matter in this case
+    dataset = TrainingDataset([conftest.dataset_1_raw_dir.name],
+                              val_ratio=0.5, add_normalization_transform=False,
+                              keep_in_memory=in_memory)
+    TrainingDataset._index_proportional = _dataset_index_proportional_single_dataset
+    assert len(dataset) == 2
+    # indices[0] because we only have one dataset
+    assert len(dataset.val_indices[0]) == 2
+    # We get back a batch of size 4 with all images in order
     for i in range(len(dataset)):
-        dataset_image = dataset[i]
-        raw_image = dataset_image['raw']
-        gt_image = dataset_image['gt']
-        # N2V i.e. some pixels have randomly been switched, we don't test for those
-        mask = dataset_image['mask'].astype(np.bool)
-        mask = np.invert(mask)
-        np.save('gt.npy', gt_image)
-        np.save('raw.npy', raw_images[i])
-        assert np.array_equal(raw_image[mask], raw_images[i][mask])
-        # Check that noise 2 void has been successfully prepared
-        assert not np.array_equal(raw_image, raw_images[i])
-        assert np.array_equal(gt_image, raw_images[i])
-
-def test_raw_images_with_val():
-    """This test case performs a simple test without transformations and checks
-    whether raw images are returned correctly when specifing
-    a validation ratio of 0.3 and Noise2Void training.
-    """
-    abstract_raw_images_test(3, 0.4, 2, 1, True)
-
-def test_raw_images_without_val():
-    """This test case performs a simple test without transformations and checks
-    whether raw images are returned correctly when specifing
-    a validation ratio of 0 and Noise2Void training.
-    """
-    abstract_raw_images_test(3, 0.0, 3, 0, True)
-
-def test_raw_images_with_val_on_demand():
-    """This test case performs a simple test without transformations and checks
-    whether raw images are returned correctly when specifing
-    a validation ratio of 0.3 and Noise2Void training.
-    """
-    abstract_raw_images_test(3, 0.4, 2, 1, False)
-
-def test_raw_images_without_val_on_demand():
-    """This test case performs a simple test without transformations and checks
-    whether raw images are returned correctly when specifing
-    a validation ratio of 0 and Noise2Void training.
-    """
-    abstract_raw_images_test(3, 0.0, 3, 0, False)
-
-def abstract_raw_gt_images_test(all_size, val_ratio, train_size, val_size,
-                             keep_in_memory):
-    dataset = TrainingDataset(conftest.tmp_raw_dir.name,
-                              conftest.tmp_gt_dir.name,
-                              val_ratio=val_ratio,
-                              add_normalization_transform=False,
-                              keep_in_memory=keep_in_memory)
-    assert len(dataset) == all_size
-    assert len(dataset.train_indices) == train_size
-    assert len(dataset.val_indices) == val_size
-    raw_images = np.array(conftest.create_raw_images())
-    gt_images = np.array(conftest.create_gt_images())
-    for i in range(len(dataset)):
-        dataset_image = dataset[i]
-        # No squeeze necessary here as we have no ToTensor transform which
-        # adds a dimension for pytroch
-        raw_image = dataset_image['raw']
-        gt_image = dataset_image['gt']
-        assert np.array_equal(raw_image, raw_images[i])
-        assert np.array_equal(gt_image, gt_images[i])
-
-def test_raw_gt_images_with_val():
-    """This test case performs a simple test without transformations and checks
-    whether raw and ground-truth images are returned correctly when specifing
-    a validation ratio of 0.3.
-    """
-    abstract_raw_gt_images_test(3, 0.4, 2, 1, True)
-
-def test_raw_gt_num_images_without_val():
-    """This test case performs a simple test without transformations and checks
-    whether raw and ground-truth images are returned correctly when specifing
-    a validation ratio of 0.
-    """
-    abstract_raw_gt_images_test(3, 0.0, 3, 0, True)
-
-def test_raw_gt_images_with_val_on_demand():
-    """This test case performs a simple test without transformations and checks
-    whether raw and ground-truth images are returned correctly when specifing
-    a validation ratio of 0.3.
-    """
-    abstract_raw_gt_images_test(3, 0.4, 2, 1, False)
-
-def test_raw_gt_num_images_without_val_on_demand():
-    """This test case performs a simple test without transformations and checks
-    whether raw and ground-truth images are returned correctly when specifing
-    a validation ratio of 0.
-    """
-    abstract_raw_gt_images_test(3, 0.0, 3, 0, False)
-
-def test_raw_mean_std():
-    """This test case tests whether mean and standard deviation of the data
-    is computed correctly by the dataset.
-    """
-    dataset = TrainingDataset(conftest.tmp_raw_dir.name, val_ratio=0)
-    raw_images = conftest.create_raw_images()
-    mean = np.mean(raw_images)
-    std = np.std(raw_images)
-    assert mean == dataset.mean
-    assert std == dataset.std
-
-def test_raw_transforms():
-    """This test case tests whether the training dataset correctly applies the
-    specified transformations to the data if we want to perform N2V training,
-    i.e. we don't specify gt images and the hot pixels have to be replaced by
-    their neighbors. The actual hot pixel replacement is not tested because
-    it depends on many random draws.
-    """
-    raw_images = conftest.create_raw_images()
-    crop_width = 20
-    crop_height = 20
-    transforms = [RandomCrop(crop_width, crop_height),
-                  RandomFlip(),
-                  RandomRotation(),
-                  ToTensor()]
-    # Setting the seed is actually not necessary because it gets set to this
-    # constant by the dataset already on init
-    dataset = TrainingDataset(conftest.tmp_raw_dir.name,
-                              transforms=transforms,
-                              add_normalization_transform=True,
-                              num_pixels=16,
-                              seed=constants.NP_RANDOM_SEED)
-    # The following numbers are the outcome within the transforms when setting
-    # the numpy seed to 2
-    np.random.seed(2)
-    # For random crop
-    x = 8
-    y = 8
-    flip = True
-    rot = 3
-
-    for i, image in enumerate(raw_images):
-        image = image[y:y+crop_height, x:x+crop_width]
-        image = np.flip(image)
-        image = np.rot90(image, rot)
-        image = util.normalize(image, dataset.mean, dataset.std)
-        raw_images[i] = image
-
-    np.random.seed(2)
-    for i, converted_image in enumerate(dataset):
-        raw_image = converted_image['raw'].numpy()
-        # Squeeze to get rid of unnecessary torch dimensions
-        raw_image = np.squeeze(raw_image)
-        mask = converted_image['mask'].numpy().squeeze().astype(np.bool)
-        mask = np.invert(mask)
-        # We only check equality where the mask is false because the other pixels
-        # are the hot pixels that have been replaced
-        assert np.array_equal(raw_images[i][mask], raw_image[mask])
-        # Also check that the hot pixels have been replaced somehow
-        assert not np.array_equal(raw_images[i], raw_image)
-        # This seed is important here because we iterate over the dataset
-        # and in its __getitem__ method we need this seed to be set again
-        np.random.seed(2)
-
-def test_raw_gt_transforms():
-    """This test case tests whether the training dataset correctly applies the
-    specified transformations to both the raw and ground-truth data.
-    """
-    raw_images = conftest.create_raw_images()
-    gt_images = conftest.create_gt_images()
-    crop_width = 20
-    crop_height = 20
-    transforms = [RandomCrop(crop_width, crop_height),
-                  RandomFlip(),
-                  RandomRotation(),
-                  ToTensor()]
-    # Setting the seed is actually not necessary because it gets set to this
-    # constant by the dataset already on init
-    dataset = TrainingDataset(conftest.tmp_raw_dir.name,
-                              conftest.tmp_gt_dir.name,
-                              transforms=transforms,
-                              add_normalization_transform=True,
-                              num_pixels=16,
-                              seed=constants.NP_RANDOM_SEED)
-    # The following numbers are the outcome within the transforms when setting
-    # the numpy seed to 2
-    np.random.seed(2)
-    # For random crop
-    x = 8
-    y = 8
-    flip = True
-    rot = 3
-
-    for i, raw_image in enumerate(raw_images):
-        raw_image = raw_image[y:y+crop_height, x:x+crop_width]
-        raw_image = np.flip(raw_image)
-        raw_image = np.rot90(raw_image, rot)
-        raw_image = util.normalize(raw_image, dataset.mean, dataset.std)
-        raw_images[i] = raw_image
-
-        gt_image = gt_images[i]
-        gt_image = gt_image[y:y+crop_height, x:x+crop_width]
-        gt_image = np.flip(gt_image)
-        gt_image = np.rot90(gt_image, rot)
-        gt_image = util.normalize(gt_image, dataset.mean, dataset.std)
-        gt_images[i] = gt_image
-
-
-    # Dataset shuffles the data, too
-    raw_images, gt_images = util.joint_shuffle(np.array(raw_images),
-                                               np.array(gt_images),
-                                               constants.NP_RANDOM_SEED)
-
-    np.random.seed(2)
-    for i, converted_image in enumerate(dataset):
-        raw_image = converted_image['raw'].numpy()
-        gt_image = converted_image['gt'].numpy()
-        # Squeeze to get rid of unnecessary torch dimensions
-        raw_image = np.squeeze(raw_image)
-        gt_image = np.squeeze(gt_image)
-        mask = converted_image['mask'].numpy().squeeze().astype(np.bool)
-        mask_test = np.ones_like(mask)
-        assert np.array_equal(mask, mask_test)
-        mask = np.invert(mask)
-        # No need to check for the inequality like in the test case above
-        # because we gave gt data (i.e. clean targets) and thus the mask should
-        # be 1 everywhere
-        assert np.array_equal(raw_images[i][mask], raw_image[mask])
-        assert np.array_equal(gt_images[i][mask], gt_image[mask])
-        # This seed is important here because we iterate over the dataset
-        # and in its __getitem__ method we need this seed to be set again
-        np.random.seed(2)
+        sample = dataset[i]
+        raw = sample['raw'].squeeze()
+        gt = sample['gt'].squeeze()
+        mask = ~sample['mask'].astype(np.bool)
+        # Second half are training indices in TrainingDataset that's why we do
+        # i + 2
+        assert np.array_equal(raw[mask], dataset_1_raw[i + 2][mask])
+        assert not np.array_equal(raw, dataset_1_raw[i + 2])
+        assert np.array_equal(sample['gt'], dataset_1_raw[i + 2])
     
-def abstract_format_to_test(keep_in_memory):
-    dataset = TrainingDataset(conftest.tmp_raw_dir.name,
-                              conftest.tmp_gt_dir.name,
+def test_single_dataset_iteration_raw_only_with_val_in_memory():
+    abstract_test_single_dataset_iteration_raw_only_with_val(True)
+
+def test_single_dataset_iteration_raw_only_with_val_on_demand():
+    abstract_test_single_dataset_iteration_raw_only_with_val(False)
+
+def abstract_test_single_dataset_raw_only_with_val(in_memory):
+    # Dataset 1 has 4 raw images and 2 gt images
+    dataset_1_raw = conftest.dataset_1_raw_images()
+    dataset = TrainingDataset([conftest.dataset_1_raw_dir.name], batch_size=2,
+                              val_ratio=0.5, add_normalization_transform=False,
+                              keep_in_memory=in_memory)
+    TrainingDataset._index_proportional = _dataset_index_proportional_single_dataset
+    assert len(dataset) == 2
+    # indices[0] because we only have one dataset
+    assert len(dataset.val_indices[0]) == 2
+    # We get back a batch of size 4 with all images in order
+    sample = next(iter(dataset))
+    for i, raw in enumerate(sample['raw']):
+        mask = ~sample['mask'][i].astype(np.bool)
+        # Second half are training indices in TrainingDataset
+        assert np.array_equal(raw[mask], dataset_1_raw[i + 2][mask])
+        assert not np.array_equal(raw, dataset_1_raw[i + 2])
+        assert np.array_equal(sample['gt'][i], dataset_1_raw[i + 2])
+    for i, val in enumerate(dataset.validation_samples()):
+        mask = val['mask'].squeeze().astype(np.bool)
+        # We do not have any hot pixel replacement during validation because
+        # we perform validation like actual testing
+        assert mask.all()
+        # First half are training indices in TrainingDataset
+        val_raw = val['raw'].squeeze()
+        val_gt = val['gt'].squeeze()
+        assert np.array_equal(val_raw, dataset_1_raw[i])
+        assert np.array_equal(val_gt, dataset_1_raw[i])
+
+def test_single_dataset_raw_only_with_val_in_memory():
+    abstract_test_single_dataset_raw_only_with_val(True)
+
+def test_single_dataset_raw_only_with_val_on_demand():
+    abstract_test_single_dataset_raw_only_with_val(False)
+
+def abstract_test_single_dataset_raw_only(in_memory):
+    # Dataset 1 has 4 raw images and 2 gt images
+    dataset_1_raw = conftest.dataset_1_raw_images()
+    dataset = TrainingDataset([conftest.dataset_1_raw_dir.name], batch_size=4,
+                              val_ratio=0, add_normalization_transform=False,
+                              keep_in_memory=in_memory)
+    TrainingDataset._index_proportional = _dataset_index_proportional_single_dataset
+    # indices[0] because we only have one dataset
+    assert len(dataset) == 4
+    assert len(dataset.val_indices[0]) == 0
+    # We get back a batch of size 4 with all images in order
+    sample = next(iter(dataset))
+    for i, raw in enumerate(sample['raw']):
+        mask = ~sample['mask'][i].astype(np.bool)
+        # Second half are training indices in TrainingDataset
+        assert np.array_equal(raw[mask], dataset_1_raw[i][mask])
+        assert not np.array_equal(raw, dataset_1_raw[i])
+        assert np.array_equal(sample['gt'][i], dataset_1_raw[i])
+
+def test_single_dataset_raw_only_in_memory():
+    abstract_test_single_dataset_raw_only(True)
+
+def test_single_dataset_raw_only_on_demand():
+    abstract_test_single_dataset_raw_only(False)
+
+def abstract_test_single_dataset_raw_only_batch_size(in_memory):
+    # Dataset 1 has 4 raw images and 2 gt images
+    dataset_1_raw = conftest.dataset_1_raw_images()
+    # Every image gets used 4 times in this setting
+    dataset = TrainingDataset([conftest.dataset_1_raw_dir.name], batch_size=16,
+                              val_ratio=0, add_normalization_transform=False,
+                              keep_in_memory=in_memory)
+    TrainingDataset._index_proportional = _dataset_index_proportional_single_dataset
+    assert len(dataset) == 4
+    # indices[0] because we only have one dataset
+    assert len(dataset.val_indices[0]) == 0
+    # We get back a batch of size 4 with all images in order
+    sample = next(iter(dataset))
+    for i, raw in enumerate(sample['raw']):
+        mask = ~sample['mask'][i].astype(np.bool)
+        # Second half are training indices in TrainingDataset
+        #assert np.array_equal(raw[mask], dataset_1_raw[i][mask])
+        assert not np.array_equal(raw, dataset_1_raw[i%4])
+        assert np.array_equal(sample['gt'][i], dataset_1_raw[i%4])
+
+def test_single_dataset_raw_only_batch_size_in_memory():
+    abstract_test_single_dataset_raw_only_batch_size(True)
+
+def test_single_dataset_raw_only_batch_size_on_demand():
+    abstract_test_single_dataset_raw_only_batch_size(False)
+
+def abstract_test_single_dataset_raw_only_with_transforms(in_memory):
+    # Dataset 1 has 4 raw images and 2 gt images
+    dataset_1_raw = conftest.dataset_1_raw_images()
+    transforms = [RandomCrop(20, 20), ToTensor()]
+    dataset = TrainingDataset([conftest.dataset_1_raw_dir.name], batch_size=4,
+                              val_ratio=0, add_normalization_transform=True,
+                              transforms=transforms,
+                              keep_in_memory=in_memory)
+    assert len(dataset) == 4
+    # indices[0] because we only have one dataset
+    assert not dataset.val_indices[0]
+    # We get back a batch of size 4 with all images in order
+    sample = next(iter(dataset))
+    raw = sample['raw']
+    assert isinstance(raw, torch.Tensor)
+    assert raw.shape == (4, 1, 20, 20)
+    gt = sample['gt']
+    assert isinstance(gt, torch.Tensor)
+    assert gt.shape == (4, 1, 20, 20)
+
+def test_single_dataset_raw_only_with_transforms_in_memory():
+    abstract_test_single_dataset_raw_only_with_transforms(True)
+
+def test_single_dataset_raw_only_with_transforms_on_demand():
+    abstract_test_single_dataset_raw_only_with_transforms(False)
+
+def abstract_test_single_dataset_raw_gt_with_val(in_memory):
+    # Dataset 1 has 4 raw images and 2 gt images
+    dataset_1_raw = conftest.dataset_1_raw_images()
+    dataset_1_gt = conftest.dataset_1_gt_images()
+    factor = 2
+    dataset = TrainingDataset([conftest.dataset_1_raw_dir.name],
+                              [conftest.dataset_1_gt_dir.name],
+                              batch_size=2, val_ratio=0.5,
                               add_normalization_transform=False,
-                              convert_to_format='uint8',
-                              keep_in_memory=keep_in_memory,
-                              num_pixels=16,
-                              seed=constants.NP_RANDOM_SEED)
-    for _, sample in enumerate(dataset):
-        assert sample['raw'].dtype == np.uint8
-        assert sample['gt'].dtype == np.uint8
+                              keep_in_memory=in_memory)
+    TrainingDataset._index_proportional = _dataset_index_proportional_single_dataset
+    assert len(dataset) == 2
+    # indices[0] because we only have one dataset
+    assert len(dataset.val_indices[0]) == 2
+    # We get back a batch of size 4 with all images in order
+    sample = next(iter(dataset))
+    for i, raw in enumerate(sample['raw']):
+        mask = sample['mask'][i].astype(np.bool)
+        assert mask.all()
+        # Second half are training indices in TrainingDataset
+        assert np.array_equal(raw, dataset_1_raw[i + 2])
+        assert np.array_equal(sample['gt'][i], dataset_1_gt[int((i + 2) / factor)])
+    for i, val in enumerate(dataset.validation_samples()):
+        mask = val['mask'].squeeze().astype(np.bool)
+        assert mask.all()
+        val_raw = val['raw'].squeeze()
+        val_gt = val['gt'].squeeze()
+        assert np.array_equal(val_raw, dataset_1_raw[i])
+        assert np.array_equal(val_gt, dataset_1_gt[int(i / factor)])
+
+def test_single_dataset_raw_gt_with_val_in_memory():
+    abstract_test_single_dataset_raw_gt_with_val(True)
+
+def test_single_dataset_raw_gt_with_val_on_demand():
+    abstract_test_single_dataset_raw_gt_with_val(False)
+
+##### Even probabilities tests
+
+def abstract_test_single_dataset_raw_only_with_val_even(in_memory):
+    # Dataset 1 has 4 raw images and 2 gt images
+    dataset_1_raw = conftest.dataset_1_raw_images()
+    dataset = TrainingDataset([conftest.dataset_1_raw_dir.name], batch_size=2,
+                              val_ratio=0.5, add_normalization_transform=False,
+                              distribution_mode='even', keep_in_memory=in_memory)
+    TrainingDataset._dataset_index_even = _dataset_index_even_single_dataset
+    assert len(dataset) == 2
+    # indices[0] because we only have one dataset
+    assert len(dataset.val_indices[0]) == 2
+    # We get back a batch of size 4 with all images in order
+    sample = next(iter(dataset))
+    for i, raw in enumerate(sample['raw']):
+        mask = ~sample['mask'][i].astype(np.bool)
+        # Second half are training indices in TrainingDataset
+        assert np.array_equal(raw[mask], dataset_1_raw[i + 2][mask])
+        assert not np.array_equal(raw, dataset_1_raw[i + 2])
+        assert np.array_equal(sample['gt'][i], dataset_1_raw[i + 2])
+    for i, val in enumerate(dataset.validation_samples()):
+        mask = val['mask'].squeeze().astype(np.bool)
+        # We do not have any hot pixel replacement during validation because
+        # we perform validation like actual testing
+        assert mask.all()
+        # First half are training indices in TrainingDataset
+        val_raw = val['raw'].squeeze()
+        val_gt = val['gt'].squeeze()
+        assert np.array_equal(val_raw, dataset_1_raw[i])
+        assert np.array_equal(val_gt, dataset_1_raw[i])
     
-def test_format_to_in_memory():
-    abstract_format_to_test(True)
+def test_single_dataset_raw_only_with_val_even_in_memory():
+    abstract_test_single_dataset_raw_only_with_val_even(True)
+    
+def test_single_dataset_raw_only_with_val_even_on_demand():
+    abstract_test_single_dataset_raw_only_with_val_even(False)
 
-def test_format_to_on_demand():
-    abstract_format_to_test(False)
-
-def abstract_image_factor_test(keep_in_memory):
-    dataset = TrainingDataset(conftest.tmp_raw_dir.name,
-                              conftest.tmp_single_gt_dir.name,
-                              val_ratio=0,
-                              add_normalization_transform=False,
-                              keep_in_memory=keep_in_memory)
-    assert len(dataset.raw_image_paths) == 3
-    assert len(dataset.gt_image_paths) == 1
-    raw_images = np.array(conftest.create_raw_images())
-    gt_image = conftest.create_single_gt_image()
-    for i in range(len(dataset)):
-        dataset_image = dataset[i]
-        # No squeeze necessary here as we have no ToTensor transform which
-        # adds a dimension for pytroch
-        raw_image = dataset_image['raw']
-        gt_image = dataset_image['gt']
-        assert np.array_equal(raw_image, raw_images[i])
-        assert np.array_equal(gt_image, gt_image)
-
-def test_image_factor():
-    abstract_image_factor_test(True)
-
-def test_image_factor_on_demand():
-    abstract_image_factor_test(False)
+##################################
+############# Multi dataset tests
+##################################

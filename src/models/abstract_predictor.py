@@ -4,8 +4,6 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 import tifffile as tif
-from torch.utils.data import DataLoader
-from torch.utils.data.sampler import SequentialSampler
 
 import util
 from data import PredictionDataset

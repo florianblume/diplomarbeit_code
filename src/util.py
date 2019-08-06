@@ -17,8 +17,8 @@ def img_to_tensor(img):
         img.shape = img.shape + (1,)
     else:
         assert len(img.shape) == 3
-        # RGB image
-        assert img.shape[2] == 3
+        # RGB or gray-scale image
+        assert img.shape[2] == 3 or img.shape[2] == 1
     # torch expects channels as the first dimension - this function automatically
     # permuates the dimensions correctly
     imgOut = torchvision.transforms.functional.to_tensor(img)
