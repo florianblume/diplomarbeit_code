@@ -205,7 +205,6 @@ class AbstractTrainer():
         self.net.train(False)
         self.val_losses = []
         self.val_counter = 0
-        self.dataset.eval()
         validation_samples = self.dataset.validation_samples()
         for i, sample in enumerate(validation_samples):
             if i == self.config['VALIDATION_SIZE']:
@@ -217,7 +216,6 @@ class AbstractTrainer():
             self.val_loss = self.net.loss_function(result)
             self.val_losses.append(self.val_loss.item())
         print("Validation loss: {}".format(self.val_loss.item()))
-        self.dataset.train()
 
         # Need to store on class because subclasses need the loss
         self.avg_val_loss = np.mean(self.val_losses)

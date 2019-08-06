@@ -52,17 +52,22 @@ def _dataset_index_proportional_single_dataset(num_indices):
 
 def _dataset_index_proportional_multi_dataset_wihtout_val(num_indices):
     global CURRENT_MULTI_DATASET
+    print('curr', CURRENT_MULTI_DATASET)
     if CURRENT_MULTI_DATASET < 4:
-        return 0
+        result = 0
     elif CURRENT_MULTI_DATASET < 6:
         # now all indices of first dataset have been used up and refilled, i.e.
         # we need to continued at len(dataset_1)
-        return 4
+        result = 1
     elif CURRENT_MULTI_DATASET < 9:
         # now all indices of the second dataset have been used up and refilled,
         # i.e. we need to continue at len(dataset_1) + len(dataset_2)
-        return 6
-    raise ValueError
+        result = 2
+    else:
+        result = 0
+    CURRENT_MULTI_DATASET += 1
+    print('result', result)
+    return result
 
 @pytest.fixture(scope='module', autouse=True)
 def setup_module():
@@ -107,7 +112,7 @@ def abstract_test_single_dataset_iteration_raw_only_with_val(in_memory):
     dataset = TrainingDataset([conftest.dataset_1_raw_dir.name],
                               val_ratio=0.5, add_normalization_transform=False,
                               keep_in_memory=in_memory)
-    TrainingDataset._index_proportional = _dataset_index_proportional_single_dataset
+    TrainingDataset._dataset_index_proportional = _dataset_index_proportional_single_dataset
     assert len(dataset) == 2
     # indices[0] because we only have one dataset
     assert len(dataset.val_indices[0]) == 2
@@ -135,7 +140,7 @@ def abstract_test_single_dataset_raw_only_with_val(in_memory):
     dataset = TrainingDataset([conftest.dataset_1_raw_dir.name], batch_size=2,
                               val_ratio=0.5, add_normalization_transform=False,
                               keep_in_memory=in_memory)
-    TrainingDataset._index_proportional = _dataset_index_proportional_single_dataset
+    TrainingDataset._dataset_index_proportional = _dataset_index_proportional_single_dataset
     assert len(dataset) == 2
     # indices[0] because we only have one dataset
     assert len(dataset.val_indices[0]) == 2
@@ -170,7 +175,7 @@ def abstract_test_single_dataset_raw_only(in_memory):
     dataset = TrainingDataset([conftest.dataset_1_raw_dir.name], batch_size=4,
                               val_ratio=0, add_normalization_transform=False,
                               keep_in_memory=in_memory)
-    TrainingDataset._index_proportional = _dataset_index_proportional_single_dataset
+    TrainingDataset._dataset_index_proportional = _dataset_index_proportional_single_dataset
     # indices[0] because we only have one dataset
     assert len(dataset) == 4
     assert len(dataset.val_indices[0]) == 0
@@ -196,7 +201,7 @@ def abstract_test_single_dataset_raw_only_batch_size(in_memory):
     dataset = TrainingDataset([conftest.dataset_1_raw_dir.name], batch_size=16,
                               val_ratio=0, add_normalization_transform=False,
                               keep_in_memory=in_memory)
-    TrainingDataset._index_proportional = _dataset_index_proportional_single_dataset
+    TrainingDataset._dataset_index_proportional = _dataset_index_proportional_single_dataset
     assert len(dataset) == 4
     # indices[0] because we only have one dataset
     assert len(dataset.val_indices[0]) == 0
@@ -251,7 +256,7 @@ def abstract_test_single_dataset_raw_gt_with_val(in_memory):
                               batch_size=2, val_ratio=0.5,
                               add_normalization_transform=False,
                               keep_in_memory=in_memory)
-    TrainingDataset._index_proportional = _dataset_index_proportional_single_dataset
+    TrainingDataset._dataset_index_proportional = _dataset_index_proportional_single_dataset
     assert len(dataset) == 2
     # indices[0] because we only have one dataset
     assert len(dataset.val_indices[0]) == 2
@@ -317,3 +322,43 @@ def test_single_dataset_raw_only_with_val_even_on_demand():
 ##################################
 ############# Multi dataset tests
 ##################################
+
+def abstract_test_multi_dataset_raw_only(in_memory):
+    # Dataset 1 has 4 raw images and 2 gt images
+    dataset_1_raw = conftest.dataset_1_raw_images()
+    dataset_2_raw = conftest.dataset_2_raw_images()
+    dataset_3_raw = conftest.dataset_3_raw_images()
+    datasets = [dataset_1_raw, dataset_2_raw, dataset_3_raw]
+    dataset = TrainingDataset([conftest.dataset_1_raw_dir.name,
+                               conftest.dataset_2_raw_dir.name,
+                               conftest.dataset_3_raw_dir.name],
+                              batch_size=9, val_ratio=0,
+                              add_normalization_transform=False,
+                              keep_in_memory=in_memory)
+    TrainingDataset._dataset_index_proportional = _dataset_index_proportional_multi_dataset_wihtout_val
+    # indices[0] because we only have one dataset
+    assert len(dataset) == 9
+    assert len(np.array(dataset.val_indices).flatten()) == 0
+    # We get back a batch of size 4 with all images in order
+    sample = next(iter(dataset))
+    for i, raw in enumerate(sample['raw']):
+        mask = ~sample['mask'][i].astype(np.bool)
+        if i < 4:
+            idx = 0
+        elif i < 6:
+            idx = 1
+        else:
+            idx = 2
+        # Second half are training indices in TrainingDataset
+        dataset = datasets[idx]
+        assert np.array_equal(raw[mask], dataset[i][mask])
+        assert not np.array_equal(raw, dataset[i])
+        assert np.array_equal(sample['gt'][i], dataset[i])
+
+def test_multi_dataset_raw_only_in_memory():
+    #abstract_test_multi_dataset_raw_only(True)
+    pass
+
+def test_multi_dataset_raw_only_on_demand():
+    #abstract_test_multi_dataset_raw_only(False)
+    pass

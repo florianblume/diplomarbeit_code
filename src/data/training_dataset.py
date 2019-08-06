@@ -61,7 +61,7 @@ class TrainingDataset(Dataset):
 
     @staticmethod
     def _train_indices_permutation(indices):
-        return np.random.permutation(indices)
+        return np.random.permutation(indices).tolist()
 
     _val_indices_permutation = _train_indices_permutation
 
@@ -69,7 +69,7 @@ class TrainingDataset(Dataset):
 
     @staticmethod
     def _dataset_index_proportional(dataset_sizes):
-        probabilities = dataset_sizes / np.linalg.norm(dataset_sizes)
+        probabilities = dataset_sizes / np.sum(dataset_sizes)
         return np.random.choice(len(dataset_sizes), 1, p=probabilities)[0]
 
     def __init__(self, raw_images_dirs, gt_images_dirs=None, batch_size=24,
@@ -118,14 +118,18 @@ class TrainingDataset(Dataset):
 
         self._load_datasets(seed)
 
-        raws_size = len(np.array(self.raw_image_paths).flatten())
+        flattend_raw_image_paths = [image_path for sublist in\
+                                self.raw_image_paths for image_path in sublist]
+        raws_size = len(flattend_raw_image_paths)
         if self._train_mode == 'void':
             print('Using {} raw images and no gt images for training.'
                    .format(raws_size))
         else:
+            flattend_gt_image_paths = [image_path for sublist in\
+                                self.gt_image_paths for image_path in sublist]
             print('Using {} raw and {} gt images for training.'
                   .format(raws_size,
-                          len(np.array(self.gt_image_paths).flatten())))
+                          len(flattend_gt_image_paths)))
 
         self.mean, self.std = self._compute_mean_and_std()
         print('Dataset has mean {} and standard deviation {}.'\
@@ -315,7 +319,9 @@ class TrainingDataset(Dataset):
             std += tmp / float(self._raw_images.shape[0] * image.shape[0] * image.shape[1] - 1)
         """
         if self._keep_in_memory:
-            return np.mean(self.raw_images), np.std(self.raw_images)
+            # TODO not a nice solution since we store all images again
+            raws_flattened = [raw for sub in self.raw_images for raw in sub]
+            return np.mean(raws_flattened), np.std(raws_flattened)
         else:
             images = []
             for raw_image_paths in self.raw_image_paths:
@@ -323,7 +329,11 @@ class TrainingDataset(Dataset):
                     image = tif.imread(raw_image_path)
                     images.append(image)
 
-            mean, std = np.mean(images), np.std(images)
+            try:
+                mean, std = np.mean(images), np.std(images)
+            except ValueError:
+                raise ValueError('Are you using images of different shapes?')
+
             # Make sure the images get deleted right away
             del images
             return mean, std
@@ -504,7 +514,8 @@ class TrainingDataset(Dataset):
         Returns:
             int -- the length of this dataset
         """
-        return len(np.array(self.train_indices).flatten())
+        flattend_indices = [index for sublist in self.train_indices for index in sublist]
+        return len(flattend_indices)
 
     def __getitem__(self, idx):
         """Returns the image of the specified index. The Dataset class
@@ -575,10 +586,6 @@ class TrainingDataset(Dataset):
 
     def validation_samples(self):
         samples = []
-        if self._last_op_is_to_tensor:
-            module = torch
-        else:
-            module = np
         for dataset_index, val_indices in enumerate(self.val_indices):
             for val_index in val_indices:
                 if self._keep_in_memory:
@@ -589,17 +596,21 @@ class TrainingDataset(Dataset):
                     raw_image = tif.imread(self.raw_image_paths[dataset_index][val_index])
                     gt_image = tif.imread(self.gt_image_paths[dataset_index]\
                                     [int(val_index / self._factors[dataset_index])])
-                mask = module.stack([module.ones(raw_image.shape)])
-                if self._last_op_is_to_tensor:
-                    raw_image = util.img_to_tensor(raw_image)
-                    gt_image = util.img_to_tensor(gt_image)
-                raw_image = module.stack([raw_image])
-                gt_image = module.stack([gt_image])
                 sample = {'raw' : raw_image,
-                          'gt'  : gt_image,
-                          'mask': mask}
+                          'gt'  : gt_image}
                 if self.eval_transforms is not None:
                     sample = self.eval_transforms(sample)
+                raw_shape = sample['raw'].shape
+                # We have [batch_size, channels, H, W] as shape for raw images
+                # but only need [batch_size, H, W] for the mask
+                mask_shape = raw_shape[2:]
+                if self._last_op_is_to_tensor:
+                    # Add batch dimension
+                    sample['raw'] = torch.stack([sample['raw']]).float()
+                    sample['gt'] = torch.stack([sample['gt']]).float()
+                    sample['mask'] = torch.ones((1, 1) + mask_shape).float()
+                else:
+                    sample['mask'] = np.ones(mask_shape)
                 samples.append(sample)
                             
         return samples
