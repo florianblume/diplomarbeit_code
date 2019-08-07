@@ -181,6 +181,9 @@ class AbstractTrainer():
             if 'gt' in training_example:
                 ground_truth = training_example['gt']
                 psnr = util.PSNR(ground_truth, prediction, 255)
+                self.writer.add_scalar('psnr_example_{}'.format(i), 
+                                       psnr, 
+                                       print_step)
                 psnrs.append(psnr)
             prediction = prediction.astype(np.uint8)
             if prediction.shape[-1] == 1:

@@ -160,7 +160,6 @@ class TrainingDataset(Dataset):
             self.gt_image_paths.append(gt_image_paths)
             if gt_images is not None:
                 self.gt_images.append(gt_images)
-                self._factors.append(factor)
 
             # One training example that is the same for all experiments
             np.random.seed(seed)
@@ -439,16 +438,16 @@ class TrainingDataset(Dataset):
         return mask
 
     def _get_sample(self, dataset_index, sample_index):
+        gt_index = int(sample_index / self._factors[dataset_index])
         if self._keep_in_memory:
             # Important that we copy the image otherwise we are editing the
             # original
             raw_image = self.raw_images[dataset_index][sample_index].copy()
-            gt_image = self.gt_images[dataset_index]\
-                            [int(sample_index / self._factors[dataset_index])]
+            images = self.gt_images[dataset_index]
+            gt_image = self.gt_images[dataset_index][gt_index]
         else:
             raw_image = tif.imread(self.raw_image_paths[dataset_index][sample_index])
-            gt_image = tif.imread(self.gt_image_paths[dataset_index]\
-                                    [int(sample_index / self._factors[dataset_index])])
+            gt_image = tif.imread(self.gt_image_paths[dataset_index][gt_index])
 
         sample = {'raw' : raw_image, 'gt' : gt_image}
         if self.transforms is not None:
@@ -605,7 +604,7 @@ class TrainingDataset(Dataset):
                 current_mask[current_item_count] = sample['mask']
                 current_item_count += 1
                 total_item_count += 1
-                if current_item_count == self.batch_size:
+                if current_item_count == batch_size:
                     batches.append({'raw' : current_raw,
                                     'gt'  : current_gt,
                                     'mask': current_mask})
