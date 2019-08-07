@@ -152,16 +152,13 @@ def abstract_test_single_dataset_raw_only_with_val(in_memory):
         assert np.array_equal(raw[mask], dataset_1_raw[i + 2][mask])
         assert not np.array_equal(raw, dataset_1_raw[i + 2])
         assert np.array_equal(sample['gt'][i], dataset_1_raw[i + 2])
-    for i, val in enumerate(dataset.validation_samples()):
-        mask = val['mask'].squeeze().astype(np.bool)
-        # We do not have any hot pixel replacement during validation because
-        # we perform validation like actual testing
-        assert mask.all()
-        # First half are training indices in TrainingDataset
-        val_raw = val['raw'].squeeze()
-        val_gt = val['gt'].squeeze()
-        assert np.array_equal(val_raw, dataset_1_raw[i])
-        assert np.array_equal(val_gt, dataset_1_raw[i])
+    for val in dataset.validation_samples():
+        for i, raw in enumerate(val['raw']):
+            val_raw = raw.squeeze()
+            val_gt = val['gt'][i].squeeze()
+            mask = ~val['mask'][i].squeeze().astype(np.bool)
+            assert np.array_equal(val_raw[mask], dataset_1_raw[i][mask])
+            assert np.array_equal(val_gt, dataset_1_raw[i])
 
 def test_single_dataset_raw_only_with_val_in_memory():
     abstract_test_single_dataset_raw_only_with_val(True)
@@ -268,13 +265,13 @@ def abstract_test_single_dataset_raw_gt_with_val(in_memory):
         # Second half are training indices in TrainingDataset
         assert np.array_equal(raw, dataset_1_raw[i + 2])
         assert np.array_equal(sample['gt'][i], dataset_1_gt[int((i + 2) / factor)])
-    for i, val in enumerate(dataset.validation_samples()):
-        mask = val['mask'].squeeze().astype(np.bool)
-        assert mask.all()
-        val_raw = val['raw'].squeeze()
-        val_gt = val['gt'].squeeze()
-        assert np.array_equal(val_raw, dataset_1_raw[i])
-        assert np.array_equal(val_gt, dataset_1_gt[int(i / factor)])
+    for val in dataset.validation_samples():
+        for i, raw in enumerate(val['raw']):
+            val_raw = raw.squeeze()
+            val_gt = val['gt'][i].squeeze()
+            mask = ~val['mask'][i].squeeze().astype(np.bool)
+            assert np.array_equal(val_raw, dataset_1_raw[i])
+            assert np.array_equal(val_gt, dataset_1_gt[int(i / factor)])
 
 def test_single_dataset_raw_gt_with_val_in_memory():
     abstract_test_single_dataset_raw_gt_with_val(True)
@@ -302,16 +299,13 @@ def abstract_test_single_dataset_raw_only_with_val_even(in_memory):
         assert np.array_equal(raw[mask], dataset_1_raw[i + 2][mask])
         assert not np.array_equal(raw, dataset_1_raw[i + 2])
         assert np.array_equal(sample['gt'][i], dataset_1_raw[i + 2])
-    for i, val in enumerate(dataset.validation_samples()):
-        mask = val['mask'].squeeze().astype(np.bool)
-        # We do not have any hot pixel replacement during validation because
-        # we perform validation like actual testing
-        assert mask.all()
-        # First half are training indices in TrainingDataset
-        val_raw = val['raw'].squeeze()
-        val_gt = val['gt'].squeeze()
-        assert np.array_equal(val_raw, dataset_1_raw[i])
-        assert np.array_equal(val_gt, dataset_1_raw[i])
+    for val in dataset.validation_samples():
+        for i, raw in enumerate(val['raw']):
+            val_raw = raw.squeeze()
+            val_gt = val['gt'][i].squeeze()
+            mask = ~val['mask'][i].squeeze().astype(np.bool)
+            assert np.array_equal(val_raw[mask], dataset_1_raw[i][mask])
+            assert np.array_equal(val_gt, dataset_1_raw[i])
     
 def test_single_dataset_raw_only_with_val_even_in_memory():
     abstract_test_single_dataset_raw_only_with_val_even(True)

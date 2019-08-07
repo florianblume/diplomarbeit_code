@@ -267,14 +267,14 @@ class AbstractTrainer():
         print('Training...')
         print('')
         # loop over the dataset multiple times
+        iterator = iter(self.dataset)
         for step in range(self.epochs):
             self.train_losses = []
             self.optimizer.zero_grad()
 
             # Iterate over virtual batch
             start = time.clock()
-            iterator = iter(self.dataset)
-            for _ in range(self.virtual_batch_size):
+            for i in range(self.virtual_batch_size):
                 sample = next(iterator)
                 result = self.net.training_predict(sample)
                 self.train_loss = self.net.loss_function(result)

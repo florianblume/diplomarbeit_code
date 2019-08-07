@@ -540,6 +540,16 @@ class TrainingDataset(Dataset):
 
     def __iter__(self):
         return self
+
+    def _init_empty_batch(self, batch_size):
+        if self._last_op_is_to_tensor:
+            module = torch
+        else:
+            module = np
+        raw = module.zeros((batch_size,) + self.image_shape)
+        ground_truth = module.zeros((batch_size,) + self.image_shape)
+        mask = module.zeros((batch_size,) + self.image_shape)
+        return raw, ground_truth, mask
     
     def __next__(self):
         """This function assembles a batch of the earlier specified batch size
@@ -557,13 +567,7 @@ class TrainingDataset(Dataset):
                         [batch_size, channels, height, width]
                     'mask' is of the shape [batch_size, heigh, width]
         """
-        if self._last_op_is_to_tensor:
-            module = torch
-        else:
-            module = np
-        raw = module.zeros((self.batch_size,) + self.image_shape)
-        ground_truth = module.zeros((self.batch_size,) + self.image_shape)
-        mask = module.zeros((self.batch_size,) + self.image_shape)
+        raw, ground_truth, mask = self._init_empty_batch(self.batch_size)
         for i in range(self.batch_size):
             if self.distribution_mode == 'even':
                 dataset_index = TrainingDataset._dataset_index_even(
@@ -585,35 +589,34 @@ class TrainingDataset(Dataset):
                 'mask': mask}
 
     def validation_samples(self):
-        samples = []
+        batches = []
+        total_item_count = 0
+        total_indices = len([index for sub in self.val_indices for index in sub])
+        # In case that we already have less validation images than requested
+        # batch size
+        batch_size = min(total_indices - total_item_count, self.batch_size)
+        current_raw, current_gt, current_mask = self._init_empty_batch(batch_size)
+        current_item_count = 0
         for dataset_index, val_indices in enumerate(self.val_indices):
             for val_index in val_indices:
-                if self._keep_in_memory:
-                    raw_image = self.raw_images[dataset_index][val_index]
-                    gt_image = self.gt_images[dataset_index]\
-                            [int(val_index / self._factors[dataset_index])]
-                else:
-                    raw_image = tif.imread(self.raw_image_paths[dataset_index][val_index])
-                    gt_image = tif.imread(self.gt_image_paths[dataset_index]\
-                                    [int(val_index / self._factors[dataset_index])])
-                sample = {'raw' : raw_image,
-                          'gt'  : gt_image}
-                if self.eval_transforms is not None:
-                    sample = self.eval_transforms(sample)
-                raw_shape = sample['raw'].shape
-                # We have [batch_size, channels, H, W] as shape for raw images
-                # but only need [batch_size, H, W] for the mask
-                mask_shape = raw_shape[2:]
-                if self._last_op_is_to_tensor:
-                    # Add batch dimension
-                    sample['raw'] = torch.stack([sample['raw']]).float()
-                    sample['gt'] = torch.stack([sample['gt']]).float()
-                    sample['mask'] = torch.ones((1, 1) + mask_shape).float()
-                else:
-                    sample['mask'] = np.ones(mask_shape)
-                samples.append(sample)
-                            
-        return samples
+                sample = self._get_sample(dataset_index, val_index)
+                current_raw[current_item_count] = sample['raw']
+                current_gt[current_item_count] = sample['gt']
+                current_mask[current_item_count] = sample['mask']
+                current_item_count += 1
+                total_item_count += 1
+                if current_item_count == self.batch_size:
+                    batches.append({'raw' : current_raw,
+                                    'gt'  : current_gt,
+                                    'mask': current_mask})
+                    current_item_count = 0
+                    # Check if we have less remaining indices than the batch
+                    # size would need
+                    batch_size = min(total_indices - total_item_count,
+                                     self.batch_size)
+                    current_raw, current_gt, current_mask =\
+                                self._init_empty_batch(self.batch_size)
+        return batches
 
     def training_examples(self):
         samples = []
