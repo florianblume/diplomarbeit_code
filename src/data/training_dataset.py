@@ -55,17 +55,25 @@ class TrainingDataset(Dataset):
     def _stratified_coord_x(max):
         return np.random.randint(max)
 
-    _stratified_coord_y = _stratified_coord_x
+    @staticmethod
+    def _stratified_coord_y(max):
+        return np.random.randint(max)
 
-    _hot_pixel_replacement_index = _example_index
+    @staticmethod
+    def _hot_pixel_replacement_index(length):
+        return np.random.randint(length)
 
     @staticmethod
     def _train_indices_permutation(indices):
         return np.random.permutation(indices).tolist()
 
-    _val_indices_permutation = _train_indices_permutation
+    @staticmethod
+    def _val_indices_permutation(indices):
+        return np.random.permutation(indices).tolist()
 
-    _dataset_index_even = _example_index
+    @staticmethod
+    def _dataset_index_even(length):
+        return np.random.randint(length)
 
     @staticmethod
     def _dataset_index_proportional(dataset_sizes):
@@ -499,13 +507,6 @@ class TrainingDataset(Dataset):
         sample['mask'] = mask
         return sample
 
-    def _refill_indices_if_needed(self, dataset_index):
-        if not self._current_train_indices[dataset_index]:
-            # We used up all the indices, thus refill the array
-            train_indices = copy.deepcopy(self.train_indices)
-            train_indices = TrainingDataset._train_indices_permutation(train_indices)
-            self._current_train_indices = train_indices
-
     def __len__(self):
         """Returns the length of this dataset. All images of all specified
         datasets are counted.
@@ -549,6 +550,13 @@ class TrainingDataset(Dataset):
         ground_truth = module.zeros((batch_size,) + self.image_shape)
         mask = module.zeros((batch_size,) + self.image_shape)
         return raw, ground_truth, mask
+
+    def _refill_indices_if_needed(self, dataset_index):
+        if not self._current_train_indices[dataset_index]:
+            # We used up all the indices, thus refill the array
+            train_indices = copy.deepcopy(self.train_indices[dataset_index])
+            train_indices = TrainingDataset._train_indices_permutation(train_indices)
+            self._current_train_indices[dataset_index] = train_indices
     
     def __next__(self):
         """This function assembles a batch of the earlier specified batch size
@@ -575,10 +583,10 @@ class TrainingDataset(Dataset):
                 dataset_sizes = [len(dataset) for dataset in self.train_indices]
                 dataset_index = TrainingDataset._dataset_index_proportional(
                                                                 dataset_sizes)
-            self._refill_indices_if_needed(dataset_index)
             # Shuffled already, we just take the first one
             sample_index = self._current_train_indices[dataset_index][0]
             self._current_train_indices[dataset_index].remove(sample_index)
+            self._refill_indices_if_needed(dataset_index)
             sample = self._get_sample(dataset_index, sample_index)
             raw[i] = sample['raw']
             ground_truth[i] = sample['gt']

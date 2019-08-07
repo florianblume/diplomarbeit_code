@@ -47,10 +47,10 @@ class IndexEvenGenerator():
     counter = 0
 
     @staticmethod
-    def _dataset_index_even_multi_dataset(num_datasets):
+    def index(num_datasets):
         index = IndexEvenGenerator.counter
         IndexEvenGenerator.counter += 1
-        IndexEvenGenerator.counter %= num_datasets
+        IndexEvenGenerator.counter %= len(num_datasets)
         return index
 
 class IndexProportionalGenerator():
@@ -373,26 +373,21 @@ def abstract_test_multi_dataset_raw_only(in_memory):
     # indices[0] because we only have one dataset
     assert len(dataset) == 9
     assert len([idx for sub in dataset.val_indices for idx in sub]) == 0
+    dataset_indices = [0, 0, 0, 0, 1, 1, 2, 2, 2]
+    raw_indices = [0, 1, 2, 3, 0, 1, 0, 1, 2]
     # We get back a batch of size 4 with all images in order
     sample = next(iter(dataset))
     for i, raw in enumerate(sample['raw']):
         mask = ~sample['mask'][i].astype(np.bool)
         assert not mask.all()
         gt = sample['gt'][i]
-        if i < 4:
-            dataset_index = 0
-            image_index = i
-        elif i < 6:
-            dataset_index = 1
-            image_index = i - 4
-        else:
-            dataset_index = 2
-            image_index = i - 6
+        dataset_index = dataset_indices[i]
+        raw_index = raw_indices[i]
         # Second half are training indices in TrainingDataset
         test_dataset = datasets[dataset_index]
-        assert np.array_equal(raw[mask], test_dataset[image_index][mask])
-        assert not np.array_equal(raw, test_dataset[image_index])
-        assert np.array_equal(gt, test_dataset[image_index])
+        assert np.array_equal(raw[mask], test_dataset[raw_index][mask])
+        assert not np.array_equal(raw, test_dataset[raw_index])
+        assert np.array_equal(gt, test_dataset[raw_index])
 
 def test_multi_dataset_raw_only_in_memory():
     abstract_test_multi_dataset_raw_only(True)
@@ -418,6 +413,8 @@ def abstract_test_multi_dataset_raw_only_with_val(in_memory):
     # indices[0] because we only have one dataset
     assert len(dataset) == 5
     assert len([idx for sub in dataset.val_indices for idx in sub]) == 4
+    dataset_indices   = [0, 0, 1, 2, 2]
+    raw_train_indices = [2, 3, 1, 1, 2]
     # We get back a batch of size 4 with all images in order
     sample = next(iter(dataset))
     for i, raw in enumerate(sample['raw']):
@@ -425,42 +422,23 @@ def abstract_test_multi_dataset_raw_only_with_val(in_memory):
         # Since N2V training
         assert not mask.all()
         gt = sample['gt'][i]
-        if i < 2:
-            dataset_index = 0
-            # Since validation indices come first, the indices of the two raw
-            # images in our dataset are 2 and 3
-            image_index = [2, 3][i]
-        elif i < 3:
-            dataset_index = 1
-            # Only one image in the second dataset because the other is used
-            # for validaiton
-            image_index = 1
-        else:
-            dataset_index = 2
-            # Same as for dataset 1
-            image_index = [1, 2][i - 3]
-        # Second half are training indices in TrainingDataset
+        dataset_index = dataset_indices[i]
+        raw_index = raw_train_indices[i]
         test_dataset = datasets[dataset_index]
-        assert np.array_equal(raw[mask], test_dataset[image_index][mask])
-        assert not np.array_equal(raw, test_dataset[image_index])
-        assert np.array_equal(gt, test_dataset[image_index])
+        assert np.array_equal(raw[mask], test_dataset[raw_index][mask])
+        assert not np.array_equal(raw, test_dataset[raw_index])
+        assert np.array_equal(gt, test_dataset[raw_index])
+    raw_val_indices = [0, 1, 0, 0]
     for val in dataset.validation_samples():
         for i, raw in enumerate(val['raw']):
-            if i < 2:
-                dataset_index = 0
-                img_index = i
-            elif i < 3:
-                dataset_index = 1
-                img_index = 0
-            elif i < 4:
-                dataset_index = 2
-                img_index = 0
+            dataset_index = dataset_indices[i]
+            raw_index = raw_val_indices[i]
             val_raw = raw.squeeze()
             val_gt = val['gt'][i].squeeze()
             mask = ~val['mask'][i].squeeze().astype(np.bool)
             test_dataset = datasets[dataset_index]
-            assert np.array_equal(val_raw[mask], test_dataset[img_index][mask])
-            assert np.array_equal(val_gt, test_dataset[img_index])
+            assert np.array_equal(val_raw[mask], test_dataset[raw_index][mask])
+            assert np.array_equal(val_gt, test_dataset[raw_index])
 
 def test_multi_dataset_raw_only_with_val_in_memory():
     abstract_test_multi_dataset_raw_only_with_val(True)
@@ -491,25 +469,18 @@ def abstract_test_multi_dataset_raw_gt(in_memory):
     # indices[0] because we only have one dataset
     assert len(dataset) == 9
     assert len([idx for sub in dataset.val_indices for idx in sub]) == 0
+    dataset_indices = [0, 0, 0, 0, 1, 1, 2, 2, 2]
+    raw_indices     = [0, 1, 2, 3, 0, 1, 0, 1, 2]
+    gt_indices      = [0, 0, 1, 1, 0, 1, 0, 0, 0]
     # We get back a batch of size 4 with all images in order
     sample = next(iter(dataset))
     for i, raw in enumerate(sample['raw']):
         mask = sample['mask'][i].astype(np.bool)
         assert mask.all()
         gt = sample['gt'][i]
-        if i < 4:
-            dataset_index = 0
-            raw_index = i
-            # Dataset 1 has factor 1 - 2 raw to gt
-            gt_index = [0, 1][int(i / 2)]
-        elif i < 6:
-            dataset_index = 1
-            raw_index = i - 4
-            gt_index = i - 4
-        else:
-            dataset_index = 2
-            raw_index = i - 6
-            gt_index = 0
+        dataset_index = dataset_indices[i]
+        raw_index = raw_indices[i]
+        gt_index = gt_indices[i]
         # Second half are training indices in TrainingDataset
         raw_dataset = raw_datasets[dataset_index]
         gt_dataset = gt_datasets[dataset_index]
@@ -542,53 +513,36 @@ def abstract_test_multi_dataset_raw_gt_with_val(in_memory):
     IndexProportionalGenerator.counter = 0
     TrainingDataset._dataset_index_proportional =\
                 IndexProportionalGenerator.index_with_val
-    print(dataset.train_indices)
-    print(dataset.val_indices)
     # indices[0] because we only have one dataset
     assert len(dataset) == 5
     assert len([idx for sub in dataset.val_indices for idx in sub]) == 4
+    dataset_indices   = [0, 0, 1, 2, 2]
+    raw_train_indices = [2, 3, 1, 1, 2]
+    gt_train_indices  = [1, 1, 1, 0, 0]
     # We get back a batch of size 4 with all images in order
     sample = next(iter(dataset))
     for i, raw in enumerate(sample['raw']):
         mask = sample['mask'][i].astype(np.bool)
         assert mask.all()
         gt = sample['gt'][i]
-        if i < 2:
-            dataset_index = 0
-            # Since validation indices come first, the indices of the two raw
-            # images in our dataset are 2 and 3
-            raw_index = [2, 3][i]
-            gt_index = 1
-        elif i < 3:
-            dataset_index = 1
-            # Only one image in the second dataset because the other is used
-            # for validaiton
-            raw_index = 1
-            gt_index = 1
-        else:
-            dataset_index = 2
-            # Same as for dataset 1
-            raw_index = [1, 2][i - 3]
-            gt_index = 0
+        dataset_index = dataset_indices[i]
+        raw_index = raw_train_indices[i]
+        gt_index = gt_train_indices[i]
         # Second half are training indices in TrainingDataset
         raw_dataset = raw_datasets[dataset_index]
         gt_dataset = gt_datasets[dataset_index]
         assert np.array_equal(raw, raw_dataset[raw_index])
         assert np.array_equal(gt, gt_dataset[gt_index])
+    raw_val_indices = [0, 1, 0, 0]
+    gt_val_indices  = [0, 0, 0, 0]
     for val in dataset.validation_samples():
         for i, raw in enumerate(val['raw']):
             mask = val['mask'][i].squeeze().astype(np.bool)
             assert mask.all()
             gt_index = 0
-            if i < 2:
-                dataset_index = 0
-                raw_index = i
-            elif i < 3:
-                dataset_index = 1
-                raw_index = 0
-            elif i < 4:
-                dataset_index = 2
-                raw_index = 0
+            dataset_index = dataset_indices[i]
+            raw_index = raw_val_indices[i]
+            gt_index = gt_val_indices[i]
             val_raw = raw.squeeze()
             val_gt = val['gt'][i].squeeze()
             raw_dataset = raw_datasets[dataset_index]
@@ -601,3 +555,207 @@ def test_multi_dataset_raw_gt_with_val_in_memory():
 
 def test_multi_dataset_raw_gt_with_val_on_demand():
     abstract_test_multi_dataset_raw_gt_with_val(False)
+
+# Testing even distribution
+
+def abstract_test_multi_dataset_raw_only_even(in_memory):
+    raw_datasets = [conftest.dataset_1_raw_images(),
+                    conftest.dataset_2_raw_images(),
+                    conftest.dataset_3_raw_images()]
+    dataset = TrainingDataset([conftest.dataset_1_raw_dir.name,
+                               conftest.dataset_2_raw_dir.name,
+                               conftest.dataset_3_raw_dir.name],
+                              batch_size=10, val_ratio=0,
+                              add_normalization_transform=False,
+                              keep_in_memory=in_memory)
+    IndexEvenGenerator.counter = 0
+    TrainingDataset._dataset_index_proportional = IndexEvenGenerator.index
+    # indices[0] because we only have one dataset
+    assert len(dataset) == 9
+    assert len([idx for sub in dataset.val_indices for idx in sub]) == 0
+    # datasets     0  1  2  0  1  2  0  1  2  0
+    raw_indices = [0, 0, 0, 1, 1, 1, 2, 0, 2, 3]
+    # We get back a batch of size 4 with all images in order
+    sample = next(iter(dataset))
+    for i, raw in enumerate(sample['raw']):
+        mask = ~sample['mask'][i].astype(np.bool)
+        assert not mask.all()
+        gt = sample['gt'][i]
+        dataset_index = i % 3
+        raw_dataset = raw_datasets[dataset_index]
+        raw_index = raw_indices[i]
+        assert np.array_equal(raw[mask], raw_dataset[raw_index][mask])
+        assert not np.array_equal(raw, raw_dataset[raw_index])
+        assert np.array_equal(gt, raw_dataset[raw_index])
+
+def test_multi_dataset_raw_only_even_in_memory():
+    abstract_test_multi_dataset_raw_only_even(True)
+
+def test_multi_dataset_raw_only_even_on_demand():
+    abstract_test_multi_dataset_raw_only_even(False)
+
+def abstract_test_multi_dataset_raw_only_with_val_even(in_memory):
+    # Dataset 1 has 4 raw images and 2 gt images
+    raw_datasets = [conftest.dataset_1_raw_images(),
+                    conftest.dataset_2_raw_images(),
+                    conftest.dataset_3_raw_images()]
+    dataset = TrainingDataset([conftest.dataset_1_raw_dir.name,
+                               conftest.dataset_2_raw_dir.name,
+                               conftest.dataset_3_raw_dir.name],
+                              batch_size=6, val_ratio=0.5,
+                              add_normalization_transform=False,
+                              keep_in_memory=in_memory)
+    IndexEvenGenerator.counter = 0
+    TrainingDataset._dataset_index_proportional = IndexEvenGenerator.index
+    # Order of indices because we cut off a part for validation
+    # dataset      0  1  2  0  1  2
+    raw_indices = [2, 1, 1, 3, 1, 2]
+    # indices[0] because we only have one dataset
+    assert len(dataset) == 5
+    assert len([idx for sub in dataset.val_indices for idx in sub]) == 4
+    # We get back a batch of size 4 with all images in order
+    sample = next(iter(dataset))
+    for i, raw in enumerate(sample['raw']):
+        mask = ~sample['mask'][i].astype(np.bool)
+        assert not mask.all()
+        gt = sample['gt'][i]
+        # We are looping through the datasets evenly
+        dataset_index = i % 3
+        raw_dataset = raw_datasets[dataset_index]
+        gt_dataset = gt_datasets[dataset_index]
+        raw_index = raw_indices[i]
+        assert np.array_equal(raw[mask], raw_dataset[raw_index][mask])
+        assert not np.array_equal(raw, raw_dataset[raw_index])
+        assert np.array_equal(gt, raw_dataset[raw_index])
+    # datasets         0  1  2  0
+    val_raw_indices = [0, 0, 0, 1]
+    for i, val in enumerate(dataset.validation_samples()):
+        mask = ~val['mask'][i].astype(np.bool)
+        assert not mask.all()
+        gt = val['gt'][i]
+        # We are looping through the datasets evenly
+        dataset_index = i % 3
+        raw_dataset = raw_datasets[dataset_index]
+        raw_index = val_raw_indices[i]
+        raw = raw_dataset[raw_index]
+        assert np.array_equal(raw[mask], raw_dataset[raw_index][mask])
+        assert not np.array_equal(raw, raw_dataset[raw_index])
+        assert np.array_equal(gt, gt_dataset[gt_index])
+
+
+def test_multi_dataset_raw_only_with_val_even_in_memory():
+    abstract_test_multi_dataset_raw_gt_with_val_even(True)
+
+def test_multi_dataset_raw_only_with_val_even_on_demand():
+    abstract_test_multi_dataset_raw_gt_with_val_even(False)
+
+def abstract_test_multi_dataset_raw_gt_even(in_memory):
+    # Dataset 1 has 4 raw images and 2 gt images
+    raw_datasets = [conftest.dataset_1_raw_images(),
+                    conftest.dataset_2_raw_images(),
+                    conftest.dataset_3_raw_images()]
+    gt_datasets = [conftest.dataset_1_gt_images(),
+                   conftest.dataset_2_gt_images(),
+                   conftest.dataset_3_gt_images()]
+    dataset = TrainingDataset([conftest.dataset_1_raw_dir.name,
+                               conftest.dataset_2_raw_dir.name,
+                               conftest.dataset_3_raw_dir.name],
+                              [conftest.dataset_1_gt_dir.name,
+                               conftest.dataset_2_gt_dir.name,
+                               conftest.dataset_3_gt_dir.name],
+                              batch_size=10, val_ratio=0,
+                              add_normalization_transform=False,
+                              keep_in_memory=in_memory)
+    IndexEvenGenerator.counter = 0
+    TrainingDataset._dataset_index_proportional = IndexEvenGenerator.index
+    # indices[0] because we only have one dataset
+    assert len(dataset) == 9
+    assert len([idx for sub in dataset.val_indices for idx in sub]) == 0
+    # datasets     0  1  2  0  1  2  0  1  2  0
+    raw_indices = [0, 0, 0, 1, 1, 1, 2, 0, 2, 3]
+    gt_indices  = [0, 0, 0, 0, 1, 0, 1, 0, 0, 1]
+    # We get back a batch of size 4 with all images in order
+    sample = next(iter(dataset))
+    for i, raw in enumerate(sample['raw']):
+        mask = sample['mask'][i].astype(np.bool)
+        assert mask.all()
+        gt = sample['gt'][i]
+        # We are looping through the datasets evenly
+        dataset_index = i % 3
+        raw_dataset = raw_datasets[dataset_index]
+        gt_dataset = gt_datasets[dataset_index]
+        raw_index = raw_indices[i]
+        gt_index = gt_indices[i]
+        assert np.array_equal(raw, raw_dataset[raw_index])
+        assert np.array_equal(gt, gt_dataset[gt_index])
+
+def test_multi_dataset_raw_gt_even_in_memory():
+    abstract_test_multi_dataset_raw_gt_even(True)
+
+def test_multi_dataset_raw_gt_even_on_demand():
+    abstract_test_multi_dataset_raw_gt_even(False)
+
+def abstract_test_multi_dataset_raw_gt_with_val_even(in_memory):
+    # Dataset 1 has 4 raw images and 2 gt images
+    raw_datasets = [conftest.dataset_1_raw_images(),
+                    conftest.dataset_2_raw_images(),
+                    conftest.dataset_3_raw_images()]
+    gt_datasets = [conftest.dataset_1_gt_images(),
+                   conftest.dataset_2_gt_images(),
+                   conftest.dataset_3_gt_images()]
+    dataset = TrainingDataset([conftest.dataset_1_raw_dir.name,
+                               conftest.dataset_2_raw_dir.name,
+                               conftest.dataset_3_raw_dir.name],
+                              [conftest.dataset_1_gt_dir.name,
+                               conftest.dataset_2_gt_dir.name,
+                               conftest.dataset_3_gt_dir.name],
+                              batch_size=6, val_ratio=0.5,
+                              add_normalization_transform=False,
+                              keep_in_memory=in_memory)
+    IndexEvenGenerator.counter = 0
+    TrainingDataset._dataset_index_proportional = IndexEvenGenerator.index
+    # Order of indices because we cut off a part for validation
+    # dataset      0  1  2  0  1  2
+    raw_indices = [2, 1, 1, 3, 1, 2]
+    gt_indices  = [1, 1, 0, 1, 1, 0]
+    # indices[0] because we only have one dataset
+    assert len(dataset) == 5
+    assert len([idx for sub in dataset.val_indices for idx in sub]) == 4
+    # We get back a batch of size 4 with all images in order
+    sample = next(iter(dataset))
+    for i, raw in enumerate(sample['raw']):
+        mask = sample['mask'][i].astype(np.bool)
+        assert mask.all()
+        gt = sample['gt'][i]
+        # We are looping through the datasets evenly
+        dataset_index = i % 3
+        raw_dataset = raw_datasets[dataset_index]
+        gt_dataset = gt_datasets[dataset_index]
+        raw_index = raw_indices[i]
+        gt_index = gt_indices[i]
+        assert np.array_equal(raw, raw_dataset[raw_index])
+        assert np.array_equal(gt, gt_dataset[gt_index])
+    # datasets         0  1  2  0
+    val_raw_indices = [0, 0, 0, 1]
+    val_gt_indices  = [0, 0, 0, 0]
+    for i, val in enumerate(dataset.validation_samples()):
+        mask = val['mask'][i].astype(np.bool)
+        assert mask.all()
+        gt = val['gt'][i]
+        # We are looping through the datasets evenly
+        dataset_index = i % 3
+        raw_dataset = raw_datasets[dataset_index]
+        raw_index = val_raw_indices[i]
+        raw = raw_dataset[raw_index]
+        gt_dataset = gt_datasets[dataset_index]
+        gt_index = val_gt_indices[i]
+        gt = gt_dataset[gt_index]
+        assert np.array_equal(raw, raw_dataset[raw_index])
+        assert np.array_equal(gt, gt_dataset[gt_index])
+
+
+def test_multi_dataset_raw_gt_with_val_even_in_memory():
+    abstract_test_multi_dataset_raw_gt_with_val_even(True)
+
+def test_multi_dataset_raw_gt_with_val_even_on_demand():
+    abstract_test_multi_dataset_raw_gt_with_val_even(False)
