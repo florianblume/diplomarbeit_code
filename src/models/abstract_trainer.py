@@ -117,7 +117,7 @@ class AbstractTrainer():
     def _load_network(self):
         raise NotImplementedError
 
-    def _load_custom_states_from_checkpoint(self):
+    def _load_custom_data_from_checkpoint(self, checkpoint):
         # Can be overwritten by subclasses
         pass
 
@@ -138,9 +138,9 @@ class AbstractTrainer():
             self.train_hist = checkpoint['train_hist']
             self.val_loss = checkpoint['val_loss']
             self.val_hist = checkpoint['val_hist']
-            self._load_custom_states_from_checkpoint()
+            self._load_custom_data_from_checkpoint(checkpoint)
 
-    def _create_custom_checkpoint(self):
+    def _custom_checkpoint_data(self):
         # Can be overwritten by subclasses
         return {}
 
@@ -155,10 +155,12 @@ class AbstractTrainer():
                         'train_hist' : self.train_hist,
                         'val_loss': self.val_loss,
                         'val_hist': self.val_hist}
-        default_dict.update(self._create_custom_checkpoint())
+        default_dict.update(self._custom_checkpoint_data())
         return default_dict
 
-    def _write_custom_tensorboard_data(self):
+    def _write_custom_tensorboard_data_for_example(self, 
+                                                   example_result, 
+                                                   example_index):
         # Can be overwritten by subclasses
         pass
 
@@ -193,6 +195,7 @@ class AbstractTrainer():
             else:
                 self.writer.add_image('pred_example_{}'.format(i), prediction,
                                       print_step, dataformats='HWC')
+            self._write_custom_tensorboard_data_for_example(result, i)
         mean_psnr = np.mean(psnrs)
         print('Avg. PSNR on {} examples'.format(len(self.training_examples)),
               mean_psnr)
@@ -210,7 +213,7 @@ class AbstractTrainer():
         self.val_counter = 0
         validation_samples = self.dataset.validation_samples()
         for i, sample in enumerate(validation_samples):
-            if i == self.config['VALIDATION_SIZE']:
+            if i == self.config['MAX_VALIDATION_SIZE']:
                 print('Ran validation for only {} of {} available images.'\
                       .format(i, len(validation_samples)))
                 break
@@ -259,7 +262,6 @@ class AbstractTrainer():
 
         if self.write_tensorboard_data:
             self._write_tensorboard_data()
-            self._write_custom_tensorboard_data()
 
         print('')
 

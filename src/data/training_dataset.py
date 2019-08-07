@@ -160,7 +160,9 @@ class TrainingDataset(Dataset):
                 assert factor.is_integer(), 'Number of raw images needs to be '+\
                                             'divisible by the number of ground-'+\
                                             'truth images.'
-                self._factors.append(factor)
+            else:
+                factor = 1.0
+            self._factors.append(factor)
 
             self.raw_image_paths.append(raw_image_paths)
             if raw_images is not None:
@@ -172,8 +174,10 @@ class TrainingDataset(Dataset):
             # One training example that is the same for all experiments
             np.random.seed(seed)
             example_index = TrainingDataset._example_index(len(raw_image_paths))
-            training_example = {'raw' : raw_image_paths[example_index],
-                                'gt'  : gt_image_paths[example_index]}
+            raw_example = raw_image_paths[example_index]
+            gt_example = gt_image_paths[int(example_index / factor)]
+            training_example = {'raw' : raw_example,
+                                'gt'  : gt_example}
             self._training_examples.append(training_example)
 
             # Create training and validation indices

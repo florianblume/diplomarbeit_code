@@ -61,26 +61,13 @@ class ImageWeightUNet(AbstractWeightNetwork):
         # only based on the patch and not the whole input image.
         return x
 
-    def training_predict(self, train_data, train_data_clean, data_counter, size, box_size, bs):
-        """Performs a forward step during training.
-
-        Arguments:
-            train_data {np.array} -- the normalized raw training data
-            train_data_clean {np.array} -- the normalized ground-truth targets, if available
-            data_counter {int} -- the counter when to shuffle the training data
-            size {int} -- the patch size
-            bs {int} -- the batch size
-
-        Returns:
-            np.array, np.array, np.array, int -- outputs, labels, masks, data_counter
-        """
-        # Init Variables
-        inputs, labels, masks = self.assemble_training__batch(bs, size, box_size,
-                                    data_counter, train_data, train_data_clean)
-
-        # Move to GPU
-        inputs, labels, masks = inputs.to(
-            self.device), labels.to(self.device), masks.to(self.device)
+    def training_predict(self, sample):
+        raw, ground_truth, mask = sample['raw'], sample['gt'], sample['mask']
+        raw, ground_truth, mask = raw.to(self.device),\
+                                   ground_truth.to(self.device),\
+                                   mask.to(self.device)
+        raw, ground_truth, mask = raw.to(
+            self.device), ground_truth.to(self.device), mask.to(self.device)
 
         # Forward step
         # Actually we compute the weights for only one patch here, not the whole
@@ -92,30 +79,34 @@ class ImageWeightUNet(AbstractWeightNetwork):
         # averaging the weights works just as well since the network performs
         # some kind of averaging already but only on the patch-level.
         # [subnets, batch]
-        weights = self(inputs)
+        original_weights = self(raw)
         # [subnets, batch, num_classes, H, W]
-        sub_outputs = torch.stack([sub(inputs) for sub in self.subnets])
+        sub_outputs = torch.stack([sub(raw) for sub in self.subnets])
         # We compute weights on a per-image basis -> one weight for one image
         # If we were to perform Probabilistic Noise2Void we would need
         # the reconstruction of based on the output samples and weight this
         # reconstruction.
         # torch is not able to broadcast weights directly thus we have to
         # expand the shape of the weights.
-        weights = weights.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
-        outputs = torch.sum(weights * sub_outputs, 0)
+        weights = original_weights.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+        weight_sub_outputs = torch.sum(weights * sub_outputs, dim=0)
 
         # [batch, H, W] / [batch]
         # i.e. we divide the patches that are comprised of weighted sums
         # of the outputs of the subnetworks by the sum of the weights
-        outputs /= torch.sum(weights, 0)
+        output = weight_sub_outputs / torch.sum(weights, dim=0)
         
-        return outputs, weights, labels, masks, data_counter
+        return  {'gt'         : ground_truth,
+                 'mask'       : mask,
+                 'output'     : output,
+                 'weights'    : weights,
+                 'sub_outputs': weight_sub_outputs}
 
     def predict(self, image, patch_size, overlap):
         # weights for each subnet for the whole imagess
         weights = []
         # sub_images = [subnets, H, W]
-        sub_images = np.zeros((self.num_subnets, image.shape[0], image.shape[1]))
+        sub_images = np.zeros((self.num_subnets,) + image.shape)
         # We have to use tiling because of memory constraints on the GPU
         xmin = 0
         ymin = 0
@@ -152,24 +143,26 @@ class ImageWeightUNet(AbstractWeightNetwork):
         # across the patches.
         weights = np.exp(weights)
         # Expand dimensions to match the image's
-        weights = np.expand_dims(np.expand_dims(weights, -1), -1)
+        # This shape is [num_subnets, C, H, W]
+        weights = weights.reshape((2, 1, 1, 1))
         # sub_images * weights = [num_subnets, H, W] * [num_subnets]
-        mult = sub_images * weights
-        weighted_average = np.sum(mult, axis=0) / np.sum(weights)
-        return weighted_average, mult, weights
+        weighted_sub_outputs = sub_images * weights
+        output = np.sum(weighted_sub_outputs, axis=0) / np.sum(weights)
+                # Transepose from [C, H, W] to [H, W, C]
+        return {'output'     : output.transpose((1, 2, 0)),
+                # Remove padding that was added to match image's dimension
+                'weights'    : weights.squeeze(),
+                # Transpose from [num_subnets, C, H, W] to [num_subnets, H, W, C]
+                'sub_outputs': weighted_sub_outputs.transpose((0, 2, 3, 1))}
 
     def predict_patch(self, patch):
-        inputs = torch.zeros(1, 1, patch.shape[0], patch.shape[1])
-        inputs[0, :, :, :] = util.img_to_tensor(patch)
-        # copy to GPU
+        # Add one dimension for the batch size which is 1 during prediction
+        inputs = torch.zeros((1,) + patch.size())
+        inputs[0, :, :, :] = patch
+
         inputs = inputs.to(self.device)
         output = self(inputs)
 
-        # In contrast to probabilistic N2V we only have one sample
-        # weights = samples[0, ...]
-
-        # Get data from GPU
         weights = output.cpu().detach().numpy()
-        # Remove unnecessary dimensions
         weights = np.squeeze(weights)
         return weights

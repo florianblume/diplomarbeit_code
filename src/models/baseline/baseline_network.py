@@ -14,8 +14,7 @@ class UNet(AbstractUNet):
     def _build_network_head(self, outs):
         self.network_head = conv1x1(outs, self.in_channels)
 
-    @staticmethod
-    def loss_function(result):
+    def loss_function(self, result):
         output, ground_truth, mask = result['output'], result['gt'], result['mask']
         mask_sum = torch.sum(mask)
         difference = torch.sum(mask * (ground_truth - output)**2)
@@ -44,15 +43,13 @@ class UNet(AbstractUNet):
         return x
 
     def training_predict(self, sample):
-        raw, gt, mask = sample['raw'], sample['gt'], sample['mask']
-
-        # Move to GPU
-        raw, gt, mask = raw.to(self.device), gt.to(self.device), mask.to(self.device)
-
-        # Forward step
+        raw, ground_truth, mask = sample['raw'], sample['gt'], sample['mask']
+        raw, ground_truth, mask = raw.to(self.device),\
+                                   ground_truth.to(self.device),\
+                                   mask.to(self.device)
         output = self(raw)
         return {'output' : output,
-                'gt'     : gt,
+                'gt'     : ground_truth,
                 'mask'   : mask}
 
     def predict(self, image, patch_size, overlap):

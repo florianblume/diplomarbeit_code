@@ -234,8 +234,7 @@ class AbstractUNet(nn.Module):
             init.xavier_normal_(m.weight)
             init.constant_(m.bias, 0)
 
-    @staticmethod
-    def loss_function(result):
+    def loss_function(self, result):
         """The loss function of this network.
         
         Arguments:

@@ -16,6 +16,8 @@ def expand_cells_dataset(base_dir, identifier):
     raw_ouput_folders = ['test', 'train']
     gt_files = ['test_gt.npy', 'training_big_GT.npy']
     gauss_noises = [15, 30]
+    # Size of SimSim images, we create cut outs of fish and mouse for that
+    simsim_shape = [256, 256]
 
     # Extract raw images
     for raw_sub_folder in raw_sub_folders:
@@ -39,7 +41,19 @@ def expand_cells_dataset(base_dir, identifier):
                                           raw_ouput_folders[i])
                 if not os.path.exists(output_dir):
                     os.makedirs(output_dir)
+                cropped_output_dir = os.path.join(base_dir,
+                                                  'data/processed',
+                                                  identifier,
+                                                  'cropped',
+                                                  raw_sub_folder,
+                                                  raw_ouput_folders[i])
+                if not os.path.exists(cropped_output_dir):
+                    os.makedirs(cropped_output_dir)
                 tif.imsave(os.path.join(output_dir, filename), image)
+                x = int(simsim_shape[0] / 2)
+                y = int(simsim_shape[1] / 2)
+                cropped_image = image[y:y+simsim_shape[0], x:x+simsim_shape[1]]
+                tif.imsave(os.path.join(cropped_output_dir, filename), cropped_image)
             # In case that we are processing the normal raw images also
             # add the artificially noised version
             if raw_sub_folder == 'raw':
@@ -49,17 +63,29 @@ def expand_cells_dataset(base_dir, identifier):
                     for j, image in enumerate(data):
                         pretty_index = str(j).zfill(len(str(abs(data.shape[0]))))
                         filename = '{}_{}_{}.tif'.format(identifier,
-                                                        gauss_str,
-                                                        pretty_index)
+                                                         gauss_str,
+                                                         pretty_index)
                         output_dir = os.path.join(base_dir,
-                                                'data/processed',
-                                                identifier,
-                                                gauss_str,
-                                                raw_ouput_folders[i])
+                                                  'data/processed',
+                                                  identifier,
+                                                  gauss_str,
+                                                  raw_ouput_folders[i])
                         if not os.path.exists(output_dir):
                             os.makedirs(output_dir)
-                        image = image.astype(np.float32)
+                        cropped_output_dir = os.path.join(base_dir,
+                                                  'data/processed',
+                                                  identifier,
+                                                  'cropped',
+                                                  gauss_str,
+                                                  raw_ouput_folders[i])
+                        if not os.path.exists(cropped_output_dir):
+                            os.makedirs(cropped_output_dir)
+                        image = image.astype(np.uint8)
                         tif.imsave(os.path.join(output_dir, filename), image)
+                        x = int(simsim_shape[0] / 2)
+                        y = int(simsim_shape[1] / 2)
+                        cropped_image = image[y:y+simsim_shape[0], x:x+simsim_shape[1]]
+                        tif.imsave(os.path.join(cropped_output_dir, filename), cropped_image)
 
     # Extract gt images
     for i, gt_file in enumerate(gt_files):
@@ -82,7 +108,19 @@ def expand_cells_dataset(base_dir, identifier):
                                       raw_ouput_folders[i])
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)
+            cropped_output_dir = os.path.join(base_dir,
+                                              'data/processed',
+                                              identifier,
+                                              'cropped',
+                                              'gt',
+                                              raw_ouput_folders[i])
+            if not os.path.exists(cropped_output_dir):
+                os.makedirs(cropped_output_dir)
             tif.imsave(os.path.join(output_dir, filename), image)
+            x = int(simsim_shape[0] / 2)
+            y = int(simsim_shape[1] / 2)
+            cropped_image = image[y:y+simsim_shape[0], x:x+simsim_shape[1]]
+            tif.imsave(os.path.join(cropped_output_dir, filename), cropped_image)
         
 def expand_simsim_dataset(base_dir):
     train_raw = tif.imread(os.path.join(base_dir,
