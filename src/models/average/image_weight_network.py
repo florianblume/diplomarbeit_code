@@ -162,7 +162,6 @@ class ImageWeightUNet(AbstractWeightNetwork):
         # Keep [num_subnets, batch_size] as shape
         batch_size = weights.shape[1]
         weights.shape = (self.num_subnets, batch_size)
-        weights = weights.transpose((1, 0))
         # Transpose to [batch_size, num_subnets]
         weights = weights.transpose((1, 0))
         # Transpose from [num_subnets, batch_size, C, H, W] to

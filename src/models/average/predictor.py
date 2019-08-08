@@ -25,16 +25,22 @@ class Predictor(AbstractPredictor):
         super(Predictor, self).__init__(config, config_path)
 
     def _load_net(self):
-        weight_mode = self.config['WEIGHT_MODE']
-        assert weight_mode in ['image', 'pixel']
+        self.weight_mode = self.config['WEIGHT_MODE']
+        weight_constraint = self.config.get('WEIGHT_CONSTRAINT', None)
+        weight_constraint_lambda = self.config.get('WEIGHT_CONSTRAINT_LAMBDA', 
+                                                   None)
+        assert self.weight_mode in ['image', 'pixel']
         checkpoint = torch.load(self.network_path)
-        if weight_mode == 'image':
+        if self.weight_mode == 'image':
             Network = ImageWeightUNet
         else:
             Network = PixelWeightUNet
+
         # mean and std get set in the load_state_dict function
         net = Network(self.config['NUM_CLASSES'],
                       checkpoint['mean'], checkpoint['std'],
+                      weight_constraint=weight_constraint, 
+                      weights_lambda=weight_constraint_lambda,
                       in_channels=self.config['IN_CHANNELS'],
                       main_net_depth=self.config['MAIN_NET_DEPTH'],
                       sub_net_depth=self.config['SUB_NET_DEPTH'],
@@ -50,7 +56,7 @@ class Predictor(AbstractPredictor):
         if self.config['WRITE_SUBNETWORK_WEIGHTS']:
             # Save weights for evaluation, etc.
             weights_filename = pred_image_filename + '_weights.tif'
-            tif.imsave(os.path.join(self.pred_output_path, 
+            tif.imsave(os.path.join(self.pred_output_path,
                                     weights_filename), weights)
         if self.config['WRITE_SUBNETWORK_IMAGES']:
             for i, sub_image in enumerate(sub_images):
@@ -74,12 +80,22 @@ class Predictor(AbstractPredictor):
         weights = raw_results['weights']
         # Store to be able to compute the mean later
         self.weights_list.append(weights)
-        weights_sum = np.sum(weights)
-        weights_percentages = [(weight / float(weights_sum)) * 100.0 for
-                               weight in weights]
-        formatted_weights = Predictor.pretty_string(weights, weights_percentages)
-        print("Weights of subnetworks: {}".format(formatted_weights))
-        processed_results[image_name]['weights'] = weights.tolist()
+        if self.weight_mode == 'image':
+            weights_sum = np.sum(weights)
+            weights_percentages = [(weight / float(weights_sum)) * 100.0 for
+                                weight in weights]
+            formatted_weights = Predictor.pretty_string(weights,
+                                                        weights_percentages)
+            print("Weights of subnetworks: {}".format(formatted_weights))
+            processed_results[image_name]['weights'] = weights.tolist()
+        else:
+            # No use in printing the whole image-dimensioned weights
+            # Instead we just print the mean of each weight "image"
+            weights_mean = np.mean(weights, axis=(1, 2))
+            string = ', '.join('{:.4f}'.format(w) for w in weights_mean)
+            formatted_string = string.format(weights)
+            print("Mean of weights of subnetworks: {}".format(formatted_string))
+            processed_results[image_name]['mean_weights'] = weights_mean.tolist()
 
     def _post_process_final_results(self, processed_results):
         self.weights_list = np.array(self.weights_list)
