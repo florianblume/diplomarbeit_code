@@ -1,64 +1,41 @@
-##### Network and data configuration
+DATA_BASE_DIR: "data/processed/"
 
-#### Data paths
-DATA_BASE_PATH: "./data/processed/joined/fish_mouse/"
+DATA_TRAIN_RAW_DIRS: ["fish/avg16/train", "mouse/gauss30/train"]
+DATA_TRAIN_GT_DIRS: ["fish/gt/train", "mouse/gt/train"]
 
-# Set GT path to "" if N2V is to be performed
-DATA_TRAIN_RAW_PATH: "avg16_gauss30/training_big_raw.npy"
-DATA_TRAIN_GT_PATH: "gt/training_big_GT.npy"
-
-DATA_PRED_RAW_PATH: "avg16_gauss30/test_noisy.npy"
-DATA_PRED_GT_PATH: "gt/test_gt.npy"
+DATA_PRED_RAW_DIRS: ["fish/avg16/test", "mouse/gauss30/test"]
+DATA_PRED_GT_DIRS: ["fish/gt/test", "mouse/gt/test"]
 
 CONVERT_DATA_TO: "uint8"
+DISTRIBUTION_MODE: "proportional"
 
-### Network configuration
 MODEL: "average"
-# Specifies whether to compute weights for the whole image or per pixel
 WEIGHT_MODE: "image"
-# Specifies how to constraint the weights for the subnetworks (not the parameters
-# of the network itself). E.g. entropy adds an entropy loss term over the 
-# weights to the existing l2 loss. Possibilities are "", "entropy" or leave out
-WEIGHT_CONSTRAINT: ""
-# The balancing parameter how much influence the constraint has
-WEIGHT_CONSTRAINT_LAMBDA: 0
+WEIGHT_CONSTRAINT: null
+WEIGHT_CONSTRAINT_LAMBDA: null
+MAIN_NET_DEPTH: 3
+NUM_SUBNETS: 2
+SUB_NET_DEPTH: 3
+NUM_CLASSES: 1
+IN_CHANNELS: 1
+
+EPOCHS: 1000
+STEPS_PER_EPOCH: 5
+VALIDATION_RATIO: 0.1
+MAX_VALIDATION_SIZE: 20
 BATCH_SIZE: 24
+AUGMENT_DATA: True
 TRAIN_PATCH_SIZE: 100
 PRED_PATCH_SIZE: 128
 VIRTUAL_BATCH_SIZE: 20
 OVERLAP: 48
-AUGMENT_DATA: True
-# How much of training data should be used for validation
-VALIDATION_RATIO: 0.1
-# Number of images to compute the validation loss with after a backpropagation step
-VALIDATION_SIZE: 20
-STEPS_PER_EPOCH: 5
-EPOCHS: 1000
-AUGMENT_DATA: True
-# Number of classes, in case of Probabilistic N2V we have 800, 1 otherwise
-NUM_CLASSES: 1
-# Depth of the main net computing the weights
-MAIN_NET_DEPTH: 3
-# Number of subnets to use
-NUM_SUBNETS: 2
-# Depth of the subnetworks performing the actual denoising
-SUB_NET_DEPTH: 3
 
-### EXperiment configuration
-# If specified, training will be continued from this checkpoint
-TRAIN_NETWORK_PATH: "best.net"
-# If set to yes, the training process will write data to tensorboard
+#TRAIN_NETWORK_PATH: "best.net"
 WRITE_TENSORBOARD_DATA: yes
-# If set to yes, the network stores an example prediction every STEPS_PER_EPOCH
 WRITE_EXAMPLE_IMAGE: yes
-# Trained network to use for prediction
+
 PRED_NETWORK_PATH: "best.net"
-# Path where to store denoised images, can be "" to omit storing prediction results
 PRED_OUTPUT_PATH: "prediction"
-# Images will be stored using the specified formats. Possible values are 'png' and 'tif'.
 OUTPUT_IMAGE_FORMATS: ["png", "tif"]
-# If set to yes, the network also writes the individual images weighted by their
-# respective weight to the prediction output folder [PRED_OUTPUT_PATH]
 WRITE_SUBNETWORK_IMAGES: yes
-# If set to yes, the network saves the weights computed for the subnetworks
 WRITE_SUBNETWORK_WEIGHTS: yes

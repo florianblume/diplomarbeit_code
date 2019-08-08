@@ -183,16 +183,18 @@ class AbstractTrainer():
             if 'gt' in training_example:
                 ground_truth = training_example['gt']
                 psnr = util.PSNR(ground_truth, prediction, 255)
-                self.writer.add_scalar('psnr_example_{}'.format(i), 
-                                       psnr, 
+                self.writer.add_scalar('psnr_example_{}'.format(i),
+                                       psnr,
                                        print_step)
                 psnrs.append(psnr)
             prediction = prediction.astype(np.uint8)
-            if prediction.shape[-1] == 1:
+            if prediction.shape[-1] == 1 or len(prediction.shape) == 2:
+                # Grayscale image
                 prediction = prediction.squeeze()
                 self.writer.add_image('pred_example_{}'.format(i), prediction,
                                       print_step, dataformats='HW')
             else:
+                # RGB image
                 self.writer.add_image('pred_example_{}'.format(i), prediction,
                                       print_step, dataformats='HWC')
             self._write_custom_tensorboard_data_for_example(result, i)

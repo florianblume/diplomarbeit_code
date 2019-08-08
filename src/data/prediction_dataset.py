@@ -3,8 +3,11 @@ import glob
 import numpy as np
 import tifffile as tif
 import natsort
+import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose
+
+from data.transforms import ToTensor
 
 class PredictionDataset(Dataset):
 
@@ -81,5 +84,9 @@ class PredictionDataset(Dataset):
 
         if self._transform is not None:
             sample = self._transform(sample)
+            if isinstance(self._transform.transforms[-1], ToTensor):
+                # Assemble "batch", maybe we have actual batching in the future
+                sample['raw'] = torch.stack([sample['raw']]).float()
+                sample['gt'] = torch.stack([sample['gt']])
 
         return sample

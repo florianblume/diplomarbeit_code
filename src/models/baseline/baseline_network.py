@@ -1,6 +1,5 @@
 import torch
 import numpy as np
-import tifffile as tif
 
 import util
 from models import AbstractUNet
@@ -53,20 +52,24 @@ class UNet(AbstractUNet):
                 'mask'   : mask}
 
     def predict(self, image, patch_size, overlap):
+        # [batch_size, C, H, W]
         output = np.zeros(image.shape)
-        # We have to use tiling because of memory constraints on the GPU
+        
+        image_height = image.shape[-2]
+        image_width = image.shape[-1]
+
         xmin = 0
         ymin = 0
         xmax = patch_size
         ymax = patch_size
         ovLeft = 0
         # Image is in [C, H, W] shape
-        while (xmin < image.shape[2]):
+        while (xmin < image_width):
             ovTop = 0
-            while (ymin < image.shape[1]):
-                a = self.predict_patch(image[:, ymin:ymax, xmin:xmax])
-                output[:, ymin:ymax, xmin:xmax][:, ovTop:,
-                                                ovLeft:] = a[:, ovTop:, ovLeft:]
+            while (ymin < image_height):
+                a = self.predict_patch(image[:, :, ymin:ymax, xmin:xmax])
+                output[:, :, ymin:ymax, xmin:xmax][:, :, ovTop:,
+                                                ovLeft:] = a[:, :, ovTop:, ovLeft:]
                 ymin = ymin-overlap+patch_size
                 ymax = ymin+patch_size
                 ovTop = overlap//2
@@ -75,21 +78,16 @@ class UNet(AbstractUNet):
             xmin = xmin-overlap+patch_size
             xmax = xmin+patch_size
             ovLeft = overlap//2
-        # Transpose image back from [C, H, W] Pytorch format to [H, W, C]
-        output = np.transpose(output, (1, 2, 0))
+        # Transpose image back from [batch_size, C, H, W] Pytorch format to
+        # [batch_size, H, W, C]
+        output = np.transpose(output, (0, 2, 3, 1))
+        # Remove batch size dim
+        output = output[0]
         return {'output' : output}
 
     def predict_patch(self, patch):
-        # Add one dimension for the batch size which is 1 during prediction
-        inputs = torch.zeros((1,) + patch.size())
-        inputs[0, :, :, :] = patch
-
-        # copy to GPU
-        inputs = inputs.to(self.device)
-        output = self(inputs)[0]
-
-        # Get data from GPU
+        inputs = patch.to(self.device)
+        output = self(inputs)
         image = output.cpu().detach().numpy()
-        # Denormalize
         image = util.denormalize(image, self.mean, self.std)
         return image

@@ -201,7 +201,6 @@ class AbstractUNet(nn.Module):
             ins = self.in_channels if i == 0 else outs
             outs = self.start_filts*(2**i)
             pooling = True if i < depth-1 else False
-
             down_conv = DownConv(ins, outs, pooling=pooling)
             self.down_convs.append(down_conv)
             

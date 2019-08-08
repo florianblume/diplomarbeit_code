@@ -639,6 +639,9 @@ class TrainingDataset(Dataset):
             if len(gt_image.shape) == 2:
                 # for compatibility
                 gt_image.shape = gt_image.shape + (1,)
+            if self.transforms is not None and\
+                isinstance(self.transforms.transforms[-1], ToTensor):
+                raw_image = torch.stack([raw_image]).float()
             sample = {'raw' : raw_image,
                       'gt'  : gt_image}
             samples.append(sample)
