@@ -71,24 +71,11 @@ def _train_step(model, loss_fn, optim, batch, device):
     #  run one forward + backward step
     # clear gradient
     optim.zero_grad()
-    # inputs and targets
-    inputs, targets = batch[0], batch[1]
-    # move data to DEVICE
-    # We do not need to move the inputs as the network does this itself
-    #inputs = inputs.to(device)
-    targets = targets.to(device)
-    # forwardnum_pix = self.size * self.size / 32.0
-    data_counter = None
-    clean_data = None
-    size = 20
-    num_pix = size * size / 32.0
-    box_size = np.round(np.sqrt(size * size / num_pix)).astype(np.int)
-    result = model.training_predict(inputs, clean_data,
-                                      data_counter, size, box_size, 1)
-    #TODO this won't work if we test baseline as it only returns the image
-    likelihood = result[0]
+    result = model.training_predict(batch)
+    likelihood = result['output']
     likelihood = likelihood.squeeze()
     # calc loss
+    targets = batch['gt']
     loss = loss_fn(likelihood, targets)
     # backward
     loss.backward()

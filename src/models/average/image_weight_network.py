@@ -18,12 +18,13 @@ class ImageWeightUNet(AbstractWeightNetwork):
                  augment_data=True,
                  device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")):
         super(ImageWeightUNet, self).__init__(num_classes, mean, std,
+                                              weight_mode='image',
+                                              weight_constraint=weight_constraint,
+                                              weights_lambda=weights_lambda,
                                               in_channels=in_channels,
                                               main_net_depth=main_net_depth,
                                               sub_net_depth=sub_net_depth,
                                               num_subnets=num_subnets,
-                                              weight_constraint=weight_constraint,
-                                              weights_lambda=weights_lambda,
                                               start_filts=start_filts,
                                               up_mode=up_mode,
                                               merge_mode=merge_mode,
@@ -65,8 +66,8 @@ class ImageWeightUNet(AbstractWeightNetwork):
     def training_predict(self, sample):
         raw, ground_truth, mask = sample['raw'], sample['gt'], sample['mask']
         raw, ground_truth, mask = raw.to(self.device),\
-                                   ground_truth.to(self.device),\
-                                   mask.to(self.device)
+                                  ground_truth.to(self.device),\
+                                  mask.to(self.device)
         raw, ground_truth, mask = raw.to(
             self.device), ground_truth.to(self.device), mask.to(self.device)
 
@@ -90,18 +91,25 @@ class ImageWeightUNet(AbstractWeightNetwork):
         # torch is not able to broadcast weights directly thus we have to
         # expand the shape of the weights.
         weights = original_weights.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
-        weight_sub_outputs = torch.sum(weights * sub_outputs, dim=0)
+        weighted_sub_outputs = weights * sub_outputs
 
         # [batch, H, W] / [batch]
         # i.e. we divide the patches that are comprised of weighted sums
         # of the outputs of the subnetworks by the sum of the weights
-        output = weight_sub_outputs / torch.sum(weights, dim=0)
+        output = torch.sum(weighted_sub_outputs, dim=0) / torch.sum(weights, dim=0)
+
+        # Transpose s.t. batch size is the first entry and remove unecessary
+        # dimensions
+        weights = weights.squeeze(-1).squeeze(-1).squeeze(-1)
+        weights = weights.transpose(1, 0)
+        # Bring batch size to front [batch_size, num_subnets, C, H, W]
+        weighted_sub_outputs = weighted_sub_outputs.transpose(1, 0)
         
         return  {'gt'         : ground_truth,
                  'mask'       : mask,
                  'output'     : output,
                  'weights'    : weights,
-                 'sub_outputs': weight_sub_outputs}
+                 'sub_outputs': weighted_sub_outputs}
 
     def predict(self, image, patch_size, overlap):
         # weights for each subnet for the whole imagess

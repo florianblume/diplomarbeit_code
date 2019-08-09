@@ -10,9 +10,12 @@ from tests import base_test
 from models.average import ImageWeightUNet
 
 def test_average_model():
-    inputs = np.random.randn(1, 100, 100)
+    inputs = torch.rand(1, 1, 20, 20)
+    mask = torch.ones_like(inputs)
     targets = Variable(torch.randn((20, 20)))
-    batch = [inputs, targets]
+    batch = {'raw' : inputs,
+             'gt'  : targets,
+             'mask': mask}
     # Cuda backend not yet working
     device = torch.device("cpu")
     model = ImageWeightUNet(

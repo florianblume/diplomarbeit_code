@@ -8,15 +8,16 @@ class AbstractWeightNetwork(AbstractUNet):
     """This class encapsulates common operations of the weight networks.
     """
 
-    def __init__(self, num_classes, mean, std, in_channels=1,
+    def __init__(self, num_classes, mean, std, weight_mode,
+                 weight_constraint=None, weights_lambda=0, in_channels=1,
                  main_net_depth=1, sub_net_depth=3, num_subnets=2,
-                 weight_constraint=None, weights_lambda=0,
                  start_filts=64, up_mode='transpose', 
                  merge_mode='add', augment_data=True,
                  device=torch.device(
                      "cuda:0" if torch.cuda.is_available() else "cpu")):
         self.num_subnets = num_subnets
         self.sub_net_depth = sub_net_depth
+        self.weight_mode = weight_mode
         self.weights_lambda = weights_lambda
         self.weight_constraint = weight_constraint
 
@@ -66,7 +67,19 @@ class AbstractWeightNetwork(AbstractUNet):
         mask = result['mask']
         weights = result['weights']
         loss = torch.sum(mask * (ground_truth - output)**2) / torch.sum(mask)
-        weights = weights / torch.sum(weights, 0)
-        weights = torch.mean(weights, 1)
+        # Weights are in shape [batch_size, num_subnets]
+        # Sum up the individual pairs of the weights for the subnetworks
+        # to be able to normalize them
+        weights_sum = torch.sum(weights, 1)
+        if self.weight_mode == 'image':
+            # Add dimension s.t. summed up weights can be broadcasted
+            weights_sum = weights_sum.unsqueeze(-1)
+        else:
+            # weight mode 'pixel'
+            weights_sum = weights_sum.unsqueeze(1)
+        weights = weights / weights_sum
+        # Mean along dimension 0 to obtain the mean of the weight of a
+        # subnetwork for the given batch
+        weights = torch.mean(weights, 0)
         entropy = -torch.sum(weights * torch.log(weights))
         return loss - self.weights_lambda * entropy

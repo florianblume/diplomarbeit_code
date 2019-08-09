@@ -18,17 +18,18 @@ class PixelWeightUNet(AbstractWeightNetwork):
                  augment_data=True,
                  device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")):
         super(PixelWeightUNet, self).__init__(num_classes, mean, std,
-                                            in_channels=in_channels,
-                                            main_net_depth=main_net_depth,
-                                            sub_net_depth=sub_net_depth,
-                                            num_subnets=num_subnets,
-                                            weight_constraint=weight_constraint,
-                                            weights_lambda=weights_lambda,
-                                            start_filts=start_filts,
-                                            up_mode=up_mode,
-                                            merge_mode=merge_mode,
-                                            augment_data=augment_data,
-                                            device=device)
+                                              weight_mode='pixel',
+                                              weight_constraint=weight_constraint,
+                                              weights_lambda=weights_lambda,
+                                              in_channels=in_channels,
+                                              main_net_depth=main_net_depth,
+                                              sub_net_depth=sub_net_depth,
+                                              num_subnets=num_subnets,
+                                              start_filts=start_filts,
+                                              up_mode=up_mode,
+                                              merge_mode=merge_mode,
+                                              augment_data=augment_data,
+                                              device=device)
 
     def _build_final_ops(self, outs):
         for _ in range(self.num_subnets):
@@ -68,13 +69,17 @@ class PixelWeightUNet(AbstractWeightNetwork):
     def training_predict(self, sample):
         raw, ground_truth, mask = sample['raw'], sample['gt'], sample['mask']
         raw, ground_truth, mask = raw.to(self.device),\
-                                   ground_truth.to(self.device),\
-                                   mask.to(self.device)
+                                  ground_truth.to(self.device),\
+                                  mask.to(self.device)
         raw, ground_truth, mask = raw.to(
             self.device), ground_truth.to(self.device), mask.to(self.device)
         
-        # Forward step
         amalgamted_image, sub_outputs, weights = self(raw)
+
+        # Switch back to [batch_size, num_subnets, H, W] - 2 is channel dim
+        weights = weights.transpose(1, 0).squeeze(2)
+        # Switch batch size and num_subnets too
+        sub_outputs = sub_outputs.transpose(1, 0)
         
         return  {'gt'         : ground_truth,
                  'mask'       : mask,
