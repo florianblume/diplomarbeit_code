@@ -40,6 +40,10 @@ def _dataset_index_proportional_single_dataset(num_indices):
     # Return 0 here as we only have one dataset and want to use up the indices
     return 0
 
+def _dataset_index_proportional(dataset_sizes):
+    probabilities = dataset_sizes / np.sum(dataset_sizes)
+    return np.random.choice(len(dataset_sizes), 1, p=probabilities)[0]
+
 # Classes for multi dataset dataset-index generation
 
 class IndexEvenGenerator():
@@ -759,3 +763,36 @@ def test_multi_dataset_raw_gt_with_val_even_in_memory():
 
 def test_multi_dataset_raw_gt_with_val_even_on_demand():
     abstract_test_multi_dataset_raw_gt_with_val_even(False)
+
+# Test for selection probability
+
+def abstract_test_multi_dataset_raw_only_proportional_probability(in_memory):
+    # Dataset 1 has 4 raw images and 2 gt images
+    dataset_1_raw = conftest.dataset_1_raw_images()
+    dataset_2_raw = conftest.dataset_2_raw_images()
+    datasets = [dataset_1_raw, dataset_2_raw]
+    dataset = TrainingDataset([conftest.dataset_1_raw_dir.name,
+                               conftest.dataset_2_raw_dir.name],
+                               # Batch size 12 to ensure that we draw enough samples
+                               batch_size=24, val_ratio=0,
+                               add_normalization_transform=False,
+                               keep_in_memory=in_memory)
+    TrainingDataset._dataset_index_proportional = _dataset_index_proportional
+    dataset_1_count = 0
+    dataset_2_count = 0
+    sample = next(iter(dataset))
+    # Compare GT against raw because we didn't specify GT thus have N2V training
+    for gt in sample['gt']:
+        for raw_1 in dataset_1_raw:
+            if np.array_equal(gt, raw_1):
+                dataset_1_count += 1
+        for raw_2 in dataset_2_raw:
+            if np.array_equal(gt, raw_2):
+                dataset_2_count += 1
+    assert dataset_1_count > dataset_2_count
+
+def test_multi_dataset_raw_only_proportional_probability_in_memory():
+    abstract_test_multi_dataset_raw_only_proportional_probability(True)
+
+    def test_multi_dataset_raw_only_proportional_probability_on_demand():
+        abstract_test_multi_dataset_raw_only_proportional_probability(False)

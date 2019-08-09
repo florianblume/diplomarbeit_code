@@ -6,6 +6,8 @@ import tifffile as tif
 
 # Dataset with factor 1 - 2 gt to raw images
 dataset_1_raw_dir = tempfile.TemporaryDirectory()
+dataset_1_raw_same_1_dir = tempfile.TemporaryDirectory()
+dataset_1_raw_same_2_dir = tempfile.TemporaryDirectory()
 dataset_1_gt_dir = tempfile.TemporaryDirectory()
 
 # Dataset with factor 1 - 1 gt to raw images
@@ -17,6 +19,22 @@ dataset_3_raw_dir = tempfile.TemporaryDirectory()
 dataset_3_gt_dir = tempfile.TemporaryDirectory()
 
 def dataset_1_raw_images():
+    raw_image_1 = np.arange(0, 90, 0.1).reshape(30, 30)
+    raw_image_2 = np.arange(90, 2 * 90, 0.1).reshape(30, 30)
+    raw_image_3 = np.arange(2 * 90, 3 * 90, 0.1).reshape(30, 30)
+    raw_image_4 = np.arange(3 * 90, 4 * 90, 0.1).reshape(30, 30)
+    return [raw_image_1, raw_image_2, raw_image_3, raw_image_4]
+
+# To test if even probability works
+def dataset_1_raw_images_same_1():
+    raw_image_1 = np.arange(0, 90, 0.1).reshape(30, 30)
+    raw_image_2 = np.arange(90, 2 * 90, 0.1).reshape(30, 30)
+    raw_image_3 = np.arange(2 * 90, 3 * 90, 0.1).reshape(30, 30)
+    raw_image_4 = np.arange(3 * 90, 4 * 90, 0.1).reshape(30, 30)
+    return [raw_image_1, raw_image_2, raw_image_3, raw_image_4]
+
+# To test if even probability works
+def dataset_1_raw_images_same_2():
     raw_image_1 = np.arange(0, 90, 0.1).reshape(30, 30)
     raw_image_2 = np.arange(90, 2 * 90, 0.1).reshape(30, 30)
     raw_image_3 = np.arange(2 * 90, 3 * 90, 0.1).reshape(30, 30)
