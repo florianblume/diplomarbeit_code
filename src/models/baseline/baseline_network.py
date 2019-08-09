@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import tifffile as tif
 
 import util
 from models import AbstractUNet
