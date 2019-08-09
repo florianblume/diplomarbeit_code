@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 import tifffile as tif
 
 import util
-from data import dataloader
-
+from data import PredictionDataset
+from data.transforms import ConvertToFormat, Normalize, ToTensor
 
 class AbstractPredictor():
     """Class AbstractPredictor is the base class for all predictor classes. It
@@ -19,11 +19,10 @@ class AbstractPredictor():
         self.config_path = config_path
         self.config = config
         self._load_config_parameters()
-        self.loader = dataloader.DataLoader(self.config['DATA_BASE_PATH'])
-        self.net = None
         # Load saved network
         print("Loading network from {}".format(self.network_path))
         self.net = self._load_net()
+        self._load_data()
         # To set dropout and batchnormalization (which we don't have but maybe in the future)
         # to inference mode.
         self.net.eval()
@@ -50,13 +49,35 @@ class AbstractPredictor():
         self.ps = self.config['PRED_PATCH_SIZE']
         self.overlap = self.config['OVERLAP']
 
+    def _load_data(self):
+        data_base_dir = self.config['DATA_BASE_DIR']
+        data_pred_raw_dirs = []
+        for data_pred_raw_dir in self.config['DATA_PRED_RAW_DIRS']:
+            data_pred_raw_dirs.append(os.path.join(data_base_dir,
+                                                   data_pred_raw_dir))
+        if 'DATA_PRED_GT_DIRS' in self.config:
+            data_pred_gt_dirs = []
+            for data_train_gt_dir in self.config['DATA_PRED_GT_DIRS']:
+                data_train_gt_dir = os.path.join(data_base_dir,
+                                                 data_train_gt_dir)
+                data_pred_gt_dirs.append(data_train_gt_dir)
+            self.with_gt = True
+        else:
+            data_train_gt_dir = None
+            self.with_gt = False
+        transforms = []
+        if 'CONVERT_DATA_TO' in self.config:
+            transforms.append(ConvertToFormat(self.config['CONVERT_DATA_TO']))
+        transforms.append(Normalize(self.net.mean, self.net.std))
+        transforms.append(ToTensor())
+        self.dataset = PredictionDataset(data_pred_raw_dirs,
+                                         data_pred_gt_dirs,
+                                         transform=transforms)
+
     def _load_net(self):
         raise NotImplementedError
 
-    def _predict(self, image):
-        raise NotImplementedError
-
-    def _write_data_to_output_path(self, output_path, image_name_base):
+    def _write_data_to_output_path(self, raw_results, pred_image_filename):
         """This function writes additional data to the specified output path.
         The AbstractPredictor takes care of writing the denoised images that
         the network outputs to the output folder.
@@ -64,55 +85,55 @@ class AbstractPredictor():
         Arguments:
             output_path {str} -- the folder where to store prediction
             artifacts
-            image_name_base {str} -- the base of the name of the currently 
+            image_name_base {str} -- the base of the name of the currently
                                      processed image, e.g. 0000_pred
         """
-        raise NotImplementedError
+        pass
 
-    def _store_additional_intermediate_results(self, image_name, results):
-        raise NotImplementedError
+    def _post_process_intermediate_results(self, image_name, raw_results,
+                                           processed_results):
+        pass
 
-    def _store_additional_results(self, results):
-        raise NotImplementedError
+    def _post_process_final_results(self, processed_results):
+        pass
 
     def predict(self):
-        self.data_test, self.data_gt = self.loader.load_test_data(
-            self.config['DATA_PRED_RAW_PATH'], self.config['DATA_PRED_GT_PATH'],
-            self.net.mean, self.net.std, self.config.get('CONVERT_DATA_TO', None))
-        print(self.data_test.shape)
-        print(self.data_gt.shape)
-
-        if self.data_gt is None:
-            print(
-                'No ground-truth data provided. Images will be denoised but PSNR is not computable.')
-
-        results = {}
-        num_images = self.data_test.shape[0]
+        processed_results = {}
         # To compute standard deviation of PSNR, if available
         psnr_values = []
         mse_values = []
         running_times = []
 
-        print('Predicting on {} images.'.format(num_images))
-        for index in range(num_images):
-            im = self.data_test[index]
+        print('Predicting on {} images.'.format(len(self.dataset)))
+        fill = len(str(len(self.dataset)))
+        for i, sample in enumerate(self.dataset):
+            raw = sample['raw']
             # Do not move after self._predict(im), the subclasses need this info
             # Not the nicest style but works...
-            pred_image_filename = '{}_pred'.format(str(index).zfill(4))
+            pred_image_filename = '{}_pred'.format(str(i).zfill(fill))
 
             # This is the actual prediction
-            print("\nPredicting on image {} with shape {}:".format(index, im.shape))
+            # Permute because our images are already in Pytorch format [C, H, W]
+            # And raw[0] because we only have one batch
+            print("\nPredicting on image {} with shape {}:"
+                  .format(i, list(raw[0].permute(1, 2, 0).size())))
             start = time.time()
-            prediction = self._predict(im)
+            raw_result = self.net.predict(raw, self.ps, self.overlap)
             end = time.time()
             diff = end - start
             running_times.append(diff)
             print('...took {:.4f} seconds.'.format(diff))
-
-            # If we want to store the unnoised test image we have to normalize it
-            im = util.denormalize(im, self.net.mean, self.net.std)
+            prediction = raw_result['output']
             #im_filename = 'im_' + str(index).zfill(4) + '.png'
             if self.pred_output_path:
+
+                if prediction.shape[-1] == 1 or len(prediction.shape) == 2:
+                    # Gray-scale images
+                    prediction = prediction.squeeze()
+                    cmap = 'gray'
+                else:
+                    cmap = None
+
                 if 'tif' in self.config['OUTPUT_IMAGE_FORMATS']:
                     tif.imsave(os.path.join(self.pred_output_path,
                                             pred_image_filename + '.tif'),
@@ -121,40 +142,42 @@ class AbstractPredictor():
                     plt.imsave(os.path.join(self.pred_output_path,
                                             pred_image_filename + '.png'),
                                prediction,
-                               cmap='gray')
-                # Uncomment if you want to see the raw image
-                #plt.imsave(os.path.join(self.pred_output_path,
-                #                       im_filename), im, cmap='gray')
-                self._write_data_to_output_path(self.pred_output_path,
+                               cmap=cmap)
+                self._write_data_to_output_path(raw_result,
                                                 pred_image_filename)
 
-
-            # Can be None, if no ground-truth data has been specified
-            if self.data_gt is not None:
-                # X images get 1 GT image together (due to creation of data set)
-                factor = int(self.data_test.shape[0] / self.data_gt.shape[0])
-                ground_truth = self.data_gt[int(index / factor)]
+            if self.with_gt:
+                # We get Pytorch tensors from the dataset
+                ground_truth = sample['gt'].cpu().detach().numpy()
+                # Ground-truth is normalized in dataset
+                ground_truth = util.denormalize(ground_truth,
+                                                self.net.mean,
+                                                self.net.std)
                 psnr = util.PSNR(ground_truth, prediction, 255)
                 psnr_values.append(psnr)
                 mse = util.MSE(ground_truth, prediction)
                 mse_values.append(mse)
-                results[pred_image_filename] = {'psnr' : psnr,
-                                                'mse'  : mse}
-                print("PSNR raw {:.4f}".format(util.PSNR(ground_truth, im, 255)))
+                processed_results[pred_image_filename] = {'psnr' : psnr,
+                                                          'mse'  : mse}
+                raw = raw.cpu().detach().numpy()
+                raw = util.denormalize(raw, self.net.mean, self.net.std)
+                #TODO 255 might not be correct for SimSim data
+                print("PSNR raw {:.4f}".format(util.PSNR(ground_truth, raw, 255)))
                 print("PSNR denoised {:.4f}".format(psnr))  # Without info from masked pixel
                 print('MSE {:.4f}'.format(mse))
                 # Weights etc only get stored if ground-truth data is available
                 # This is ok since the subclasses store the weights again as
                 # numpy arrays so they do not get lost if there is no ground-truth
-                self._store_additional_intermediate_results(pred_image_filename,
-                                                            results)
+                self._post_process_intermediate_results(pred_image_filename,
+                                                        raw_result,
+                                                        processed_results)
 
         # To show a visual break before printing averages
         print('')
         avg_runtime = np.mean(running_times)
         print("Average runtime per image: {:.4f}".format(avg_runtime))
 
-        if self.data_gt is not None:
+        if self.with_gt:
             psnr_average = np.mean(np.array(psnr_values))
             mse_average = np.mean(np.array(mse_values))
             std = np.std(psnr_values)
@@ -165,10 +188,10 @@ class AbstractPredictor():
             if self.pred_output_path:
                 with open(os.path.join(self.pred_output_path, 
                                        'results.json'), 'w') as json_output:
-                    results['average_runtime'] = avg_runtime
-                    results['psnr_average'] = psnr_average
-                    results['mse_average'] = mse_average
-                    results['std'] = std
-                    self._store_additional_results(results)
+                    processed_results['average_runtime'] = avg_runtime
+                    processed_results['psnr_average'] = psnr_average
+                    processed_results['mse_average'] = mse_average
+                    processed_results['std'] = std
+                    self._post_process_final_results(processed_results)
                     # We are pretty printing
-                    json.dump(results, json_output, indent=4)
+                    json.dump(processed_results, json_output, indent=4)

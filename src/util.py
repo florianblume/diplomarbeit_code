@@ -1,5 +1,5 @@
-import numpy as np
 import os
+import numpy as np
 
 
 def normal_dense(x, m_=0.0, std_=None):
@@ -13,7 +13,12 @@ def normal_dense(x, m_=0.0, std_=None):
 
 def img_to_tensor(img):
     import torchvision
-    img.shape = (img.shape[0], img.shape[1], 1)
+    if len(img.shape) == 2:
+        img.shape = img.shape + (1,)
+    else:
+        assert len(img.shape) == 3
+        # RGB or gray-scale image
+        assert img.shape[2] == 3 or img.shape[2] == 1
     # torch expects channels as the first dimension - this function automatically
     # permuates the dimensions correctly
     imgOut = torchvision.transforms.functional.to_tensor(img)
@@ -52,7 +57,7 @@ def joint_shuffle(inA, inB, seed=None):
     assert inA.shape[0] == inB.shape[0]
     indices = np.arange(inA.shape[0])
     if seed is not None:
-        print('Seeding numpy with {}'.format(seed))
+        print('Seeding numpy with {}.'.format(seed))
         np.random.seed(seed)
     np.random.shuffle(indices)
     return inA[indices], inB[indices]
@@ -70,9 +75,11 @@ def shuffle(inA, seed=None):
         np.array -- the shuffled array
     """
     if seed is not None:
-        print('Seeding numpy with {}'.format(seed))
+        print('Seeding numpy with {}.'.format(seed))
         np.random.seed(seed)
-    return np.random.shuffle(inA)
+    indices = np.arange(inA.shape[0])
+    np.random.shuffle(indices)
+    return inA[indices]
 
 def random_crop_fri(data, width, height, box_size, dataClean=None, counter=None,
                     augment_data=True):
@@ -127,8 +134,8 @@ def random_crop(img, width, height, box_size, imgClean=None,
             roiMinB = max(b-2, 0)
             roiMaxB = min(b+3, maxB)
             roi = imgOut[roiMinB:roiMaxB, roiMinA:roiMaxA]
-          #  print(roi.shape,b ,a)
-         #   print(b-2,b+3 ,a-2,a+3)
+            #print(roi.shape,b ,a)
+            #print(b-2,b+3 ,a-2,a+3)
             a_ = 2
             b_ = 2
             while a_ == 2 and b_ == 2:
@@ -203,7 +210,7 @@ def add_shot_noise_to_images(images, defect_ratio):
                   for i in image.shape]
         out[coords] = np.random.randint(255, size=len(coords[0]))
         result.append(out)
-    return result
+    return np.array(result)
 
 
 def add_gauss_noise_to_images(images, mean, std):
@@ -212,7 +219,7 @@ def add_gauss_noise_to_images(images, mean, std):
         noisy = image + np.random.normal(mean, std, image.shape)
         noisy = np.clip(noisy, 0, 255)
         result.append(noisy)
-    return result
+    return np.array(result)
 
 
 def merge_two_npy_datasets(dataset_path_1, dataset_path_2, output_path):

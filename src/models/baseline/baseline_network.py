@@ -1,9 +1,4 @@
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
-from collections import OrderedDict
-from torch.nn import init
 import numpy as np
 import tifffile as tif
 
@@ -17,16 +12,16 @@ class UNet(AbstractUNet):
     """
     
     def _build_network_head(self, outs):
-        # TODO actually output should be self.num_channels x self.num_classes
-        # to account for RGB images and Probabilistic Noise2Void
-        self.network_head = conv1x1(outs, 1)
+        self.network_head = conv1x1(outs, self.in_channels)
 
-    @staticmethod
-    def loss_function(outputs, labels, masks):
-        outs = outputs[:, 0, ...]
-        # print(outs.shape,labels.shape,masks.shape)
-        # Simple L2 loss
-        loss = torch.sum(masks*(labels-outs)**2)/torch.sum(masks)
+    def loss_function(self, result):
+        output, ground_truth, mask = result['output'], result['gt'], result['mask']
+        mask_sum = torch.sum(mask)
+        difference = torch.sum(mask * (ground_truth - output)**2)
+        # NOTE: if the config for the network is wrong and no hot pixels were
+        # selected to be replaced during N2V training, we get a NaN loss because
+        # of division by 0 (mask_sum).
+        loss = difference / mask_sum
         return loss
 
     def forward(self, x):
@@ -48,32 +43,34 @@ class UNet(AbstractUNet):
         return x
 
     def training_predict(self, sample):
-        inputs, labels, masks = sample['raw'], sample['gt'], sample['mask']
-        tif.imsave('test.tif', inputs.cpu().detach().numpy())
-        raise ValueError
-        
-        # Move to GPU
-        inputs, labels, masks = inputs.to(
-            self.device), labels.to(self.device), masks.to(self.device)
-
-        # Forward step
-        outputs = self(inputs)
-        return outputs, labels, masks, data_counter
+        raw, ground_truth, mask = sample['raw'], sample['gt'], sample['mask']
+        raw, ground_truth, mask = raw.to(self.device),\
+                                   ground_truth.to(self.device),\
+                                   mask.to(self.device)
+        output = self(raw)
+        return {'output' : output,
+                'gt'     : ground_truth,
+                'mask'   : mask}
 
     def predict(self, image, patch_size, overlap):
-        means = np.zeros(image.shape)
-        # We have to use tiling because of memory constraints on the GPU
+        # [batch_size, C, H, W]
+        output = np.zeros(image.shape)
+        
+        image_height = image.shape[-2]
+        image_width = image.shape[-1]
+
         xmin = 0
         ymin = 0
         xmax = patch_size
         ymax = patch_size
         ovLeft = 0
-        while (xmin < image.shape[1]):
+        # Image is in [C, H, W] shape
+        while (xmin < image_width):
             ovTop = 0
-            while (ymin < image.shape[0]):
-                a = self.predict_patch(image[ymin:ymax, xmin:xmax])
-                means[ymin:ymax, xmin:xmax][ovTop:,
-                                            ovLeft:] = a[ovTop:, ovLeft:]
+            while (ymin < image_height):
+                a = self.predict_patch(image[:, :, ymin:ymax, xmin:xmax])
+                output[:, :, ymin:ymax, xmin:xmax][:, :, ovTop:,
+                                                ovLeft:] = a[:, :, ovTop:, ovLeft:]
                 ymin = ymin-overlap+patch_size
                 ymax = ymin+patch_size
                 ovTop = overlap//2
@@ -82,28 +79,16 @@ class UNet(AbstractUNet):
             xmin = xmin-overlap+patch_size
             xmax = xmin+patch_size
             ovLeft = overlap//2
-        return means
+        # Transpose image back from [batch_size, C, H, W] Pytorch format to
+        # [batch_size, H, W, C]
+        output = np.transpose(output, (0, 2, 3, 1))
+        # Remove batch size dim
+        output = output[0]
+        return {'output' : output}
 
     def predict_patch(self, patch):
-        # In case of Probabilistic Noise2Void we would have samples from
-        # multiple Gaussian distributions and inputs[0, :, :, :] would become
-        # inputs[num_classes, :, :, :]
-        # Shape of inputs is [num_classes, channels, H, W]
-        inputs = torch.zeros(1, 1, patch.shape[0], patch.shape[1])
-        inputs[0, :, :, :] = util.img_to_tensor(patch)
-
-        # copy to GPU
-        inputs = inputs.to(self.device)
+        inputs = patch.to(self.device)
         output = self(inputs)
-        # Permute batch and samples
-        samples = (output).permute(1, 0, 2, 3)
-
-        # In contrast to probabilistic N2V we only have one sample
-        means = samples[0, ...]
-        # Get data from GPU
-        means = means.cpu().detach().numpy()
-        # Reshape to 2D images and remove padding
-        means.shape = (output.shape[2], output.shape[3])
-        # Denormalize
-        means = util.denormalize(means, self.mean, self.std)
-        return means
+        image = output.cpu().detach().numpy()
+        image = util.denormalize(image, self.mean, self.std)
+        return image

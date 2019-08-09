@@ -20,15 +20,4 @@ class Predictor(AbstractPredictor):
             del state_dict['conv_final.bias']
         net.load_state_dict(state_dict)
         return net
-
-    def _predict(self, image):
-        image = self.net.predict(image, self.ps, self.overlap)
-        return image
-
-    def _store_additional_intermediate_results(self, image_name, results):
-        # Nothing to do here
-        pass
-
-    def _store_additional_results(self, results):
-        # Nothing to do here
-        pass
+        

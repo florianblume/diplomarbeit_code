@@ -1,10 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable
-from collections import OrderedDict
 from torch.nn import init
-import numpy as np
 
 import util
 
@@ -204,7 +201,6 @@ class AbstractUNet(nn.Module):
             ins = self.in_channels if i == 0 else outs
             outs = self.start_filts*(2**i)
             pooling = True if i < depth-1 else False
-
             down_conv = DownConv(ins, outs, pooling=pooling)
             self.down_convs.append(down_conv)
             
@@ -237,14 +233,13 @@ class AbstractUNet(nn.Module):
             init.xavier_normal_(m.weight)
             init.constant_(m.bias, 0)
 
-    @staticmethod
-    def loss_function(outputs, labels, masks):
+    def loss_function(self, result):
         """The loss function of this network.
         
         Arguments:
-            outputs {np.array} -- the outputs that the network produces
-            labels {np.array} -- the target outputs that the network should have produced
-            masks {np.array} -- the mask of the active pixels
+            result {dict} -- dictionary containting at least the keys 'output',
+                             'gt', 'mask'. Might contain more keys depending
+                             one the implementation of the subclass.
         """
         raise NotImplementedError
 
@@ -264,22 +259,18 @@ class AbstractUNet(nn.Module):
         """
         raise NotImplementedError
 
-    def training_predict(self, train_data, train_data_clean,
-                            data_counter, size, box_size, bs):
+    def training_predict(self, sample):
         """Performs a forward step during training.
 
         Arguments:
-            train_data {np.array} -- the normalized raw training data
-            train_data_clean {np.array} -- the normalized ground-truth targets, if available
-            data_counter {int} -- the counter when to shuffle the training data
-            size {int} -- the patch size
-            bs {int} -- the batch size
+            train_data {dict} -- Dictionary containting at least the keys 'raw',
+                                 'gt' and 'mask'. Subclasses might require
+                                 additional keys.
 
         Returns:
             {np.array} -- outputs
             {np.array} -- labels
             {np.array} -- masks
-            {int} -- data_counter
         """
         raise NotImplementedError
 
