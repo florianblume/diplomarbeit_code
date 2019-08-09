@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 
+import util
+
 from models import conv1x1
 from models.average import AbstractWeightNetwork
 
@@ -11,17 +13,17 @@ class PixelWeightUNet(AbstractWeightNetwork):
     Afterwards the results is divided by the sum of the weights.
     """
 
-    def __init__(self, num_classes, mean, std, in_channels=1,
+    def __init__(self, mean, std, in_channels=1,
                  main_net_depth=1, sub_net_depth=3, num_subnets=2,
                  weight_constraint=None, weights_lambda=0,
                  start_filts=64, up_mode='transpose', merge_mode='add',
                  augment_data=True,
                  device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")):
-        super(PixelWeightUNet, self).__init__(num_classes, mean, std,
+        super(PixelWeightUNet, self).__init__(mean, std,
                                               weight_mode='pixel',
+                                              in_channels=in_channels,
                                               weight_constraint=weight_constraint,
                                               weights_lambda=weights_lambda,
-                                              in_channels=in_channels,
                                               main_net_depth=main_net_depth,
                                               sub_net_depth=sub_net_depth,
                                               num_subnets=num_subnets,
@@ -33,9 +35,7 @@ class PixelWeightUNet(AbstractWeightNetwork):
 
     def _build_final_ops(self, outs):
         for _ in range(self.num_subnets):
-            # And for each pixel we output a weight for each subnet
-            # 1 is num_classes in the subnets, but we do not sample the weight
-            # or something like but just produce one weight per pixel
+            # We produce one weight per output pixel (gray-scale or RGB)
             self.final_ops.append(conv1x1(outs, 1))
 
     def forward(self, x):
@@ -43,7 +43,7 @@ class PixelWeightUNet(AbstractWeightNetwork):
         # Compute the outputs of the subnetworks - this is ok here since we
         # do not want weights for the whole image. I.e. we can directly multiply
         # output of the subnetworks and computed weights.
-        # [num_subnets, batch_size, num_classes, H, W]
+        # [num_subnets, batch_size, C, H, W]
         sub_outputs = torch.stack([sub(x) for sub in self.subnets])
 
         # encoder pathway, save outputs for merging
@@ -57,7 +57,6 @@ class PixelWeightUNet(AbstractWeightNetwork):
 
         # Compute the pixel-wise weights for the subnetworks
         # x = [num_subnets, batch_size, C, H, W]
-        # where num_classes is only used in Probabilistic Noise2Void
         weights = torch.stack([final_op(x) for final_op in self.final_ops])
         weights = torch.exp(weights)
         sub_images = weights * sub_outputs
@@ -153,4 +152,8 @@ class PixelWeightUNet(AbstractWeightNetwork):
         # in the forward method to ensure shape compatibility between the weights
         # and the sub images
         weights = weights[:, :, 0]
+        # Since we only call the forward() method on the subimages which does
+        # not denormalize images we need to do this here manually
+        amalgamted_image = util.denormalize(amalgamted_image, self.mean, self.std)
+        sub_images = util.denormalize(sub_images, self.mean, self.std)
         return amalgamted_image, sub_images, weights

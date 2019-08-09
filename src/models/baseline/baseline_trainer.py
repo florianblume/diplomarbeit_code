@@ -10,8 +10,7 @@ class Trainer(AbstractTrainer):
     def _load_network(self):
         # Device gets automatically created in constructor
         # We persist mean and std when saving the network
-        return UNet(self.config['NUM_CLASSES'],
-                    self.dataset.mean, self.dataset.std,
+        return UNet(self.dataset.mean, self.dataset.std,
                     in_channels=self.config['IN_CHANNELS'],
                     depth=self.config['DEPTH'],
                     augment_data=self.config['AUGMENT_DATA'])

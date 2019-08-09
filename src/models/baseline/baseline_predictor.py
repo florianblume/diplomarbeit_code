@@ -9,8 +9,7 @@ class Predictor(AbstractPredictor):
 
     def _load_net(self):
         checkpoint = torch.load(self.network_path)
-        net = UNet(self.config['NUM_CLASSES'], checkpoint['mean'],
-                        checkpoint['std'], depth=self.config['DEPTH'])
+        net = UNet(checkpoint['mean'], checkpoint['std'], depth=self.config['DEPTH'])
         state_dict = checkpoint['model_state_dict']
         # Legacy weight adjustment
         if 'conv_final.weight' in state_dict:

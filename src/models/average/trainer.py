@@ -27,8 +27,7 @@ class Trainer(AbstractTrainer):
         else:
             raise 'Invalid config value for \"weight_mode\".'
 
-        return Network(self.config['NUM_CLASSES'],
-                       self.dataset.mean, self.dataset.std,
+        return Network(self.dataset.mean, self.dataset.std,
                        in_channels=self.config['IN_CHANNELS'],
                        main_net_depth=self.config['MAIN_NET_DEPTH'],
                        sub_net_depth=self.config['SUB_NET_DEPTH'],

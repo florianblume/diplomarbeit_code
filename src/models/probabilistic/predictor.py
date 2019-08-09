@@ -1,25 +1,20 @@
-import argparse
 import torch
-import numpy as np
-import matplotlib.pyplot as plt
-import importlib
-import json
-import os
 
-from models import abstract_predictor
+from models import AbstractPredictor
+from models.probabilistic import ImageProbabilisticUNet
+from models.probabilistic import PixelProbabilisticUNet
 
-class Predictor(abstract_predictor.AbstractPredictor):
+class Predictor(AbstractPredictor):
 
     def _load_net(self):
         weight_mode = self.config['WEIGHT_MODE']
         assert weight_mode in ['image', 'pixel']
         checkpoint = torch.load(self.network_path)
         if weight_mode == 'image':
-            from probabilistic_network import ImageProbabilisticUNet as Network
+            Network = ImageProbabilisticUNet
         else:
-            from probabilistic_network import PixelProbabilisticUNet as Network
-        net = Network(self.config['NUM_CLASSES'], checkpoint['mean'], 
-                        checkpoint['std'], depth=self.config['DEPTH'])
+            Network = PixelProbabilisticUNet
+        net = Network(checkpoint['mean'], checkpoint['std'], depth=self.config['DEPTH'])
         net.load_state_dict(checkpoint['model_state_dict'])
         return net
 

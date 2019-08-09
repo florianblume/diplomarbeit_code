@@ -11,17 +11,17 @@ class ImageWeightUNet(AbstractWeightNetwork):
     are then summed up and divided by the sum of the weights.
     """
 
-    def __init__(self, num_classes, mean, std, in_channels=1,
+    def __init__(self, mean, std, in_channels=1,
                  main_net_depth=1, sub_net_depth=3, num_subnets=2,
                  weight_constraint=None, weights_lambda=0,
                  start_filts=64, up_mode='transpose', merge_mode='add',
                  augment_data=True,
                  device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")):
-        super(ImageWeightUNet, self).__init__(num_classes, mean, std,
+        super(ImageWeightUNet, self).__init__(mean, std,
                                               weight_mode='image',
+                                              in_channels=in_channels,
                                               weight_constraint=weight_constraint,
                                               weights_lambda=weights_lambda,
-                                              in_channels=in_channels,
                                               main_net_depth=main_net_depth,
                                               sub_net_depth=sub_net_depth,
                                               num_subnets=num_subnets,
@@ -48,8 +48,7 @@ class ImageWeightUNet(AbstractWeightNetwork):
             before_pool = encoder_outs[-(i+2)]
             x = module(before_pool, x)
 
-        # x = [num_subnets, batch_size, num_classes, H, W]
-        # where num_classes is only used in Probabilistic Noise2Void
+        # x = [num_subnets, batch_size, C, H, W]
         x = torch.stack([final_op(x) for final_op in self.final_ops])
         # We want weights for the subnets, i.e. we need to take the mean
         # (this is the image-wise weight network) along all other dimensions
@@ -71,6 +70,11 @@ class ImageWeightUNet(AbstractWeightNetwork):
         raw, ground_truth, mask = raw.to(
             self.device), ground_truth.to(self.device), mask.to(self.device)
 
+        # NOTE we can't move the amalgamation code to the forward() method
+        # because during prediction we predict the sub images patch-wise.
+        # If we assembled the final image within the forward() method we would
+        # multiply the patches with patch-wise weights and not for the whole image.
+
         # Forward step
         # Actually we compute the weights for only one patch here, not the whole
         # image. We could compute the weights for one image if we ran the network
@@ -82,7 +86,7 @@ class ImageWeightUNet(AbstractWeightNetwork):
         # some kind of averaging already but only on the patch-level.
         # [subnets, batch]
         original_weights = self(raw)
-        # [subnets, batch, num_classes, H, W]
+        # [subnets, batch, channels, H, W]
         sub_outputs = torch.stack([sub(raw) for sub in self.subnets])
         # We compute weights on a per-image basis -> one weight for one image
         # If we were to perform Probabilistic Noise2Void we would need

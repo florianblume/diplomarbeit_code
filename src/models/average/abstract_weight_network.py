@@ -8,8 +8,8 @@ class AbstractWeightNetwork(AbstractUNet):
     """This class encapsulates common operations of the weight networks.
     """
 
-    def __init__(self, num_classes, mean, std, weight_mode,
-                 weight_constraint=None, weights_lambda=0, in_channels=1,
+    def __init__(self, mean, std, weight_mode, in_channels=1,
+                 weight_constraint=None, weights_lambda=0,
                  main_net_depth=1, sub_net_depth=3, num_subnets=2,
                  start_filts=64, up_mode='transpose', 
                  merge_mode='add', augment_data=True,
@@ -21,7 +21,7 @@ class AbstractWeightNetwork(AbstractUNet):
         self.weights_lambda = weights_lambda
         self.weight_constraint = weight_constraint
 
-        super(AbstractWeightNetwork, self).__init__(num_classes, mean, std,
+        super(AbstractWeightNetwork, self).__init__(mean, std,
                                                     in_channels=in_channels,
                                                     depth=main_net_depth,
                                                     start_filts=start_filts,
@@ -36,7 +36,7 @@ class AbstractWeightNetwork(AbstractUNet):
         for _ in range(self.num_subnets):
             # We create each requested subnet
             # TODO Make main and subnets individually configurable
-            self.subnets.append(SubUNet(self.num_classes, self.mean, self.std,
+            self.subnets.append(SubUNet(self.mean, self.std,
                                         in_channels=self.in_channels,
                                         depth=self.sub_net_depth,
                                         start_filts=self.start_filts,

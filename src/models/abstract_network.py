@@ -131,7 +131,7 @@ class AbstractUNet(nn.Module):
         This channel halving happens with the convolution in
         the tranpose convolution (specified by upmode='transpose')
     """
-    def __init__(self, num_classes, mean, std, in_channels=1, depth=5,
+    def __init__(self, mean, std, in_channels=1, depth=5,
                  start_filts=64, up_mode='transpose',
                  merge_mode='add', augment_data=True,
                  device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")):
@@ -139,9 +139,6 @@ class AbstractUNet(nn.Module):
         NOTE: mean and std will be persisted by the model and restored on loading
 
         Arguments:
-            num_classes: int, for Probabilistic Noise2Void this is the number of
-                distributions we want to draw the samples from. Set it to 1 if
-                not training in probabilistic style.
             mean: int, the mean of the raw data that this network was trained with.
             std: int, the std of the raw data that this network was trained with.
             in_channels: int, number of channels in the input tensor.
@@ -179,7 +176,6 @@ class AbstractUNet(nn.Module):
                              "nearest neighbour to reduce "
                              "depth channels (by half).")
 
-        self.num_classes = num_classes
         self.in_channels = in_channels
         self.start_filts = start_filts
         self.depth = depth

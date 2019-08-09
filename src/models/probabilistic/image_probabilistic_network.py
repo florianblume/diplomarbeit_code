@@ -36,11 +36,9 @@ class ImageProbabilisticUNet(AbstractUNet):
             # create the probability weights, this can be seen as p(z|x), i.e. the probability
             # of a decision given the input image. To obtain a weighted "average" of the
             # predictions of the subnets, we multiply this weight to their output.
-            self.weight_probabilities.append(conv1x1(outs, self.num_classes))
+            self.weight_probabilities.append(conv1x1(outs, 1))
 
-    @staticmethod
-    def loss_function(outputs, labels, masks):
-        outs = outputs[:, 0, ...]
+    def loss_function(self, result):
         raise 'Need to implement!'
 
     def forward(self, x):
@@ -61,30 +59,15 @@ class ImageProbabilisticUNet(AbstractUNet):
         outs = F.softmax(outs, dim=0)
         return outs
 
-    def training_predict(self, train_data, train_data_clean, data_counter, size, box_size, bs):
-        """Performs a forward step during training.
-
-        Arguments:
-            train_data {np.array} -- the normalized raw training data
-            train_data_clean {np.array} -- the normalized ground-truth targets, if available
-            data_counter {int} -- the counter when to shuffle the training data
-            size {int} -- the patch size
-            bs {int} -- the batch size
-
-        Returns:
-            np.array, np.array, np.array, int -- outputs, labels, masks, data_counter
-        """
-        # Init Variables
-        inputs, labels, masks = self.assemble_training__batch(bs, size, box_size,
-                                    data_counter, train_data, train_data_clean)
-
-        # Move to GPU
-        inputs, labels, masks = inputs.to(
-            self.device), labels.to(self.device), masks.to(self.device)
+    def training_predict(self, sample):
+        raw, ground_truth, mask = sample['raw'], sample['gt'], sample['mask']
+        raw, ground_truth, mask = raw.to(self.device),\
+                                   ground_truth.to(self.device),\
+                                   mask.to(self.device)
 
         # Forward step
-        weights = self(inputs)
-        means, stds = [subnet(inputs) for subnet in self.subnets]
+        weights = self(raw)
+        means, stds = [subnet(raw) for subnet in self.subnets]
 
         # TODO THIS IS NOT CORRECT!!!
         # The correct formula is w_i = 1/sigma_i^2
@@ -96,23 +79,33 @@ class ImageProbabilisticUNet(AbstractUNet):
         #TODO this might be wrong
         means_out = np.sum(means_out, axis=0)
         stds_out = np.sum(stds_out, axis=0)
-        return means_out, stds_out, labels, masks, data_counter
+        return {'output' : means_out,
+                'mean'   : means_out,
+                'std'    : stds_out,
+                'gt'     : ground_truth,
+                'mask'   : mask}
 
     def predict(self, image, patch_size, overlap):
-        # TODO
-        means = np.zeros(image.shape)
-        # We have to use tiling because of memory constraints on the GPU
+        mean = np.zeros(image.shape)
+        std = np.zeros(image.shape)
+        
+        image_height = image.shape[-2]
+        image_width = image.shape[-1]
+
         xmin = 0
         ymin = 0
         xmax = patch_size
         ymax = patch_size
         ovLeft = 0
-        while (xmin < image.shape[1]):
+        while (xmin < image_height):
             ovTop = 0
-            while (ymin < image.shape[0]):
-                a = self.predict_patch(image[ymin:ymax, xmin:xmax])
-                means[ymin:ymax, xmin:xmax][ovTop:,
-                                            ovLeft:] = a[ovTop:, ovLeft:]
+            while (ymin < image_width):
+                mean_, std_ = self.predict_patch(
+                                    image[:, :, ymin:ymax, xmin:xmax])
+                mean[:, :, ymin:ymax, xmin:xmax]\
+                        [:, :, ovTop:, ovLeft:] = mean_[:, :, ovTop:, ovLeft:]
+                std[:, :, ymin:ymax, xmin:xmax]\
+                        [:, :, ovTop:, ovLeft:] = std_[:, :, ovTop:, ovLeft:]
                 ymin = ymin-overlap+patch_size
                 ymax = ymin+patch_size
                 ovTop = overlap//2
@@ -121,37 +114,14 @@ class ImageProbabilisticUNet(AbstractUNet):
             xmin = xmin-overlap+patch_size
             xmax = xmin+patch_size
             ovLeft = overlap//2
-        return means, stds
+        return mean, std
 
     def predict_patch(self, patch):
-        """Performs network prediction on a patch of an image using the
-        specified parameters. The network expects the image to be normalized
-        with its mean and std. Likewise, it denormalizes the output images
-        using the same mean and std.
+        inputs = patch.to(self.device)
+        mean, std = self(inputs)
 
-        Arguments:
-            patch {np.array} -- the patch to perform prediction on
-            mean {int} -- the mean of the data the network was trained with
-            std {int} -- the std of the data the network was trained with
-
-        Returns:
-            np.array -- the denoised and denormalized patch
-        """
-        inputs = torch.zeros(1, 1, patch.shape[0], patch.shape[1])
-        inputs[0, :, :, :] = util.img_to_tensor(patch)
-
-        # copy to GPU
-        inputs = inputs.to(self.device)
-        output = self(inputs)
-        samples = (output).permute(1, 0, 2, 3)
-
-        # In contrast to probabilistic N2V we only have one sample
-        means = samples[0, ...]
-        # Get data from GPU
-        means = means.cpu().detach().numpy()
-        # Reshape to 2D images and remove padding
-        means.shape = (output.shape[2], output.shape[3])
-
-        # Denormalize
-        means = util.denormalize(means, self.mean, self.std)
-        return means
+        mean = mean.cpu().detach().numpy()
+        std = std.cpu().detach().numpy()
+        mean = util.denormalize(mean, self.mean, self.std)
+        std = util.denormalize(std, self.mean, self.std)
+        return mean, std

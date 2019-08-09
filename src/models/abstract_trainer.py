@@ -29,6 +29,7 @@ class AbstractTrainer():
         self.write_tensorboard_data = False
 
         self.current_epoch = 0
+        self.current_step = 0
         self.running_loss = 0.0
 
         self.train_loss = None
@@ -130,7 +131,8 @@ class AbstractTrainer():
             checkpoint = torch.load(train_network_path)
             self.net.load_state_dict(checkpoint['model_state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizier_state_dict'])
-            self.epoch = checkpoint['epoch']
+            self.current_epoch = checkpoint['epoch']
+            self.current_step = checkpoint['current_step']
             self.mean = checkpoint['mean']
             self.std = checkpoint['std']
             self.running_loss = checkpoint['running_loss']
@@ -148,6 +150,7 @@ class AbstractTrainer():
         default_dict = {'model_state_dict': self.net.state_dict(),
                         'optimizier_state_dict': self.optimizer.state_dict(),
                         'epoch': self.current_epoch,
+                        'current_step' : self.current_step,
                         'mean': self.dataset.mean,
                         'std': self.dataset.std,
                         'running_loss': self.running_loss,
@@ -275,7 +278,10 @@ class AbstractTrainer():
         print('')
         # loop over the dataset multiple times
         iterator = iter(self.dataset)
-        for step in range(self.epochs):
+        # We start at current_step because if we are further training the net
+        # this gets saved to the dict
+        for step in range(self.current_step, self.epochs):
+            self.current_step = step
             self.train_losses = []
             self.optimizer.zero_grad()
 
