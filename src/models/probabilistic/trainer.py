@@ -11,7 +11,9 @@ class ProbabilisticTrainer(AbstractTrainer):
 class SubnetworkTrainer(AbstractTrainer):
 
     def _load_network(self):
-        self.config['IS_INTEGRATED'] = True
+        self.config['IS_INTEGRATED'] = False
+        self.config['MEAN'] = self.dataset.mean
+        self.config['STD'] = self.dataset.std
         return SubUNet(self.config)
 
     def _write_custom_tensorboard_data_for_example(self, example_result,

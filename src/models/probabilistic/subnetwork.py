@@ -37,7 +37,7 @@ class SubUNet(AbstractUNet):
         c = torch.log(1 / (torch.sqrt(2 * math.pi * std**2)))
         # exp is no exponential here because we take the log of the loss
         exp = ((ground_truth - mean)**2)/(2 * std**2)
-        loss = torch.sum(mask * (c - exp))
+        loss = torch.sum(mask * (c - exp)) / torch.sum(mask)
         # -loss because we want to maximize the probability of the output
         # i.e. minimize the negative loss
         return -loss
@@ -119,7 +119,7 @@ class SubUNet(AbstractUNet):
         std = util.denormalize(std, self.mean, self.std)
         return mean, std
 
-    def _post_process_predict(self, result)
+    def _post_process_predict(self, result):
         mean = result['mean']
         std = result['std']
         # At the moment we always have implicit batch size 1
