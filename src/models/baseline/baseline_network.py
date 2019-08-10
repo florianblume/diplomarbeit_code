@@ -51,43 +51,35 @@ class UNet(AbstractUNet):
                 'gt'     : ground_truth,
                 'mask'   : mask}
 
-    def predict(self, image):
-        # [batch_size, C, H, W]
-        output = np.zeros(image.shape)
-        
-        image_height = image.shape[-2]
-        image_width = image.shape[-1]
+    def _pre_process_predict(self, image):
+        return {'image'  : image,
+                'output' : np.zeros(image.shape)}
 
-        xmin = 0
-        ymin = 0
-        xmax = self.patch_size
-        ymax = self.patch_size
-        ovLeft = 0
-        # Image is in [C, H, W] shape
-        while (xmin < image_width):
-            ovTop = 0
-            while (ymin < image_height):
-                a = self.predict_patch(image[:, :, ymin:ymax, xmin:xmax])
-                output[:, :, ymin:ymax, xmin:xmax][:, :, ovTop:,
-                                                ovLeft:] = a[:, :, ovTop:, ovLeft:]
-                ymin = ymin-self.overlap+self.patch_size
-                ymax = ymin+self.patch_size
-                ovTop = self.overlap//2
-            ymin = 0
-            ymax = self.patch_size
-            xmin = xmin-self.overlap+self.patch_size
-            xmax = xmin+self.patch_size
-            ovLeft = self.overlap//2
+    def _process_patch(self, data, ymin, ymax, xmin, xmax, ovTop, ovLeft):
+        image = data['image']
+        output = data['output']
+        
+        patch = image[:, :, ymin:ymax, xmin:xmax]
+        prediction = self.predict_patch(patch)
+        output[:, :, ymin:ymax, xmin:xmax][:, :, ovTop:,
+                                    ovLeft:] = prediction[:, :, ovTop:, ovLeft:]
+        # Actually we have a pointer to the data but to make the code more
+        # understandable we add this here
+        data['output'] = output
+        return data
+
+    def predict_patch(self, patch):
+        inputs = patch.to(self.device)
+        prediction = self(inputs)
+        prediction = prediction.cpu().detach().numpy()
+        prediction = util.denormalize(prediction, self.mean, self.std)
+        return prediction
+
+    def _post_process_predict(self, result):
+        output = result['output']
         # Transpose image back from [batch_size, C, H, W] Pytorch format to
         # [batch_size, H, W, C]
         output = np.transpose(output, (0, 2, 3, 1))
         # Remove batch size dim
         output = output[0]
         return {'output' : output}
-
-    def predict_patch(self, patch):
-        inputs = patch.to(self.device)
-        output = self(inputs)
-        image = output.cpu().detach().numpy()
-        image = util.denormalize(image, self.mean, self.std)
-        return image

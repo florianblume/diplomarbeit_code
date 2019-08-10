@@ -73,18 +73,6 @@ class AbstractWeightNetwork(AbstractUNet):
         entropy = -torch.sum(weights * torch.log(weights))
         return loss - self.weight_constraint_lambda * entropy
 
-    def forward(self, x):
-        raise NotImplementedError
-
-    def training_predict(self, sample):
-        raise NotImplementedError
-
-    def predict(self, image):
-        raise NotImplementedError
-
-    def predict_patch(self, patch):
-        raise NotImplementedError
-
 class ImageWeightUNet(AbstractWeightNetwork):
     """This network computes the weights for the subnetworks on a per-image basis.
     This means that each subnetwork gets one weight. The whole output of each
@@ -175,45 +163,47 @@ class ImageWeightUNet(AbstractWeightNetwork):
                  'weights'    : weights,
                  'sub_outputs': weighted_sub_outputs}
 
-    def predict(self, image):
+    def _pre_process_predict(self, image):
         # weights for each subnet for the whole imagess
-        weights = []
+        stored_weights = []
         # sub_images = [subnets, batch_size, C, H, W]
         sub_images = np.zeros((self.num_subnets,) + image.shape)
+        return {'image'      : image,
+                'stored_weights'    : stored_weights,
+                'sub_images' : sub_images}
+
+    def _process_patch(self, data, ymin, ymax, xmin, xmax, ovTop, ovLeft):
+        image = data['image']
+        stored_weights = data['stored_weights']
+        sub_images = data['sub_images']
+
+        patch = image[:, :, ymin:ymax, xmin:xmax]
+        weights = self.predict_patch(patch)
+        # NOTE: We save all weights for all patches and average later ->
+        # this is not identical to computing one weight based on the
+        # whole image but we have use tiling due to memory constraints.
+        # In training we take the exp of the mean so in order to average
+        # over the patches we take the log here and then exp later.
+        stored_weights.append(np.log(weights))
+        sub_outputs = np.array([subnet.predict_patch(patch)\
+                                for subnet in self.subnets])
+        sub_images[:, :, :, ymin:ymax, xmin:xmax][:, :, :, ovTop:, ovLeft:]\
+            = sub_outputs[:, :, :, ovTop:, ovLeft:]
+
+        data['stored_weights'] = stored_weights
+        data['sub_images'] = sub_images
+        return data
+
+    def predict_patch(self, patch):
+        inputs = patch.to(self.device)
+        output = self(inputs)
+        weights = output.cpu().detach().numpy()
+        return weights
+
+    def _post_process_predict(self, result):
+        weights = result['stored_weights']
+        sub_images = result['sub_images']
         
-        image_height = image.shape[-2]
-        image_width = image.shape[-1]
-
-        xmin = 0
-        ymin = 0
-        xmax = self.patch_size
-        ymax = self.patch_size
-        ovLeft = 0
-        while (xmin < image_width):
-            ovTop = 0
-            while (ymin < image_height):
-                patch = image[:, :, ymin:ymax, xmin:xmax]
-                # NOTE: We save all weights for all patches and average later ->
-                # this is not identical to computing one weight based on the
-                # whole image but we have use tiling due to memory constraints.
-                # In training we take the exp of the mean so in order to average
-                # over the patches we take the log here and then exp later.
-                weights.append(np.log(self.predict_patch(patch)))
-                sub_outputs = np.array([subnet.predict_patch(patch)\
-                                        for subnet in self.subnets])
-                sub_images[:, :, :, ymin:ymax, xmin:xmax][:, :, :, ovTop:, ovLeft:]\
-                    = sub_outputs[:, :, :, ovTop:, ovLeft:]
-                ymin = ymin-self.overlap+self.patch_size
-                ymax = ymin+self.patch_size
-                ovTop = self.overlap//2
-            ymin = 0
-            ymax = self.patch_size
-            xmin = xmin-self.overlap+self.patch_size
-            xmax = xmin+self.patch_size
-            ovLeft = self.overlap//2
-
-        ### Amalgamte image
-
         # [num_subnets] = weights for the whole image for each subnet
         weights = np.mean(np.array(weights), axis=0)
         # NOTE: we do exp here since this normally happens in training but
@@ -249,23 +239,12 @@ class ImageWeightUNet(AbstractWeightNetwork):
                 'weights'    : weights,
                 'sub_outputs': weighted_sub_outputs}
 
-    def predict_patch(self, patch):
-        # Add one dimension for the batch size which is 1 during prediction
-        inputs = patch.to(self.device)
-        output = self(inputs)
-
-        weights = output.cpu().detach().numpy()
-        return weights
-
 class PixelWeightUNet(AbstractWeightNetwork):
     """This network computes weights for each subnetwork on a per-pixel basis.
     This means that each pixel gets a weights for each subnet. The outputs of
     the subnets are multiplied with their respective weights and added up.
     Afterwards the results is divided by the sum of the weights.
     """
-
-    def __init__(self, config):
-        super(PixelWeightUNet, self).__init__(config)
 
     def forward(self, x):
         encoder_outs = []
@@ -315,7 +294,7 @@ class PixelWeightUNet(AbstractWeightNetwork):
                     'weights'    : weights,
                     'sub_outputs': sub_outputs}
 
-    def predict(self, image):
+    def _pre_process_predict(self, image):
         # weights for each subnet for each pixel (without channel dim)
         # [num_subnets, batch_size, H, W]
         weights = np.zeros((self.num_subnets, image.shape[0]) + image.shape[2:])
@@ -323,34 +302,52 @@ class PixelWeightUNet(AbstractWeightNetwork):
         sub_outputs = np.zeros((self.num_subnets,) + image.shape)
         # sub_images = [batch_size, C, H, W] since the network amalgamtes images
         amalgamted_image = np.zeros(image.shape)
+        return {'image'            : image,
+                'weights'          : weights,
+                'sub_outputs'      : sub_outputs,
+                'amalgamted_image' : amalgamted_image}
 
-        image_width = image.shape[-1]
-        image_height = image.shape[-2]
+    def _process_patch(self, data, ymin, ymax, xmin, xmax, ovTop, ovLeft):
+        image = data['image']
+        weights = data['weights']
+        sub_outputs = data['sub_outputs']
+        amalgamted_image = data['amalgamted_image']
 
-        xmin = 0
-        ymin = 0
-        xmax = self.patch_size
-        ymax = self.patch_size
-        ovLeft = 0
-        while (xmin < image_width):
-            ovTop = 0
-            while (ymin < image_height):
-                patch = image[:, :, ymin:ymax, xmin:xmax]
-                _amalgamted_image, _sub_outputs, _weights = self.predict_patch(patch)
-                amalgamted_image[:, :, ymin:ymax, xmin:xmax][:, :, ovTop:, ovLeft:]\
-                    = _amalgamted_image[:, :, ovTop:, ovLeft:]
-                sub_outputs[:, :, :, ymin:ymax, xmin:xmax][:, :, :, ovTop:, ovLeft:]\
-                    = _sub_outputs[:, :, :, ovTop:, ovLeft:]
-                weights[:, :, ymin:ymax, xmin:xmax][:, :, ovTop:, ovLeft:]\
-                    = _weights[:, :, ovTop:, ovLeft:]
-                ymin = ymin-self.overlap+self.patch_size
-                ymax = ymin+self.patch_size
-                ovTop = self.overlap//2
-            ymin = 0
-            ymax = self.patch_size
-            xmin = xmin-self.overlap+self.patch_size
-            xmax = xmin+self.patch_size
-            ovLeft = self.overlap//2
+        patch = image[:, :, ymin:ymax, xmin:xmax]
+        _amalgamted_image, _sub_outputs, _weights = self.predict_patch(patch)
+        amalgamted_image[:, :, ymin:ymax, xmin:xmax][:, :, ovTop:, ovLeft:]\
+            = _amalgamted_image[:, :, ovTop:, ovLeft:]
+        sub_outputs[:, :, :, ymin:ymax, xmin:xmax][:, :, :, ovTop:, ovLeft:]\
+            = _sub_outputs[:, :, :, ovTop:, ovLeft:]
+        weights[:, :, ymin:ymax, xmin:xmax][:, :, ovTop:, ovLeft:]\
+            = _weights[:, :, ovTop:, ovLeft:]
+        
+        data['weights'] = weights
+        data['sub_outputs'] = sub_outputs
+        data['amalgamted_image'] = amalgamted_image
+        return data
+
+    def predict_patch(self, patch):
+        inputs = patch.to(self.device)
+        amalgamted_image, sub_images, weights = self(inputs)
+        
+        amalgamted_image = amalgamted_image.cpu().detach().numpy()
+        sub_images = sub_images.cpu().detach().numpy()
+        weights = weights.cpu().detach().numpy()
+        # We don't need the channel dimension in the weights, it was only added
+        # in the forward method to ensure shape compatibility between the weights
+        # and the sub images
+        weights = weights[:, :, 0]
+        # Since we only call the forward() method on the subimages which does
+        # not denormalize images we need to do this here manually
+        amalgamted_image = util.denormalize(amalgamted_image, self.mean, self.std)
+        sub_images = util.denormalize(sub_images, self.mean, self.std)
+        return amalgamted_image, sub_images, weights
+
+    def _post_process_predict(self, result):
+        weights = result['weights']
+        sub_outputs = result['sub_outputs']
+        amalgamted_image = result['amalgamted_image']
 
         # Transepose from [batch_size, C, H, W] to [batch_size, H, W, C]
         amalgamted_image = amalgamted_image.transpose((0, 2, 3, 1))
@@ -369,20 +366,3 @@ class PixelWeightUNet(AbstractWeightNetwork):
         return {'output'     : amalgamted_image,
                 'weights'    : weights,
                 'sub_outputs': sub_outputs}
-
-    def predict_patch(self, patch):
-        inputs = patch.to(self.device)
-        amalgamted_image, sub_images, weights = self(inputs)
-        
-        amalgamted_image = amalgamted_image.cpu().detach().numpy()
-        sub_images = sub_images.cpu().detach().numpy()
-        weights = weights.cpu().detach().numpy()
-        # We don't need the channel dimension in the weights, it was only added
-        # in the forward method to ensure shape compatibility between the weights
-        # and the sub images
-        weights = weights[:, :, 0]
-        # Since we only call the forward() method on the subimages which does
-        # not denormalize images we need to do this here manually
-        amalgamted_image = util.denormalize(amalgamted_image, self.mean, self.std)
-        sub_images = util.denormalize(sub_images, self.mean, self.std)
-        return amalgamted_image, sub_images, weights

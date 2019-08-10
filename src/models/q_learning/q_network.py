@@ -46,7 +46,7 @@ class QUNet(AbstractUNet):
         outputs = self(raw)
         return {}
 
-    def predict(self, image, patch_size, overlap):
+    def predict(self, image):
         means = np.zeros(image.shape)
         # We have to use tiling because of memory constraints on the GPU
         xmin = 0

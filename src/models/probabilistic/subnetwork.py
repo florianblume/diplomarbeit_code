@@ -85,43 +85,25 @@ class SubUNet(AbstractUNet):
                 'gt'     : ground_truth,
                 'mask'   : mask}
 
-    def predict(self, image):
+    def _pre_process_predict(self, image):
         mean = np.zeros(image.shape)
         std = np.zeros(image.shape)
-        
-        image_height = image.shape[-2]
-        image_width = image.shape[-1]
+        return {'image': image,
+                'mean' : mean,
+                'std'  : std}
 
-        xmin = 0
-        ymin = 0
-        xmax = self.prediction_patch_size
-        ymax = self.prediction_patch_size
-        ovLeft = 0
-        while (xmin < image_width):
-            ovTop = 0
-            while (ymin < image_height):
-                _mean, _std = self.predict_patch(image[:, :, ymin:ymax, xmin:xmax])
-                mean[:, :, ymin:ymax, xmin:xmax][:, :, ovTop:, ovLeft:] =\
-                                                    _mean[:, :, ovTop:, ovLeft:]
-                std[:, :, ymin:ymax, xmin:xmax][:, :, ovTop:, ovLeft:] =\
-                                                    _std[:, :, ovTop:, ovLeft:]
-                ymin = ymin - self.prediction_patch_size + self.prediction_patch_size
-                ymax = ymin + self.prediction_patch_size
-                ovTop = self.prediction_patch_overlap//2
-            ymin = 0
-            ymax = self.prediction_patch_size
-            xmin = xmin - self.prediction_patch_overlap + self.prediction_patch_size
-            xmax = xmin + self.prediction_patch_size
-            ovLeft = self.prediction_patch_overlap//2
-
-        # At the moment we always have implicit batch size 1
-        out_image = mean[0]
-        # Transpose to [C, H, W]
-        out_image = out_image.transpose(1, 2, 0)
-        
-        return {'output' : out_image,
-                'mean'   : mean,
-                'std'    : std}
+    def _process_patch(self, data, ymin, ymax, xmin, xmax, ovTop, ovLeft):
+        image = data['image']
+        mean = data['mean']
+        std = data['std']
+        _mean, _std = self.predict_patch(image[:, :, ymin:ymax, xmin:xmax])
+        mean[:, :, ymin:ymax, xmin:xmax][:, :, ovTop:, ovLeft:] =\
+                                            _mean[:, :, ovTop:, ovLeft:]
+        std[:, :, ymin:ymax, xmin:xmax][:, :, ovTop:, ovLeft:] =\
+                                            _std[:, :, ovTop:, ovLeft:]
+        data['mean'] = mean
+        data['std'] = std
+        return data
 
     def predict_patch(self, patch):
         inputs = patch.to(self.device)
@@ -136,3 +118,15 @@ class SubUNet(AbstractUNet):
         mean = util.denormalize(mean, self.mean, self.std)
         std = util.denormalize(std, self.mean, self.std)
         return mean, std
+
+    def _post_process_predict(self, result)
+        mean = result['mean']
+        std = result['std']
+        # At the moment we always have implicit batch size 1
+        out_image = mean[0]
+        # Transpose to [C, H, W]
+        out_image = out_image.transpose(1, 2, 0)
+        
+        return {'output' : out_image,
+                'mean'   : mean,
+                'std'    : std}

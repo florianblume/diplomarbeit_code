@@ -277,18 +277,73 @@ class AbstractUNet(nn.Module):
             {np.array} -- the denoised image of shape [H, W, C]
             NOTE -- subclasses might return additional artifacts
         """
+        data = self._pre_process_predict(image)
+        image_height = image.shape[-2]
+        image_width = image.shape[-1]
+        xmin = 0
+        ymin = 0
+        xmax = self.patch_size
+        ymax = self.patch_size
+        ovLeft = 0
+        # Image is in [C, H, W] shape
+        while (xmin < image_width):
+            ovTop = 0
+            while (ymin < image_height):
+                data = self._process_patch(data, ymin, ymax, xmin, 
+                                           xmax, ovTop, ovLeft)
+                ymin = ymin-self.overlap+self.patch_size
+                ymax = ymin+self.patch_size
+                ovTop = self.overlap//2
+            ymin = 0
+            ymax = self.patch_size
+            xmin = xmin-self.overlap+self.patch_size
+            xmax = xmin+self.patch_size
+            ovLeft = self.overlap//2
+        return self._post_process_predict(data)
+
+    def _pre_process_predict(self, image):
+        """Subclasses are supposed to prepare needed variables to perform
+        the actual prediction.
+
+        Returns:
+            {dict} -- dictionary containing all the necessary variables
+        """
+        raise NotImplementedError
+
+    def _process_patch(self, data, ymin, ymax, xmin, xmax, ovTop, ovLeft):
+        """Performs prediction on the specified patch coordinates given the
+        specified data dictionary. This method is for internal use of the
+        prediction pipeline only.
+        
+        Arguments:
+            data {dict} -- a dictionary with the data to work on
+            ymin {int} -- y minimum of patch
+            ymax {int} -- y maximum of patch
+            xmin {int} -- x minimum of patch
+            xmax {int} -- x maximum of patch
+            ovTop {int} -- overlap top
+            ovLef {int} -- overlap left
+        """
         raise NotImplementedError
 
     def predict_patch(self, patch):
-        """Performs network prediction on a patch of an image using the
-        specified parameters. The network expects the image to be normalized
-        with its mean and std.
-
+        """Performs prediction on the specified patch without any further
+        processing.
+        
         Arguments:
-            patch {torch.Tensor} -- the patch to perform prediction on, shape
-                                    must be [batch_size, C, H, W]
+            patch {torch.Tensor} -- the patch to process of shape
+                                    [batch_size, C, H, W]
+        """
+        raise NotImplementedError
+
+    def _post_process_predict(self, result):
+        """In this method subclasses can assemble the final results of the
+        prediction.
+        
+        Arguments:
+            result {dict} -- containing all the keys that the subclasses need
 
         Returns:
-            np.array -- the denoised and denormalized patch
+            {dict}        -- a dictionary containing the final results
         """
         raise NotImplementedError
