@@ -1,6 +1,5 @@
 import torch
 import numpy as np
-import tifffile as tif
 
 import util
 from models import AbstractUNet
@@ -52,7 +51,7 @@ class UNet(AbstractUNet):
                 'gt'     : ground_truth,
                 'mask'   : mask}
 
-    def predict(self, image, patch_size, overlap):
+    def predict(self, image):
         # [batch_size, C, H, W]
         output = np.zeros(image.shape)
         
@@ -61,8 +60,8 @@ class UNet(AbstractUNet):
 
         xmin = 0
         ymin = 0
-        xmax = patch_size
-        ymax = patch_size
+        xmax = self.patch_size
+        ymax = self.patch_size
         ovLeft = 0
         # Image is in [C, H, W] shape
         while (xmin < image_width):
@@ -71,14 +70,14 @@ class UNet(AbstractUNet):
                 a = self.predict_patch(image[:, :, ymin:ymax, xmin:xmax])
                 output[:, :, ymin:ymax, xmin:xmax][:, :, ovTop:,
                                                 ovLeft:] = a[:, :, ovTop:, ovLeft:]
-                ymin = ymin-overlap+patch_size
-                ymax = ymin+patch_size
-                ovTop = overlap//2
+                ymin = ymin-self.overlap+self.patch_size
+                ymax = ymin+self.patch_size
+                ovTop = self.overlap//2
             ymin = 0
-            ymax = patch_size
-            xmin = xmin-overlap+patch_size
-            xmax = xmin+patch_size
-            ovLeft = overlap//2
+            ymax = self.patch_size
+            xmin = xmin-self.overlap+self.patch_size
+            xmax = xmin+self.patch_size
+            ovLeft = self.overlap//2
         # Transpose image back from [batch_size, C, H, W] Pytorch format to
         # [batch_size, H, W, C]
         output = np.transpose(output, (0, 2, 3, 1))

@@ -3,7 +3,7 @@ DATA_BASE_DIR: "data/processed/fish"
 DATA_PRED_RAW_DIRS: ["avg16/train"]
 DATA_PRED_GT_DIRS: ["gt/train"]
 
-CONVERT_DATA_TO: "uint8"
+CONVERT_TO_FORMAT: "uint8"
 DISTRIBUTION_MODE: "proportional"
 
 MODEL: "average"

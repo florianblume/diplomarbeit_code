@@ -131,35 +131,17 @@ class AbstractUNet(nn.Module):
         This channel halving happens with the convolution in
         the tranpose convolution (specified by upmode='transpose')
     """
-    def __init__(self, mean, std, in_channels=1, depth=5,
-                 start_filts=64, up_mode='transpose',
-                 merge_mode='add', augment_data=True,
-                 device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")):
-        """
-        NOTE: mean and std will be persisted by the model and restored on loading
-
-        Arguments:
-            mean: int, the mean of the raw data that this network was trained with.
-            std: int, the std of the raw data that this network was trained with.
-            in_channels: int, number of channels in the input tensor.
-                Default is 3 for RGB images.
-            depth: int, number of MaxPools in the U-Net.
-            start_filts: int, number of convolutional filters for the
-                first conv.
-            up_mode: string, type of upconvolution. Choices: 'transpose'
-                for transpose convolution or 'upsample' for nearest neighbour
-                upsampling.
-            merge_mode: string, method to merge down and up convolutions. Choices:
-                'concat' to concatenate the convolutions or 'add' to add them.
-        """
+    # * enforces named parameters to avoid accidential misconfigurations
+    def __init__(self, config):
         super(AbstractUNet, self).__init__()
+        up_mode = config['UP_MODE']
         if up_mode in ('transpose', 'upsample'):
             self.up_mode = up_mode
         else:
             raise ValueError("\"{}\" is not a valid mode for "
                              "upsampling. Only \"transpose\" and "
                              "\"upsample\" are allowed.".format(up_mode))
-
+        merge_mode = config['MERGE_MODE']
         if merge_mode in ('concat', 'add'):
             self.merge_mode = merge_mode
         else:
@@ -175,16 +157,20 @@ class AbstractUNet(nn.Module):
                              "because it doesn't make sense to use "
                              "nearest neighbour to reduce "
                              "depth channels (by half).")
+        self.mean = config['MEAN']
+        self.std = config['STD']
+        self.in_channels = config['IN_CHANNELS']
+        self.depth = config['DEPTH']
+        self.patch_size = config['PRED_PATCH_SIZE']
+        self.overlap = config['OVERLAP']
+        self.augment_data = config['AUGMENT_DATA']
+        self.start_filts = config['START_FILTS']
+        self.up_mode = config['UP_MODE']
+        self.merge_mode = config['MERGE_MODE']
+        self.device = torch.device(config['DEVICE'])
 
-        self.in_channels = in_channels
-        self.start_filts = start_filts
-        self.depth = depth
-        self.device = device
-        self.mean = mean
-        self.std = std
-        self.up_mode = up_mode
-        self.merge_mode = merge_mode
-        self.augment_data = augment_data
+        AbstractUNet._verify_depth_config(self.depth, self.patch_size, 
+                                          self.overlap)
 
         self.down_convs = []
         self.up_convs = []
@@ -193,16 +179,16 @@ class AbstractUNet(nn.Module):
         self.noiseSTD.requires_grad = False
 
         # create the encoder pathway and add to a list
-        for i in range(depth):
+        for i in range(self.depth):
             ins = self.in_channels if i == 0 else outs
             outs = self.start_filts*(2**i)
-            pooling = True if i < depth-1 else False
+            pooling = True if i < self.depth-1 else False
             down_conv = DownConv(ins, outs, pooling=pooling)
             self.down_convs.append(down_conv)
             
         # create the decoder pathway and add to a list
         # - careful! decoding only requires depth-1 blocks
-        for i in range(depth-1):
+        for i in range(self.depth-1):
             ins = outs
             outs = ins // 2
             up_conv = UpConv(ins, outs, up_mode=up_mode,
@@ -222,6 +208,15 @@ class AbstractUNet(nn.Module):
 
     def _build_network_head(self, outs):
         raise NotImplementedError
+
+    @staticmethod
+    def _verify_depth_config(depth, patch_size, overlap):
+        while depth > 0:
+            patch_size = patch_size / 2.0
+            depth -= 1
+        assert patch_size.is_integer(), 'Patch size must be [depth]-many times'+\
+                                        ' divisible by 2.'
+        # No idea what to do with overlap...
 
     @staticmethod
     def weight_init(m):
@@ -247,10 +242,11 @@ class AbstractUNet(nn.Module):
         """Runs this network on the given input x.
         
         Arguments:
-            x {np.array} -- the input image to process
+            x {torch.Tensor} -- the input image to process, must be of shape
+                                [batch_size, C, H, W]
 
         Returns:
-            {np.array} -- the denoised image
+            {torch.Tensor} -- the denoised image
             NOTE -- subclasses might return additional artifacts
         """
         raise NotImplementedError
@@ -264,57 +260,21 @@ class AbstractUNet(nn.Module):
                                  additional keys.
 
         Returns:
-            {np.array} -- outputs
-            {np.array} -- labels
-            {np.array} -- masks
+            {dict} -- containing at leas the keys 'output', 'gt' and 'mask
         """
         raise NotImplementedError
 
-    def assemble_training__batch(self, bs, size, box_size, data_counter,
-                                train_data, train_data_clean):
-        """Assembles a training batch of the requested batch size using the
-        specified patch size and data.
-        
-        Arguments:
-            bs {int} -- batch size
-            size {int} -- size of a patch
-            box_size {int} -- size of a box
-            data_counter {None or int} -- counts whether we should shuffle the data
-            train_data {np.array} -- the raw training data
-            train_data_clean {np.array} -- the ground-truth training data - if available
-        
-        Returns:
-            {np.array} -- prepared inputs
-            {np.array} -- target outputs
-            {np.array} -- masks, i.e. active pixels
-        """
-        inputs = torch.zeros(bs, 1, size, size)
-        labels = torch.zeros(bs, size, size)
-        masks = torch.zeros(bs, size, size)
-
-        # Assemble mini batch
-        for j in range(bs):
-            im, l, m, data_counter = util.random_crop_fri(
-                train_data, size, size, box_size, counter=data_counter,
-                dataClean=train_data_clean, augment_data=self.augment_data)
-            inputs[j, :, :, :] = util.img_to_tensor(im)
-            labels[j, :, :] = util.img_to_tensor(l)
-            masks[j, :, :] = util.img_to_tensor(m)
-
-        return inputs, labels, masks
-
-    def predict(self, image, patch_size, overlap):
+    def predict(self, image):
         """Performs prediction on the whole image. Since we have certain memory
         constraints on the GPU it is important to define an appropriate patch
         size. The overlap defines the overlap between patches.
         
         Arguments:
-            image {np.array} -- 2D image (grayscale or RGB)
-            patch_size {int} -- size of the patches to process individually
-            overlap {int} -- overlap between patches
+            image {torch.Tensor} -- 2D image (grayscale or RGB), must be of
+                                    shape [batch_size, C, H, W]
 
         Returns:
-            {np.array} -- the denoised image
+            {np.array} -- the denoised image of shape [H, W, C]
             NOTE -- subclasses might return additional artifacts
         """
         raise NotImplementedError
@@ -325,7 +285,8 @@ class AbstractUNet(nn.Module):
         with its mean and std.
 
         Arguments:
-            patch {np.array} -- the patch to perform prediction on
+            patch {torch.Tensor} -- the patch to perform prediction on, shape
+                                    must be [batch_size, C, H, W]
 
         Returns:
             np.array -- the denoised and denormalized patch

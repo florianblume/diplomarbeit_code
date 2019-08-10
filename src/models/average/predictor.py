@@ -26,9 +26,6 @@ class Predictor(AbstractPredictor):
 
     def _load_net(self):
         self.weight_mode = self.config['WEIGHT_MODE']
-        weight_constraint = self.config.get('WEIGHT_CONSTRAINT', None)
-        weight_constraint_lambda = self.config.get('WEIGHT_CONSTRAINT_LAMBDA',
-                                                   None)
         assert self.weight_mode in ['image', 'pixel']
         checkpoint = torch.load(self.network_path)
         if self.weight_mode == 'image':
@@ -37,13 +34,9 @@ class Predictor(AbstractPredictor):
             Network = PixelWeightUNet
 
         # mean and std get set in the load_state_dict function
-        net = Network(checkpoint['mean'], checkpoint['std'],
-                      weight_constraint=weight_constraint,
-                      weights_lambda=weight_constraint_lambda,
-                      in_channels=self.config['IN_CHANNELS'],
-                      main_net_depth=self.config['MAIN_NET_DEPTH'],
-                      sub_net_depth=self.config['SUB_NET_DEPTH'],
-                      num_subnets=self.config['NUM_SUBNETS'])
+        self.config['MEAN'] = checkpoint['mean']
+        self.config['STD'] = checkpoint['std']
+        net = Network(self.config)
         net.load_state_dict(checkpoint['model_state_dict'])
         return net
 

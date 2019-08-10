@@ -21,8 +21,3 @@ class Predictor(AbstractPredictor):
     def _predict(self, image):
         image = self.net.predict(image, self.ps, self.overlap)
         return image
-
-class SubnetworkPredictor(AbstractPredictor):
-
-    def _load_net(self):
-        pass

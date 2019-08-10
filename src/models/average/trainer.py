@@ -1,8 +1,5 @@
-import torch
 import numpy as np
-import os
 
-import util
 from models import AbstractTrainer
 from models.average import ImageWeightUNet
 from models.average import PixelWeightUNet
@@ -13,8 +10,6 @@ class Trainer(AbstractTrainer):
         self.train_loss = 0.0
         self.train_losses = []
         self.val_loss = 0.0
-        self.weight_constraint = config.get('WEIGHT_CONSTRAINT', None)
-        self.weight_constraint_lambda = config.get('WEIGHT_CONSTRAINT_LAMBDA', 0)
         super(Trainer, self).__init__(config, config_path)
 
     def _load_network(self):
@@ -27,13 +22,9 @@ class Trainer(AbstractTrainer):
         else:
             raise 'Invalid config value for \"weight_mode\".'
 
-        return Network(self.dataset.mean, self.dataset.std,
-                       in_channels=self.config['IN_CHANNELS'],
-                       main_net_depth=self.config['MAIN_NET_DEPTH'],
-                       sub_net_depth=self.config['SUB_NET_DEPTH'],
-                       num_subnets=self.config['NUM_SUBNETS'],
-                       weight_constraint=self.weight_constraint,
-                       augment_data=self.config['AUGMENT_DATA'])
+        self.config['MEAN'] = self.dataset.mean
+        self.config['STD'] = self.dataset.std
+        return Network(self.config)
 
     def _write_custom_tensorboard_data_for_example(self,
                                                    example_result,

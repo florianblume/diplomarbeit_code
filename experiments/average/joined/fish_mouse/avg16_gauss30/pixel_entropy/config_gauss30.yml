@@ -3,7 +3,7 @@ DATA_BASE_DIR: "data/processed/mouse"
 DATA_PRED_RAW_DIRS: ["gauss30/test"]
 DATA_PRED_GT_DIRS: ["gt/test"]
 
-CONVERT_DATA_TO: "uint8"
+CONVERT_TO_FORMAT: "uint8"
 DISTRIBUTION_MODE: "proportional"
 
 MODEL: "average"

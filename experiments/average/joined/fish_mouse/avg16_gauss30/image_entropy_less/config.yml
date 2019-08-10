@@ -6,7 +6,7 @@ DATA_TRAIN_GT_DIRS: ["fish/gt/train", "mouse/gt/train"]
 DATA_PRED_RAW_DIRS: ["fish/avg16/test", "mouse/gauss30/test"]
 DATA_PRED_GT_DIRS: ["fish/gt/test", "mouse/gt/test"]
 
-CONVERT_DATA_TO: "uint8"
+CONVERT_TO_FORMAT: "uint8"
 DISTRIBUTION_MODE: "proportional"
 
 MODEL: "average"
@@ -18,6 +18,10 @@ NUM_SUBNETS: 2
 SUB_NET_DEPTH: 3
 NUM_CLASSES: 1
 IN_CHANNELS: 1
+START_FILTS: 64
+UP_MODE: "transpose"
+MERGE_MODE: "add"
+DEVICE: "cuda:0"
 
 EPOCHS: 1000
 STEPS_PER_EPOCH: 5

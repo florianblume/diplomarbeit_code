@@ -6,10 +6,7 @@ DATA_TRAIN_GT_DIRS: ["fish/gt/train", "mouse/gt/train"]
 DATA_PRED_RAW_DIRS: ["fish/avg16/test", "mouse/gauss30/test"]
 DATA_PRED_GT_DIRS: ["fish/gt/test", "mouse/gt/test"]
 
-CONVERT_DATA_TO: "uint8"
-DISTRIBUTION_MODE: "proportional"
-
-CONVERT_DATA_TO: "uint8"
+CONVERT_TO_FORMAT: "uint8"
 DISTRIBUTION_MODE: "proportional"
 
 MODEL: "average"

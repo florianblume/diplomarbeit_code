@@ -12,14 +12,9 @@ class SubUNet(AbstractUNet):
     a different loss compared to the integrated version.
     """
 
-    def __init__(self, mean, std, is_integrated, in_channels=1,
-                 depth=5, start_filts=64, up_mode='transpose',
-                 merge_mode='add', augment_data=True,
-                 device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")):
-        self.is_integrated = is_integrated
-        super(SubUNet, self).__init__(mean, std, in_channels,
-                                      depth, start_filts, up_mode, merge_mode,
-                                      augment_data, device)
+    def __init__(self, config):
+        self.is_integrated = config['IS_INTEGRATED']
+        super(SubUNet, self).__init__(config)
 
     def _build_network_head(self, outs):
         self.conv_final_mean = conv1x1(outs, self.in_channels)
@@ -37,11 +32,15 @@ class SubUNet(AbstractUNet):
         ground_truth = result['gt']
         mask = result['mask']
 
+        # We formulate the loss as maximizing the probability of an output
+        # pixel drawn from a Gaussian distribution
         c = torch.log(1 / (torch.sqrt(2 * math.pi * std**2)))
         # exp is no exponential here because we take the log of the loss
         exp = ((ground_truth - mean)**2)/(2 * std**2)
-        loss = torch.sum(mask * (c - exp))/torch.sum(mask)
-        return loss
+        loss = torch.sum(mask * (c - exp))
+        # -loss because we want to maximize the probability of the output
+        # i.e. minimize the negative loss
+        return -loss
 
     def loss_function_integrated(self, result):
         # Mean and std predicted for the pixels
@@ -55,10 +54,6 @@ class SubUNet(AbstractUNet):
         #loss = torch.sum(masks * (c * exp)/torch.sum(masks)
         # Return the Gaussian
         return c + exp
-
-    def reset_params(self):
-        for i, m in enumerate(self.modules()):
-            self.weight_init(m)
 
     def forward(self, x):
         encoder_outs = []
@@ -90,7 +85,7 @@ class SubUNet(AbstractUNet):
                 'gt'     : ground_truth,
                 'mask'   : mask}
 
-    def predict(self, image, patch_size, overlap):
+    def predict(self, image):
         mean = np.zeros(image.shape)
         std = np.zeros(image.shape)
         
@@ -99,8 +94,8 @@ class SubUNet(AbstractUNet):
 
         xmin = 0
         ymin = 0
-        xmax = patch_size
-        ymax = patch_size
+        xmax = self.prediction_patch_size
+        ymax = self.prediction_patch_size
         ovLeft = 0
         while (xmin < image_width):
             ovTop = 0
@@ -108,17 +103,25 @@ class SubUNet(AbstractUNet):
                 _mean, _std = self.predict_patch(image[:, :, ymin:ymax, xmin:xmax])
                 mean[:, :, ymin:ymax, xmin:xmax][:, :, ovTop:, ovLeft:] =\
                                                     _mean[:, :, ovTop:, ovLeft:]
-                std[:, :, ymin:ymax, xmin:xmax][ovTop:, ovLeft:] =\
+                std[:, :, ymin:ymax, xmin:xmax][:, :, ovTop:, ovLeft:] =\
                                                     _std[:, :, ovTop:, ovLeft:]
-                ymin = ymin - overlap + patch_size
-                ymax = ymin + patch_size
-                ovTop = overlap//2
+                ymin = ymin - self.prediction_patch_size + self.prediction_patch_size
+                ymax = ymin + self.prediction_patch_size
+                ovTop = self.prediction_patch_overlap//2
             ymin = 0
-            ymax = patch_size
-            xmin = xmin - overlap + patch_size
-            xmax = xmin + patch_size
-            ovLeft = overlap//2
-        return mean, std
+            ymax = self.prediction_patch_size
+            xmin = xmin - self.prediction_patch_overlap + self.prediction_patch_size
+            xmax = xmin + self.prediction_patch_size
+            ovLeft = self.prediction_patch_overlap//2
+
+        # At the moment we always have implicit batch size 1
+        out_image = mean[0]
+        # Transpose to [C, H, W]
+        out_image = out_image.transpose(1, 2, 0)
+        
+        return {'output' : out_image,
+                'mean'   : mean,
+                'std'    : std}
 
     def predict_patch(self, patch):
         inputs = patch.to(self.device)

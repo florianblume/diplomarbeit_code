@@ -118,7 +118,7 @@ class AbstractPredictor():
             print("\nPredicting on image {} with shape {}:"
                   .format(i, list(raw[0].permute(1, 2, 0).size())))
             start = time.time()
-            raw_result = self.net.predict(raw, self.ps, self.overlap)
+            raw_result = self.net.predict(raw)
             end = time.time()
             diff = end - start
             running_times.append(diff)

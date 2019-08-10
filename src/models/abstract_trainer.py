@@ -104,13 +104,14 @@ class AbstractTrainer():
 
         # We let the dataset automatically add a normalization term with the
         # mean and std computed of the data
+        convert_to_format = self.config.get('CONVERT_TO_FORMAT', None)
         self.dataset = TrainingDataset(data_train_raw_dirs,
                                        data_train_gt_dirs,
                                        self.config['BATCH_SIZE'],
                                        self.config['DISTRIBUTION_MODE'],
                                        self.config['VALIDATION_RATIO'],
                                        transforms=transforms,
-                                       convert_to_format=self.config['CONVERT_DATA_TO'],
+                                       convert_to_format=convert_to_format,
                                        add_normalization_transform=True,
                                        keep_in_memory=True)
         self.training_examples = self.dataset.training_examples()
@@ -167,109 +168,6 @@ class AbstractTrainer():
         # Can be overwritten by subclasses
         pass
 
-    def _write_tensorboard_data(self):
-        # +1 because epochs start at 0
-        print_step = self.current_epoch + 1
-        self.writer.add_scalar('train_loss',
-                               self.avg_train_loss,
-                               print_step)
-        self.writer.add_scalar('val_loss', self.avg_val_loss, print_step)
-
-        self.net.train(False)
-        psnrs = []
-        for i, training_example in enumerate(self.training_examples):
-            # Predict for one example image
-            result = self.net.predict(training_example['raw'],
-                                      self.patch_size,
-                                      self.overlap)
-            prediction = result['output']
-            if 'gt' in training_example:
-                ground_truth = training_example['gt']
-                psnr = util.PSNR(ground_truth, prediction, 255)
-                self.writer.add_scalar('psnr_example_{}'.format(i),
-                                       psnr,
-                                       print_step)
-                psnrs.append(psnr)
-            prediction = prediction.astype(np.uint8)
-            if prediction.shape[-1] == 1 or len(prediction.shape) == 2:
-                # Grayscale image
-                prediction = prediction.squeeze()
-                self.writer.add_image('pred_example_{}'.format(i), prediction,
-                                      print_step, dataformats='HW')
-            else:
-                # RGB image
-                self.writer.add_image('pred_example_{}'.format(i), prediction,
-                                      print_step, dataformats='HWC')
-            self._write_custom_tensorboard_data_for_example(result, i)
-        mean_psnr = np.mean(psnrs)
-        print('Avg. PSNR on {} examples'.format(len(self.training_examples)),
-              mean_psnr)
-        self.writer.add_scalar('mean_psnr', mean_psnr, print_step)
-        self.net.train(True)
-
-        for name, param in self.net.named_parameters():
-            self.writer.add_histogram(
-                name, param.clone().cpu().data.numpy(), print_step)
-
-    def _perform_eval(self):
-        # Perform evaluation
-        self.net.train(False)
-        self.val_losses = []
-        self.val_counter = 0
-        validation_samples = self.dataset.validation_samples()
-        for i, sample in enumerate(validation_samples):
-            if i == self.config['MAX_VALIDATION_SIZE']:
-                print('Ran validation for only {} of {} available images.'\
-                      .format(i, len(validation_samples)))
-                break
-            result = self.net.training_predict(sample)
-            # Needed by subclasses that's why we store val_loss on self
-            self.val_loss = self.net.loss_function(result)
-            self.val_losses.append(self.val_loss.item())
-        print("Validation loss: {}".format(self.val_loss.item()))
-
-        # Need to store on class because subclasses need the loss
-        self.avg_val_loss = np.mean(self.val_losses)
-        self.net.train(True)
-
-        # Save the current best network
-        if len(self.val_hist) == 0 or\
-           self.avg_val_loss < np.min(self.val_hist):
-            torch.save(
-                self._create_checkpoint(),
-                os.path.join(self.experiment_base_path, 'best.net'))
-        self.val_hist.append(self.avg_val_loss)
-
-        np.save(os.path.join(self.experiment_base_path, 'history.npy'),
-                (np.array([np.arange(self.current_epoch),
-                           self.train_hist,
-                           self.val_hist])))
-        torch.save(
-            self._create_checkpoint(),
-            os.path.join(self.experiment_base_path, 'last.net'))
-
-        self.scheduler.step(self.avg_val_loss)
-
-    def _on_epoch_end(self):
-        # Needed by subclasses
-        #self.running_loss = (np.mean(self.train_losses))
-        print("Epoch:", self.current_epoch,
-              "| Avg. epoch loss:", np.mean(self.train_losses))
-        self.train_losses = np.array(self.train_losses)
-        print("Avg. loss: "+str(np.mean(self.train_losses))+"+-" +
-            str(np.std(self.train_losses)/np.sqrt(self.train_losses.size)))
-        # Average loss for the current iteration
-        # Need to store on class because subclasses need the loss
-        self.avg_train_loss = np.mean(self.train_losses)
-        self.train_hist.append(self.avg_train_loss)
-
-        self._perform_eval()
-
-        if self.write_tensorboard_data:
-            self._write_tensorboard_data()
-
-        print('')
-
     def train(self):
         """This method performs training of this network using the earlier
         set configuration and parameters.
@@ -315,3 +213,104 @@ class AbstractTrainer():
             self.writer.close()
 
         print('Finished Training')
+
+    def _on_epoch_end(self):
+        # Needed by subclasses
+        #self.running_loss = (np.mean(self.train_losses))
+        print("Epoch:", self.current_epoch,
+              "| Avg. epoch loss:", np.mean(self.train_losses))
+        self.train_losses = np.array(self.train_losses)
+        print("Avg. loss: "+str(np.mean(self.train_losses))+"+-" +
+            str(np.std(self.train_losses)/np.sqrt(self.train_losses.size)))
+        # Average loss for the current iteration
+        # Need to store on class because subclasses need the loss
+        self.avg_train_loss = np.mean(self.train_losses)
+        self.train_hist.append(self.avg_train_loss)
+
+        self._perform_eval()
+
+        if self.write_tensorboard_data:
+            self._write_tensorboard_data()
+
+        print('')
+
+    def _perform_eval(self):
+        # Perform evaluation
+        self.net.train(False)
+        self.val_losses = []
+        self.val_counter = 0
+        validation_samples = self.dataset.validation_samples()
+        for i, sample in enumerate(validation_samples):
+            if i == self.config['MAX_VALIDATION_SIZE']:
+                print('Ran validation for only {} of {} available images.'\
+                      .format(i, len(validation_samples)))
+                break
+            result = self.net.training_predict(sample)
+            # Needed by subclasses that's why we store val_loss on self
+            self.val_loss = self.net.loss_function(result)
+            self.val_losses.append(self.val_loss.item())
+        print("Validation loss: {}".format(self.val_loss.item()))
+
+        # Need to store on class because subclasses need the loss
+        self.avg_val_loss = np.mean(self.val_losses)
+        self.net.train(True)
+
+        # Save the current best network
+        if len(self.val_hist) == 0 or\
+           self.avg_val_loss < np.min(self.val_hist):
+            torch.save(
+                self._create_checkpoint(),
+                os.path.join(self.experiment_base_path, 'best.net'))
+        self.val_hist.append(self.avg_val_loss)
+
+        np.save(os.path.join(self.experiment_base_path, 'history.npy'),
+                (np.array([np.arange(self.current_epoch),
+                           self.train_hist,
+                           self.val_hist])))
+        torch.save(
+            self._create_checkpoint(),
+            os.path.join(self.experiment_base_path, 'last.net'))
+
+        self.scheduler.step(self.avg_val_loss)
+
+    def _write_tensorboard_data(self):
+        # +1 because epochs start at 0
+        print_step = self.current_epoch + 1
+        self.writer.add_scalar('train_loss',
+                               self.avg_train_loss,
+                               print_step)
+        self.writer.add_scalar('val_loss', self.avg_val_loss, print_step)
+
+        self.net.train(False)
+        psnrs = []
+        for i, training_example in enumerate(self.training_examples):
+            # Predict for one example image
+            result = self.net.predict(training_example['raw'])
+            prediction = result['output']
+            if 'gt' in training_example:
+                ground_truth = training_example['gt']
+                psnr = util.PSNR(ground_truth, prediction, 255)
+                self.writer.add_scalar('psnr_example_{}'.format(i),
+                                       psnr,
+                                       print_step)
+                psnrs.append(psnr)
+            prediction = prediction.astype(np.uint8)
+            if prediction.shape[-1] == 1 or len(prediction.shape) == 2:
+                # Grayscale image
+                prediction = prediction.squeeze()
+                self.writer.add_image('pred_example_{}'.format(i), prediction,
+                                      print_step, dataformats='HW')
+            else:
+                # RGB image
+                self.writer.add_image('pred_example_{}'.format(i), prediction,
+                                      print_step, dataformats='HWC')
+            self._write_custom_tensorboard_data_for_example(result, i)
+        mean_psnr = np.mean(psnrs)
+        print('Avg. PSNR on {} examples'.format(len(self.training_examples)),
+              mean_psnr)
+        self.writer.add_scalar('mean_psnr', mean_psnr, print_step)
+        self.net.train(True)
+
+        for name, param in self.net.named_parameters():
+            self.writer.add_histogram(
+                name, param.clone().cpu().data.numpy(), print_step)

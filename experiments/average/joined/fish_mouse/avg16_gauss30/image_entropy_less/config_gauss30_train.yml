@@ -3,7 +3,7 @@ DATA_BASE_DIR: "data/processed/mouse"
 DATA_PRED_RAW_DIRS: ["gauss30/train"]
 DATA_PRED_GT_DIRS: [gt/train"]
 
-CONVERT_DATA_TO: "uint8"
+CONVERT_TO_FORMAT: "uint8"
 DISTRIBUTION_MODE: "proportional"
 
 MODEL: "average"
@@ -15,6 +15,10 @@ NUM_SUBNETS: 2
 SUB_NET_DEPTH: 3
 NUM_CLASSES: 1
 IN_CHANNELS: 1
+START_FILTS: 64
+UP_MODE: "transpose"
+MERGE_MODE: "add"
+DEVICE: "cuda:0"
 
 EPOCHS: 1000
 STEPS_PER_EPOCH: 5
