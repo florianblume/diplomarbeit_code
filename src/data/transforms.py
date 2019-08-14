@@ -38,8 +38,9 @@ class RandomFlip():
         raw_image = sample['raw']
         gt_image = sample['gt']
         if np.random.choice((True, False)):
-            raw_image = np.flip(raw_image)
-            gt_image = np.flip(gt_image)
+            # (-2, -1) because when we have batch and channels as first dims
+            raw_image = np.flip(raw_image, (-2, -1))
+            gt_image = np.flip(gt_image, (-2, -1))
         return {'raw' : raw_image, 'gt' : gt_image}
 
 class RandomRotation():
