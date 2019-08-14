@@ -2,14 +2,12 @@ import os
 import time
 import logging
 import numpy as np
-import tifffile as tif
 import torch
 import torch.optim as optim
 
 import util
 from data import TrainingDataset
-from data.transforms import RandomCrop, RandomFlip, RandomRotation,\
-                            ConvertToFormat, ToTensor
+from data.transforms import RandomCrop, RandomFlip, RandomRotation, ToTensor
 
 class AbstractTrainer():
     """Class AbstractTrainer is the base class of all trainers. It automatically

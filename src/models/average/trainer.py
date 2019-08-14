@@ -43,7 +43,7 @@ class Trainer(AbstractTrainer):
                                           bins='auto')
             elif self.weight_mode == 'pixel':
                 # Normalize weights
-                normalized = weights[i] / np.sum(weights[i], axis=0)
+                normalized = weights[i] / np.max(weights[i], axis=0)
                 color_space = normalized * 255
                 color_space = color_space.astype(np.uint8)
                 # We only have grayscale weights

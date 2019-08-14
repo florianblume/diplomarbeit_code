@@ -25,11 +25,15 @@ class ImageProbabilisticUNet(AbstractUNet):
         self.num_subnets = num_subnets
 
     def _build_network_head(self, outs):
-
         self.subnets = nn.ModuleList()
-        self.weight_probabilities = nn.ModuleList()
+        if self.num_subnets == 2:
+            # In case that we only have two subnets we produce only one output
+            # with sigmoid, the second probability is implicit in this case
+            count = self.num_subnets - 1
+        else:
+            count = self.num_subnets
 
-        for _ in range(self.num_subnets):
+        for _ in range(count):
             # create the two subnets
             self.subnets.append(SubUNet(self.mean, self.std, is_integrated=True,
                                          in_channels=self.in_channels,
@@ -39,13 +43,40 @@ class ImageProbabilisticUNet(AbstractUNet):
                                          merge_mode=self.merge_mode,
                                          augment_data=self.augment_data,
                                          device=self.device))
-            # create the probability weights, this can be seen as p(z|x), i.e. the probability
-            # of a decision given the input image. To obtain a weighted "average" of the
-            # predictions of the subnets, we multiply this weight to their output.
-            self.weight_probabilities.append(conv1x1(outs, 1))
+
+        # create the probability weights, this can be seen as p(z|x), i.e. the probability
+        # of a decision given the input image. To obtain a weighted "average" of the
+        # predictions of the subnets, we multiply this weight to their output.
+        self.weight_probabilities = conv1x1(outs, self.num_subnets)
 
     def loss_function(self, result):
-        raise 'Need to implement!'
+        # mean and std of the subnetworks, i.e. [batch_size, num_subnets, H, W]
+        mean = result['mean']
+        std = result['std']
+        # Probabilites for each subnetwork per image, i.e. [batch_size, num_subnets]
+        probabilities = result['probabilities']
+        ground_truth = result['ground_truth']
+        mask = result['mask']
+
+        sub_losses = [subnet.loss_function_standalone(result) for subnet in
+                      self.subnets]
+
+        ### Compute p(z|x,y)
+        # We employ the log-exp trick, i.e. take the log of the softmax (=exp)
+        # probabilities, subtract the maximum and compute softmax again (to
+        # undo the log)
+        log_probs = torch.log(probabilities)
+        # Multiply by -1 because in the loss function we invert the loss to
+        # obtain a minimization task from the actual maximization
+        sub_probs = [log_probs[i] * sub_losses[i] * -1.0 for i in self.num_subnets]
+        # Due to the log-exp trick we can subtract the maximum. This means we
+        # obtain smaller numbers and are less prone to numerical issues.
+        max_prob = torch.max(sub_probs)
+        sub_probs -= max_prob
+        sub_probs = F.softmax(sub_probs, dim=0)
+        # p(z|x,y) is multiplied to the gradient as a factor and must not
+        # receive a gradient during backpropagation
+        sub_probs = sub_probs.detach()
 
     def forward(self, x):
         encoder_outs = []
@@ -61,8 +92,12 @@ class ImageProbabilisticUNet(AbstractUNet):
 
         # Compute the individual weight probabilities
         # One probability (weight) for each subnet
-        outs = torch.stack([prob(x) for prob in self.weight_probabilities])
-        outs = F.softmax(outs, dim=0)
+        if self.num_subnets == 2:
+            first_prob = torch.sigmoid(self.subnets[0](x))
+            outs = torch.stack([first_prob, 1 - first_prob])
+        else:
+            outs = torch.stack([prob(x) for prob in self.weight_probabilities])
+            outs = F.softmax(outs, dim=0)
         return outs
 
     def training_predict(self, sample):

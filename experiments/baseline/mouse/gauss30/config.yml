@@ -1,45 +1,41 @@
-##### Network and data configuration
+DATA_BASE_DIR: "data/processed/mouse/"
 
-#### Data paths
-DATA_BASE_PATH: "data/processed/mouse/"
+DATA_TRAIN_RAW_DIRS: ["gauss30/train"]
+DATA_TRAIN_GT_DIRS: ["gt/train"]
 
-# Set GT path to "" if N2V is to be performed
-DATA_TRAIN_RAW_PATH: "gauss30/training_big_raw.npy"
-DATA_TRAIN_GT_PATH: "gt/training_big_GT.npy"
-
-DATA_PRED_RAW_PATH: "gauss30/test_noisy.npy"
-DATA_PRED_GT_PATH: "gt/test_gt.npy"
+DATA_PRED_RAW_DIRS: ["gauss30/test"]
+DATA_PRED_GT_DIRS: ["gt/test"]
 
 CONVERT_DATA_TO: "uint8"
+DISTRIBUTION_MODE: "proportional"
 
-### Network configuration
 MODEL: "baseline"
-# Rigth now only depth 3 works
 DEPTH: 3
+NUM_CLASSES: 1
+IN_CHANNELS: 1
+START_FILTS: 64
+UP_MODE: "transpose"
+MERGE_MODE: "add"
+DEVICE: "cuda:0"
+
+EPOCHS: 1000
+STEPS_PER_EPOCH: 5
+VALIDATION_RATIO: 0.1
+MAX_VALIDATION_SIZE: 20
 BATCH_SIZE: 24
-TRAIN_PATCH_SIZE: 100
+AUGMENT_DATA: True
+# To achieve higher depth the patch size needs to be dividible by 2 6 times
+TRAIN_PATCH_SIZE: 128
 PRED_PATCH_SIZE: 128
 VIRTUAL_BATCH_SIZE: 20
-OVERLAP: 48
-AUGMENT_DATA: True
-# How much of training data should be used for validation
-VALIDATION_RATIO: 0.1
-# Number of images to compute the validation loss with after a backpropagation step
-VALIDATION_SIZE: 20
-STEPS_PER_EPOCH: 5
-EPOCHS: 1000
-# Number of classes, in case of Probabilistic N2V we have 800, 1 otherwise
-NUM_CLASSES: 1
-# Base path for the experiment, the paths below are all relative to this one
-# Can be left out or set to "" if the experiment folder is the same containting
-# the config
-#EXPERIMENT_BASE_PATH: "./experiments/baseline/01_fish_avg16"
-# If specified, training will be continued from this checkpoint
-TRAIN_NETWORK_PATH: "best.net"
-# Trained network to use for prediction
-PRED_NETWORK_PATH: "best.net"
-# Path where to store denoised images, can be "" to omit
-PRED_OUTPUT_PATH: "prediction"
+OVERLAP: 32
+
+#TRAIN_NETWORK_PATH: "best.net"
 WRITE_TENSORBOARD_DATA: yes
-# If set to yes, the network stores an example prediction every STEPS_PER_EPOCH
 WRITE_EXAMPLE_IMAGE: yes
+
+PRED_NETWORK_PATH: "best.net"
+PRED_OUTPUT_PATH: "prediction"
+OUTPUT_IMAGE_FORMATS: ["png", "tif"]
+WRITE_SUBNETWORK_IMAGES: yes
+WRITE_SUBNETWORK_WEIGHTS: yes

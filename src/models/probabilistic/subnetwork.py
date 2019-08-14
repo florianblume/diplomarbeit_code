@@ -17,8 +17,8 @@ class SubUNet(AbstractUNet):
         super(SubUNet, self).__init__(config)
 
     def _build_network_head(self, outs):
-        self.conv_final_mean = conv1x1(outs, self.in_channels)
-        self.conv_final_std = conv1x1(outs, self.in_channels)
+        # 2 output channels for mean and std, respectively
+        self.conv_final = conv1x1(outs, 2)
 
     def loss_function(self, result):
         if self.is_integrated:
@@ -34,10 +34,10 @@ class SubUNet(AbstractUNet):
 
         # We formulate the loss as maximizing the probability of an output
         # pixel drawn from a Gaussian distribution
-        c = torch.log(1 / (torch.sqrt(2 * math.pi * std**2)))
+        factor = torch.log(1.0 / torch.sqrt(2.0 * math.pi * (std**2)))
         # exp is no exponential here because we take the log of the loss
-        exp = ((ground_truth - mean)**2)/(2 * std**2)
-        loss = torch.sum(mask * (c - exp)) / torch.sum(mask)
+        exp = ((ground_truth - mean)**2)/(2.0 * (std**2))
+        loss = torch.sum(mask * (factor - exp)) / torch.sum(mask)
         # -loss because we want to maximize the probability of the output
         # i.e. minimize the negative loss
         return -loss
@@ -67,9 +67,10 @@ class SubUNet(AbstractUNet):
             before_pool = encoder_outs[-(i+2)]
             x = module(before_pool, x)
 
-        mean = self.conv_final_mean(x)
+        output = self.conv_final(x)
+        mean, std = output[:, 0], output[:, 1]
         # exp makes std positive (which it always is)
-        std = torch.exp(self.conv_final_std(x))
+        std = torch.exp(std)
         return mean, std
 
     def training_predict(self, sample):
@@ -83,7 +84,8 @@ class SubUNet(AbstractUNet):
                 'mean'   : mean,
                 'std'    : std,
                 'gt'     : ground_truth,
-                'mask'   : mask}
+                'mask'   : mask,
+                'raw'    : raw}
 
     def _pre_process_predict(self, image):
         mean = np.zeros(image.shape)

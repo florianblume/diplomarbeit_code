@@ -9,9 +9,6 @@ DATA_PRED_GT_DIRS: ["fish/gt/test", "mouse/gt/test"]
 CONVERT_DATA_TO: "uint8"
 DISTRIBUTION_MODE: "proportional"
 
-CONVERT_DATA_TO: "uint8"
-DISTRIBUTION_MODE: "proportional"
-
 MODEL: "average"
 WEIGHT_MODE: "pixel"
 WEIGHT_CONSTRAINT: "entropy"
