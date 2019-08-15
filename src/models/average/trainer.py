@@ -29,23 +29,19 @@ class Trainer(AbstractTrainer):
     def _write_custom_tensorboard_data_for_example(self,
                                                    example_result,
                                                    example_index):
-        # In case that we predict the weights for the whole image we only
-        # want to plot their histograms. In case that we predict the weights
-        # on a per-pixel basis we store it as an image.
-        # We only have one batch, thus [0]
+        # weights are either of shape [subnets] or [subnets, H, W]
         weights = example_result['weights']
-        for i in range(weights.shape[1]):
+        # Normalize weights
+        weights = weights / np.sum(weights, axis=0)
+        for i, weights_ in enumerate(weights):
             weights_name = 'example_{}.weights.subnet.{}'.format(example_index, i)
             if self.weight_mode == 'image':
                 self.writer.add_histogram(weights_name,
-                                          weights[i],
+                                          weights_,
                                           self.current_epoch,
                                           bins='auto')
             elif self.weight_mode == 'pixel':
-                # Normalize weights
-                weight = weights[0, i, ...]
-                normalized = weight / np.max(weight)
-                color_space = normalized * 255
+                color_space = weights_ * 255
                 color_space = color_space.astype(np.uint8)
                 # We only have grayscale weights
                 self.writer.add_image(weights_name, color_space,

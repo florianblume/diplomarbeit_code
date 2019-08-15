@@ -252,7 +252,8 @@ class TrainingDataset(Dataset):
         transforms = requested_transforms
         # Store this for later use
         self._last_op_is_to_tensor = isinstance(transforms[-1], ToTensor) if\
-                                        transforms is not None else None
+                                        transforms is not None and\
+                                        len(transforms) > 0 else False
 
 
         # We need a different set of transforms for evaluation as we do not

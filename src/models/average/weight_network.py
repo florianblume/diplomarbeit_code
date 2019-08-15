@@ -209,6 +209,14 @@ class ImageWeightUNet(AbstractWeightNetwork):
         output = np.sum(weighted_sub_outputs, axis=0) / np.sum(weights)
 
         ### Transpose in correct order
+
+        print('t1', output.shape, weights.shape, weighted_sub_outputs.shape)
+
+        # We assume we have batch size 1 always, remove if not the case
+        output = output[0]
+        weights = weights[0]
+        weighted_sub_outputs = weighted_sub_outputs[0]
+        print('t2', output.shape, weights.shape, weighted_sub_outputs.shape)
         
         # Transepose from [batch, C, H, W] to [batch, H, W, C]
         output = output.transpose((0, 2, 3, 1))
@@ -220,11 +228,7 @@ class ImageWeightUNet(AbstractWeightNetwork):
         # Transpose from [subnet, batch, C, H, W] to
         # [batch, subnet, H, W, C]
         weighted_sub_outputs = weighted_sub_outputs.transpose((1, 0, 3, 4, 2))
-
-        # We assume we have batch size 1 always, remove if not the case
-        output = output[0]
-        weights = weights[0]
-        weighted_sub_outputs = weighted_sub_outputs[0]
+        print('t3', output.shape, weights.shape, weighted_sub_outputs.shape)
 
         return {'output'     : output,
                 'weights'    : weights,
@@ -335,19 +339,15 @@ class PixelWeightUNet(AbstractWeightNetwork):
         sub_outputs = result['sub_outputs']
         amalgamted_image = result['amalgamted_image']
 
-        # Transepose from [batch, C, H, W] to [batch, H, W, C]
-        amalgamted_image = amalgamted_image.transpose((0, 2, 3, 1))
-        # Transpose from [subnet, batch, C, H, W] to
-        # [batch, num_subnets, H, W, C]
-        sub_outputs = sub_outputs.transpose((1, 0, 3, 4, 2))
-        # Transpose from [subnet, batch, H, W] to
-        # [batch, subnet, H, W]
-        weights = weights.transpose((1, 0, 2, 3))
-
         # We always have only one batch during prediciton
         amalgamted_image = amalgamted_image[0]
         sub_outputs = sub_outputs[0]
         weights = weights[0]
+
+        # Transepose from [C, H, W] to [H, W, C]
+        amalgamted_image = amalgamted_image.transpose((1, 2, 0))
+        # Transepose from [subnet, C, H, W] to [ subnet, H, W, C]
+        sub_outputs = sub_outputs.transpose((0, 2, 3, 1))
 
         return {'output'     : amalgamted_image,
                 'weights'    : weights,

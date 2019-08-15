@@ -86,6 +86,8 @@ class AbstractTrainer():
                           RandomFlip(),
                           RandomRotation(),
                           ToTensor()]
+        else:
+            transforms = [ToTensor()]
 
         data_base_dir = self.config['DATA_BASE_DIR']
         data_train_raw_dirs = []
