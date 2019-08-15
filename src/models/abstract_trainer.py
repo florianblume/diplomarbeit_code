@@ -87,7 +87,10 @@ class AbstractTrainer():
                           RandomRotation(),
                           ToTensor()]
         else:
-            transforms = [ToTensor()]
+            # Not entirely correct that this is without augmentation but we
+            # need the random crops to reduce image size
+            transforms = [RandomCrop(crop_width, crop_height),
+                          ToTensor()]
 
         data_base_dir = self.config['DATA_BASE_DIR']
         data_train_raw_dirs = []
