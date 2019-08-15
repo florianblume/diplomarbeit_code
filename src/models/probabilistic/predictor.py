@@ -19,7 +19,7 @@ class Predictor(AbstractPredictor):
         return net
 
     def _predict(self, image):
-        image = self.net.predict(image, self.ps, self.overlap)
+        image = self.net.predict(image)
         return image
 
 class SubnetworkPredictor(AbstractPredictor):

@@ -53,7 +53,7 @@ class SubUNet(AbstractUNet):
         # We do not want to sum here as the loss is continued in the main network
         #loss = torch.sum(masks * (c * exp)/torch.sum(masks)
         # Return the Gaussian
-        return c + exp
+        return c * exp
 
     def forward(self, x):
         encoder_outs = []
@@ -87,8 +87,7 @@ class SubUNet(AbstractUNet):
                 'mean'   : mean,
                 'std'    : std,
                 'gt'     : ground_truth,
-                'mask'   : mask,
-                'raw'    : raw}
+                'mask'   : mask}
 
     def _pre_process_predict(self, image):
         mean = np.zeros(image.shape)

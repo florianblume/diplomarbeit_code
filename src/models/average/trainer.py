@@ -34,7 +34,7 @@ class Trainer(AbstractTrainer):
         # on a per-pixel basis we store it as an image.
         # We only have one batch, thus [0]
         weights = example_result['weights']
-        for i in range(weights.shape[0]):
+        for i in range(weights.shape[1]):
             weights_name = 'example_{}.weights.subnet.{}'.format(example_index, i)
             if self.weight_mode == 'image':
                 self.writer.add_histogram(weights_name,
@@ -43,7 +43,8 @@ class Trainer(AbstractTrainer):
                                           bins='auto')
             elif self.weight_mode == 'pixel':
                 # Normalize weights
-                normalized = weights[i] / np.max(weights[i], axis=0)
+                weight = weights[0, i, ...]
+                normalized = weight / np.max(weight)
                 color_space = normalized * 255
                 color_space = color_space.astype(np.uint8)
                 # We only have grayscale weights
