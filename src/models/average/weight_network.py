@@ -209,14 +209,6 @@ class ImageWeightUNet(AbstractWeightNetwork):
         output = np.sum(weighted_sub_outputs, axis=0) / np.sum(weights)
 
         ### Transpose in correct order
-
-        print('t1', output.shape, weights.shape, weighted_sub_outputs.shape)
-
-        # We assume we have batch size 1 always, remove if not the case
-        output = output[0]
-        weights = weights[0]
-        weighted_sub_outputs = weighted_sub_outputs[0]
-        print('t2', output.shape, weights.shape, weighted_sub_outputs.shape)
         
         # Transepose from [batch, C, H, W] to [batch, H, W, C]
         output = output.transpose((0, 2, 3, 1))
@@ -228,7 +220,11 @@ class ImageWeightUNet(AbstractWeightNetwork):
         # Transpose from [subnet, batch, C, H, W] to
         # [batch, subnet, H, W, C]
         weighted_sub_outputs = weighted_sub_outputs.transpose((1, 0, 3, 4, 2))
-        print('t3', output.shape, weights.shape, weighted_sub_outputs.shape)
+
+        # We assume we have batch size 1 always, remove if not the case
+        output = output[0]
+        weights = weights[0]
+        weighted_sub_outputs = weighted_sub_outputs[0]
 
         return {'output'     : output,
                 'weights'    : weights,
