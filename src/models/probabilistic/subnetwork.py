@@ -17,8 +17,8 @@ class SubUNet(AbstractUNet):
         super(SubUNet, self).__init__(config)
 
     def _build_network_head(self, outs):
-        # 2 output channels for mean and std, respectively
-        self.conv_final = conv1x1(outs, 2)
+        # Mean and std as for each input channel
+        self.conv_final = conv1x1(outs, self.in_channels * 2)
 
     def loss_function(self, result):
         if self.is_integrated:
@@ -68,7 +68,10 @@ class SubUNet(AbstractUNet):
             x = module(before_pool, x)
 
         output = self.conv_final(x)
-        mean, std = output[:, 0], output[:, 1]
+
+        # First entries are the means of the channels, the second are the stds
+        mean = output[:, 0:self.in_channels]
+        std = output[:, self.in_channels:2*self.in_channels]
         # exp makes std positive (which it always is)
         std = torch.exp(std)
         return mean, std
@@ -103,9 +106,6 @@ class SubUNet(AbstractUNet):
                                             _mean[:, :, ovTop:, ovLeft:]
         std[:, :, ymin:ymax, xmin:xmax][:, :, ovTop:, ovLeft:] =\
                                             _std[:, :, ovTop:, ovLeft:]
-        data['mean'] = mean
-        data['std'] = std
-        return data
 
     def predict_patch(self, patch):
         inputs = patch.to(self.device)
@@ -126,7 +126,7 @@ class SubUNet(AbstractUNet):
         std = result['std']
         # At the moment we always have implicit batch size 1
         out_image = mean[0]
-        # Transpose to [C, H, W]
+        # Transpose to [H, W, C]
         out_image = out_image.transpose(1, 2, 0)
         
         return {'output' : out_image,

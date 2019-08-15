@@ -9,7 +9,7 @@ def main(config_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", "-c", help="Path to the config.")
+    parser.add_argument("config", help="Path to the config.")
     args = parser.parse_args()
     main(args.config)
     

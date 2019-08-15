@@ -184,10 +184,6 @@ class ImageWeightUNet(AbstractWeightNetwork):
         sub_images[:, :, :, ymin:ymax, xmin:xmax][:, :, :, ovTop:, ovLeft:]\
             = sub_outputs[:, :, :, ovTop:, ovLeft:]
 
-        data['stored_weights'] = stored_weights
-        data['sub_images'] = sub_images
-        return data
-
     def predict_patch(self, patch):
         inputs = patch.to(self.device)
         output = self(inputs)

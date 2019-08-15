@@ -11,9 +11,9 @@ DATA_PRED_GT_DIRS: ["fish/cropped/gt/test", "simsim/part1/gt/test"]
 DISTRIBUTION_MODE: "proportional"
 
 MODEL: "average"
-WEIGHT_MODE: "image"
-WEIGHT_CONSTRAINT: null
-WEIGHT_CONSTRAINT_LAMBDA: null
+WEIGHT_MODE: "pixel"
+WEIGHT_CONSTRAINT: "entropy"
+WEIGHT_CONSTRAINT_LAMBDA: 0.01
 MAIN_NET_DEPTH: 3
 NUM_SUBNETS: 2
 SUB_NET_DEPTH: 3

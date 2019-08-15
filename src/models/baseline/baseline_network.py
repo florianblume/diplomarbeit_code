@@ -63,10 +63,6 @@ class UNet(AbstractUNet):
         prediction = self.predict_patch(patch)
         output[:, :, ymin:ymax, xmin:xmax][:, :, ovTop:,
                                     ovLeft:] = prediction[:, :, ovTop:, ovLeft:]
-        # Actually we have a pointer to the data but to make the code more
-        # understandable we add this here
-        data['output'] = output
-        return data
 
     def predict_patch(self, patch):
         inputs = patch.to(self.device)

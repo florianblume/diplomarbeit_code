@@ -289,8 +289,9 @@ class AbstractUNet(nn.Module):
         while (xmin < image_width):
             ovTop = 0
             while (ymin < image_height):
-                data = self._process_patch(data, ymin, ymax, xmin, 
-                                           xmax, ovTop, ovLeft)
+                # We do not receive anything from this method because it
+                # modifies the data in-place
+                self._process_patch(data, ymin, ymax, xmin, xmax, ovTop, ovLeft)
                 ymin = ymin-self.overlap+self.patch_size
                 ymax = ymin+self.patch_size
                 ovTop = self.overlap//2
@@ -314,6 +315,8 @@ class AbstractUNet(nn.Module):
         """Performs prediction on the specified patch coordinates given the
         specified data dictionary. This method is for internal use of the
         prediction pipeline only.
+
+        NOTE: Does not return anything because it modifies the data in-place.
         
         Arguments:
             data {dict} -- a dictionary with the data to work on

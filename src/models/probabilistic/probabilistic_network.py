@@ -71,12 +71,13 @@ class ImageProbabilisticUNet(AbstractUNet):
         sub_probs = [log_probs[i] * sub_losses[i] * -1.0 for i in self.num_subnets]
         # Due to the log-exp trick we can subtract the maximum. This means we
         # obtain smaller numbers and are less prone to numerical issues.
-        max_prob = torch.max(sub_probs)
-        sub_probs -= max_prob
+        sub_probs -= torch.max(sub_probs)
         sub_probs = F.softmax(sub_probs, dim=0)
         # p(z|x,y) is multiplied to the gradient as a factor and must not
         # receive a gradient during backpropagation
         sub_probs = sub_probs.detach()
+
+        return log_probs * sub_probs + sub_losses * sub_probs
 
     def forward(self, x):
         encoder_outs = []
@@ -108,57 +109,41 @@ class ImageProbabilisticUNet(AbstractUNet):
 
         # Forward step
         weights = self(raw)
-        means, stds = [subnet(raw) for subnet in self.subnets]
+        sub_outputs = [subnet(raw) for subnet in self.subnets]
+        # Slice notation to keep dimensions
+        means = sub_outputs[:, :1]
+        stds = sub_outputs[:, 1:]
 
-        # TODO THIS IS NOT CORRECT!!!
-        # The correct formula is w_i = 1/sigma_i^2
-        # bar(x) = sum(x_i sigma_i^(-2))/sum(sigma_i^(-2)) (mean)
-        # sigma_bar(x) = sqrt(1 / sum(sigma_i^(-2)))
-        # See also https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Variance_weights
-        means_out = np.array([w * m for w in weights for m in means])
-        stds_out = np.array([w * m for w in weights for m in stds])
-        #TODO this might be wrong
-        means_out = np.sum(means_out, axis=0)
-        stds_out = np.sum(stds_out, axis=0)
+        # TODO the standard deviation is not simply the weighted average
+        # https://stats.stackexchange.com/questions/16608/what-is-the-variance-of-the-weighted-mixture-of-two-gaussians
+        means_out = torch.stack([w * m for w in weights for m in means])
+        stds_out = torch.stack([w * m for w in weights for m in stds])
+        
+        means_out = torch.sum(means_out, dim=0)
+        stds_out = torch.sum(stds_out, dim=0)
         return {'output' : means_out,
                 'mean'   : means_out,
                 'std'    : stds_out,
                 'gt'     : ground_truth,
                 'mask'   : mask}
 
-    def predict(self, image, patch_size, overlap):
+    def _pre_process_predict(self, image):
         mean = np.zeros(image.shape)
         std = np.zeros(image.shape)
-        
-        image_height = image.shape[-2]
-        image_width = image.shape[-1]
+        return {'image' : image,
+                'mean'  : mean,
+                'std'   : std}
 
-        xmin = 0
-        ymin = 0
-        xmax = patch_size
-        ymax = patch_size
-        ovLeft = 0
-        while (xmin < image_height):
-            ovTop = 0
-            while (ymin < image_width):
-                mean_, std_ = self.predict_patch(
-                                    image[:, :, ymin:ymax, xmin:xmax])
-                mean[:, :, ymin:ymax, xmin:xmax]\
-                        [:, :, ovTop:, ovLeft:] = mean_[:, :, ovTop:, ovLeft:]
-                std[:, :, ymin:ymax, xmin:xmax]\
-                        [:, :, ovTop:, ovLeft:] = std_[:, :, ovTop:, ovLeft:]
-                ymin = ymin-overlap+patch_size
-                ymax = ymin+patch_size
-                ovTop = overlap//2
-            ymin = 0
-            ymax = patch_size
-            xmin = xmin-overlap+patch_size
-            xmax = xmin+patch_size
-            ovLeft = overlap//2
-
-        #TODO assemble final image here
-
-        return mean, std
+    def _process_patch(self, data, ymin, ymax, xmin, xmax, ovTop, ovLeft):
+        image = data['image']
+        mean = data['mean']
+        std = data['std']
+        mean_, std_ = self.predict_patch(
+                            image[:, :, ymin:ymax, xmin:xmax])
+        mean[:, :, ymin:ymax, xmin:xmax]\
+                [:, :, ovTop:, ovLeft:] = mean_[:, :, ovTop:, ovLeft:]
+        std[:, :, ymin:ymax, xmin:xmax]\
+                [:, :, ovTop:, ovLeft:] = std_[:, :, ovTop:, ovLeft:]
 
     def predict_patch(self, patch):
         inputs = patch.to(self.device)
@@ -169,6 +154,10 @@ class ImageProbabilisticUNet(AbstractUNet):
         mean = util.denormalize(mean, self.mean, self.std)
         std = util.denormalize(std, self.mean, self.std)
         return mean, std
+
+    def _post_process_predict(self, result):
+        pass
+        #TODO assemble final image here
 
 class PixelProbabilisticUNet(AbstractUNet):
 
