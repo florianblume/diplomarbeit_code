@@ -59,13 +59,15 @@ class AbstractWeightNetwork(AbstractUNet):
         if self.weight_mode == 'image':
             # Add dimension s.t. summed up weights can be broadcasted
             weights_sum = weights_sum.unsqueeze(-1)
+            sum_dims = 0
         else:
             # weight mode 'pixel'
             weights_sum = weights_sum.unsqueeze(1)
+            sum_dims = (0, 2, 3)
         weights = weights / weights_sum
-        # Mean along dimension (0, 2, 3) to obtain the mean of the weights
+        # Mean along dimension 0 to obtain the mean of the weights
         # along batch and H and W
-        weights = torch.mean(weights, (0, 2, 3))
+        weights = torch.mean(weights, sum_dims)
         entropy = -torch.sum(weights * torch.log(weights))
         return loss - self.weight_constraint_lambda * entropy
 

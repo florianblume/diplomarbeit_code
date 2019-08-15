@@ -74,7 +74,10 @@ class ImageProbabilisticUNet(AbstractUNet):
         # One probability (weight) for each subnet
         if self.num_subnets == 2:
             # probabilities are of shape [batch, subnet, H, W] before taking mean
-            probabilities = torch.mean(self.weight_probabilities(x), (-2, -1))
+            probabilities = self.weight_probabilities(x)
+            print(probabilities.shape)
+            probabilities = torch.mean(probabilities, (-2, -1))
+            print('s', probabilities.shape)
             first_prob = torch.sigmoid(probabilities)
             outs = torch.stack([first_prob, 1 - first_prob])
         else:
