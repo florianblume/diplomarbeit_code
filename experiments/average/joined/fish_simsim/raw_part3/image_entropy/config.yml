@@ -1,0 +1,46 @@
+DATA_BASE_DIR: "data/processed/"
+
+DATA_TRAIN_RAW_DIRS: ["fish/cropped/raw/train", "simsim/part3/raw/train"]
+DATA_TRAIN_GT_DIRS: ["fish/cropped/gt/train", "simsim/part3/gt/train"]
+
+DATA_PRED_RAW_DIRS: ["fish/cropped/raw/test", "simsim/part3/raw/test"]
+DATA_PRED_GT_DIRS: ["fish/cropped/gt/test", "simsim/part3/gt/test"]
+
+# Simsim is float32, i.e. do not convert it
+#CONVERT_DATA_TO: "uint8"
+DISTRIBUTION_MODE: "proportional"
+
+MODEL: "average"
+WEIGHT_MODE: "image"
+WEIGHT_CONSTRAINT: "entropy"
+WEIGHT_CONSTRAINT_LAMBDA: 0.1
+MAIN_NET_DEPTH: 3
+NUM_SUBNETS: 2
+SUB_NET_DEPTH: 3
+NUM_CLASSES: 1
+IN_CHANNELS: 1
+START_FILTS: 64
+UP_MODE: "transpose"
+MERGE_MODE: "add"
+DEVICE: "cuda:0"
+
+EPOCHS: 1000
+STEPS_PER_EPOCH: 5
+VALIDATION_RATIO: 0.1
+MAX_VALIDATION_SIZE: 20
+BATCH_SIZE: 24
+AUGMENT_DATA: False
+TRAIN_PATCH_SIZE: 100
+PRED_PATCH_SIZE: 128
+VIRTUAL_BATCH_SIZE: 20
+OVERLAP: 48
+
+#TRAIN_NETWORK_PATH: "best.net"
+WRITE_TENSORBOARD_DATA: yes
+WRITE_EXAMPLE_IMAGE: yes
+
+PRED_NETWORK_PATH: "best.net"
+PRED_OUTPUT_PATH: "prediction"
+OUTPUT_IMAGE_FORMATS: ["png", "tif"]
+WRITE_SUBNETWORK_IMAGES: yes
+WRITE_SUBNETWORK_WEIGHTS: yes
