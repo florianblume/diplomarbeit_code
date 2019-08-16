@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+import datetime
 import numpy as np
 import torch
 import torch.optim as optim
@@ -18,6 +19,9 @@ class AbstractTrainer():
     
     def _init_attributes(self):
         self.experiment_base_path = None
+
+        # To measure how long training takes
+        self.start_time = 0
 
         self.epochs = 0
         self.virtual_batch_size = 0
@@ -42,6 +46,7 @@ class AbstractTrainer():
         self.val_counter = 0
 
     def __init__(self, config, config_path):
+        print('Using config at {}'.format(os.path.abspath(config_path)))
         self._init_attributes()
         self.config = config
         self.config_path = config_path
@@ -177,6 +182,7 @@ class AbstractTrainer():
         """
         print('Training...')
         print('')
+        self.start_time = time.clock()
         # loop over the dataset multiple times
         iterator = iter(self.dataset)
         # We start at current_step because if we are further training the net
@@ -215,6 +221,8 @@ class AbstractTrainer():
             #self.writer.add_graph(self.net, outputs)
             self.writer.close()
 
+        training_time = time.clock() - self.start_time
+        print('Training took {}.'.format(datetime.timedelta(training_time)))
         print('Finished Training')
 
     def _on_epoch_end(self):
@@ -287,7 +295,6 @@ class AbstractTrainer():
         self.net.train(False)
         psnrs = []
         for i, training_example in enumerate(self.training_examples):
-            print(i)
             # Predict for one example image
             result = self.net.predict(training_example['raw'])
             prediction = result['output']

@@ -14,7 +14,7 @@ class ImageProbabilisticUNet(AbstractUNet):
     def __init__(self, config):
         self.sub_net_depth = config['SUB_NET_DEPTH']
         self.num_subnets = config['NUM_SUBNETS']
-        self.weight_mode = config['WEIGHT_MODE']
+        self.weight_mode = 'image'
         self.subnet_config = copy.deepcopy(config)
         self.subnet_config['DEPTH'] = config['SUB_NET_DEPTH']
 
@@ -78,14 +78,17 @@ class ImageProbabilisticUNet(AbstractUNet):
         if self.num_subnets == 2:
             # probabilities are of shape [batch, subnet, H, W] before taking mean
             probabilities = self.weight_probabilities(x)
+            # Take mean across H and W (and subnets because that dim is 1 anyways)
             probabilities = torch.mean(probabilities, (1, 2, 3))
             first_prob = torch.sigmoid(probabilities)
-            outs = torch.stack([first_prob, 1 - first_prob])
+            ones = torch.ones(first_prob.shape).to(self.device)
+            outs = torch.stack([first_prob, ones - first_prob])
             outs = outs.transpose(1, 0)
         else:
             # probabilities are of shape [batch, subnet, H, W] before taking mean
             outs = torch.mean(self.weight_probabilities(x), (-2, -1))
-            outs = F.softmax(outs, dim=0)
+            # Dim 1 is the subnet dimension
+            outs = F.softmax(outs, dim=1)
         return outs
 
     def training_predict(self, sample):
@@ -152,43 +155,58 @@ class ImageProbabilisticUNet(AbstractUNet):
 
 class PixelProbabilisticUNet(AbstractUNet):
 
-    def __init__(self, mean, std, in_channels=1,
-                 main_net_depth=1, sub_net_depth=3, num_subnets=2,
-                 start_filts=64, up_mode='transpose',
-                 merge_mode='add', augment_data=True,
-                 device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")):
+    def __init__(self, config):
+        self.sub_net_depth = config['SUB_NET_DEPTH']
+        self.num_subnets = config['NUM_SUBNETS']
+        self.weight_mode = 'pixel'
+        self.subnet_config = copy.deepcopy(config)
+        self.subnet_config['DEPTH'] = config['SUB_NET_DEPTH']
 
-        super().__init__(mean=mean, std=std, 
-                in_channels=in_channels, main_net_depth=main_net_depth, 
-                start_filts=start_filts, up_mode=up_mode, merge_mode=merge_mode, 
-                augment_data=augment_data, device=device)
-
-        self.sub_net_depth = sub_net_depth
-        self.num_subnets = num_subnets
+        config['DEPTH'] = config['MAIN_NET_DEPTH']
+        super(PixelProbabilisticUNet, self).__init__(config)
 
     def _build_network_head(self, outs):
         self.subnets = nn.ModuleList()
-        self.weight_probabilities = nn.ModuleList()
-
         for _ in range(self.num_subnets):
-            # create the two subnets
-            self.subnets.append(SubUNet(self.mean, self.std, is_integrated=True,
-                                        in_channels=self.in_channels,
-                                        depth=self.depth,
-                                        start_filts=self.start_filts,
-                                        up_mode=self.up_mode,
-                                        merge_mode=self.merge_mode,
-                                        augment_data=self.augment_data,
-                                        device=self.device))
-            # create the probability weights, this can be seen as p(z|x), i.e. the probability
-            # of a decision given the input image. To obtain a weighted "average" of the
-            # predictions of the subnets, we multiply this weight to their output.
-            self.weight_probabilities.append(conv1x1(outs, 1))
+            # create the subnets
+            self.subnets.append(SubUNet(self.subnet_config))
+
+        if self.num_subnets == 2:
+            # In case that we only have two subnets we produce only one output
+            # with sigmoid, the second probability is implicit in this case
+            count = self.num_subnets - 1
+        else:
+            count = self.num_subnets
+
+        # create the probability weights, this can be seen as p(z|x), i.e. the probability
+        # of a decision given the input image. To obtain a weighted "average" of the
+        # predictions of the subnets, we multiply this weight to their output.
+        self.weight_probabilities = conv1x1(outs, count)
 
     def loss_function(self, result):
-        output = result['output']
-        ground_truth = result['gt']
-        mask = result['mask']
+        # Probabilites for each subnetwork per pixel,
+        # i.e. [batch_size, num_subnets, H, W]
+        probabilities = result['probabilities']
+
+        # Assemble dict for subnets on-the-fly because list comprehension is
+        # faster in Python
+        sub_losses = [self.subnets[i].loss_function_integrated(
+                                    {'mean' : result['sub_outputs'][i][0],
+                                     'std'  : result['sub_outputs'][i][1],
+                                     'gt'   : result['gt']}
+                      ) for i in range(self.num_subnets)]
+        # [subnet, batch, C, H, W]
+        sub_losses = torch.stack(sub_losses)
+        # Transpose to [batch, subnet, C, H, W]
+        sub_losses = sub_losses.transpose(1, 0)
+        # To match sub_losses shape
+        probabilities = probabilities.unsqueeze(2)
+        loss = probabilities * sub_losses
+        # Sum over subnet dimension
+        loss = torch.sum(loss, 1)
+        loss = torch.log(loss)
+        # Mean instead of sum is only a factor
+        return torch.mean(loss)
 
     def forward(self, x):
         encoder_outs = []
@@ -204,8 +222,20 @@ class PixelProbabilisticUNet(AbstractUNet):
 
         # Compute the individual weight probabilities
         # One probability (weight) for each subnet
-        outs = torch.stack([prob(x) for prob in self.weight_probabilities])
-        outs = F.softmax(outs, dim=0)
+        if self.num_subnets == 2:
+            # probabilities are of shape [batch, subnet, H, W] before taking mean
+            probabilities = self.weight_probabilities(x)
+            first_prob = torch.sigmoid(probabilities)
+            ones = torch.ones(first_prob.shape).to(self.device)
+            outs = torch.stack([first_prob, ones - first_prob])
+            # Transpose to [batch, subnet]
+            outs = outs.transpose(1, 0)
+        else:
+            # probabilities are of shape [batch, subnet, H, W] before taking mean
+            outs = self.weight_probabilities(x)
+            outs = F.softmax(outs, dim=1)
+        # Remove unnecessary channel dimension
+        outs = outs.squeeze(2)
         return outs
 
     def training_predict(self, sample):
@@ -213,67 +243,67 @@ class PixelProbabilisticUNet(AbstractUNet):
         raw, ground_truth, mask = raw.to(self.device),\
                                    ground_truth.to(self.device),\
                                    mask.to(self.device)
-        weights = self(raw)
-        # TODO move to forward method
-        means, stds = [subnet(raw) for subnet in self.subnets]
-        # TODO THIS IS NOT CORRECT!!!
-        # NOTE this part depends on whether 
-        # The correct formula is w_i = 1/sigma_i^2
-        # bar(x) = sum(x_i sigma_i^(-2))/sum(sigma_i^(-2)) (mean)
-        # sigma_bar(x) = sqrt(1 / sum(sigma_i^(-2)))
-        # See also https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Variance_weights
-        means_out = np.array([w * m for w in weights for m in means])
-        stds_out = np.array([w * m for w in weights for m in stds])
-        #TODO this might be wrong
-        means_out = np.sum(means_out, axis=0)
-        stds_out = np.sum(stds_out, axis=0)
-        return {'output' : means_out,
-                'mean'   : means_out,
-                'std'    : stds_out,
-                'gt'     : ground_truth,
-                'mask'   : mask}
 
-    def predict(self, image, patch_size, overlap):
-        mean = np.zeros(image.shape)
-        std = np.zeros(image.shape)
-        
-        image_height = image.shape[-2]
-        image_width = image.shape[-1]
+        # Forward step
+        probabilities = self(raw)
+        sub_outputs = [subnet(raw) for subnet in self.subnets]
 
-        xmin = 0
-        ymin = 0
-        xmax = patch_size
-        ymax = patch_size
-        ovLeft = 0
-        while (xmin < image_width):
-            ovTop = 0
-            while (ymin < image_height):
-                patch = image[:, :, ymin:ymax, xmin:xmax]
-                mean_, std_ = self.predict_patch(patch)
-                mean[:, :, ymin:ymax, xmin:xmax]\
-                            [:, :, ovTop:, ovLeft:] = mean_[:, :, ovTop:, ovLeft:]
-                std[:, :, ymin:ymax, xmin:xmax]\
-                            [:, :, ovTop:, ovLeft:] = std_[:, :, ovTop:, ovLeft:]
-                ymin = ymin-overlap+patch_size
-                ymax = ymin+patch_size
-                ovTop = overlap//2
-            ymin = 0
-            ymax = patch_size
-            xmin = xmin-overlap+patch_size
-            xmax = xmin+patch_size
-            ovLeft = overlap//2
-        return {'output' : mean,
-                'mean'   : mean,
-                'std'    : std}
+        return {'probabilities': probabilities,
+                'sub_outputs'  : sub_outputs,
+                'gt'           : ground_truth,
+                'mask'         : mask}
+
+    def _pre_process_predict(self, image):
+        # Omit channel dimension and add subnet dimension
+        probabilities = np.zeros((image.shape[0], self.num_subnets) + image.shape[2:])
+        mean = np.zeros((self.num_subnets,) + image.shape)
+        std = np.zeros((self.num_subnets,) + image.shape)
+        return {'image'         : image,
+                'probabilities' : probabilities,
+                'mean'          : mean,
+                'std'           : std}
+
+    def _process_patch(self, data, ymin, ymax, xmin, xmax, ovTop, ovLeft):
+        image = data['image']
+        probabilities = data['probabilities']
+        mean = data['mean']
+        std = data['std']
+        patch = image[:, :, ymin:ymax, xmin:xmax]
+        probabilities_ = self.predict_patch(patch)
+        probabilities[:, :, ymin:ymax, xmin:xmax]\
+                [:, :, ovTop:, ovLeft:] = probabilities_[:, :, ovTop:, ovLeft:]
+        sub_outputs = np.array([subnet.predict_patch(patch)\
+                                for subnet in self.subnets])
+        # Dim 0 is mean and dim 1 is std
+        mean[:, :, :, ymin:ymax, xmin:xmax]\
+            [:, :, :, ovTop:, ovLeft:] = sub_outputs[:, 0, :, :, ovTop:, ovLeft:]
+        std[:, :, :, ymin:ymax, xmin:xmax]\
+            [:, :, :, ovTop:, ovLeft:] = sub_outputs[:, 1, :, :, ovTop:, ovLeft:]
 
     def predict_patch(self, patch):
         inputs = patch.to(self.device)
+        probabilities = self(inputs)
+        probabilities = probabilities.cpu().detach().numpy()
+        return probabilities
 
-        mean, std = self(inputs)
-
-        mean = mean.cpu().detach().numpy()
-        std = std.cpu().detach().numpy()
-
-        mean = util.denormalize(mean, self.mean, self.std)
-        std = util.denormalize(std, self.mean, self.std)
-        return mean, std
+    def _post_process_predict(self, result):
+        # [batch, subnet]
+        probabilities = result['probabilities']
+        mean = result['mean']
+        std = result['std']
+        # Transpose from [subnet, batch, C, H, W] to [batch, subnet, H, W, C]
+        mean = mean.transpose((1, 0, 3, 4, 2))
+        std = std.transpose((1, 0, 3, 4, 2))
+        # Add channel dimension to ensure compatibility between shapes
+        probabilities = np.expand_dims(probabilities, axis=-1)
+        amalgamted_image = probabilities * mean
+        # Sum up over the subnets
+        amalgamted_image = np.sum(amalgamted_image, axis=1)
+        amalgamted_image = np.squeeze(amalgamted_image)
+        probabilities = np.squeeze(probabilities)
+        mean = np.squeeze(mean)
+        std = np.squeeze(std)
+        return {'output'        : amalgamted_image,
+                'probabilities' : probabilities,
+                'mean'          : mean,
+                'std'           : std}

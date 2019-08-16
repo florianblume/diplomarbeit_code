@@ -3,8 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
 
-import util
-
 def conv3x3(in_channels, out_channels, stride=1,
             padding=1, bias=True, groups=1):
     return nn.Conv2d(
