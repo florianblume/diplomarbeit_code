@@ -3,6 +3,7 @@ import argparse
 import util
 
 def main(config_path):
+    print('Predicting using config at \"{}\"'.format(config_path))
     config = util.load_config(config_path)
     predictor = util.load_trainer_or_predictor('Predictor', config, config_path)
     predictor.predict()

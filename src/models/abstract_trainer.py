@@ -46,7 +46,6 @@ class AbstractTrainer():
         self.val_counter = 0
 
     def __init__(self, config, config_path):
-        print('Using config at {}'.format(os.path.abspath(config_path)))
         self._init_attributes()
         self.config = config
         self.config_path = config_path

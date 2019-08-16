@@ -4,6 +4,7 @@ import logging
 import util
 
 def main(config_path, debug):
+    print('Training using config at \"{}\"'.format(os.path.abspath(config_path)))
     if debug:
         logging.basicConfig()
         logging.getLogger().setLevel(logging.DEBUG)
