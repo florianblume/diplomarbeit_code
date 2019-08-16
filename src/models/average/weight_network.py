@@ -68,8 +68,8 @@ class AbstractWeightNetwork(AbstractUNet):
         # Mean along dimension 0 to obtain the mean of the weights
         # along batch and H and W
         weights = torch.mean(weights, sum_dims)
-        entropy = -torch.sum(weights * torch.log(weights))
-        return loss - self.weight_constraint_lambda * entropy
+        entropy = torch.sum(weights * torch.log(weights))
+        return loss + self.weight_constraint_lambda * entropy
 
 class ImageWeightUNet(AbstractWeightNetwork):
     """This network computes the weights for the subnetworks on a per-image basis.

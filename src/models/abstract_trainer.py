@@ -287,6 +287,7 @@ class AbstractTrainer():
         self.net.train(False)
         psnrs = []
         for i, training_example in enumerate(self.training_examples):
+            print(i)
             # Predict for one example image
             result = self.net.predict(training_example['raw'])
             prediction = result['output']
