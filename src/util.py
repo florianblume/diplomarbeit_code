@@ -197,6 +197,18 @@ def load_config(config_path):
     import yaml
     with open(config_path, 'r') as config_file:
         config = yaml.safe_load(config_file)
+        # Configs duplicate a lot of things, check if we are extending another
+        # config
+        extended_config_path = config.get('EXTENDS_CONFIG', None)
+        if extended_config_path is not None:
+            if not os.path.isabs(extended_config_path):
+                # In case we don't have an absolute path prepend the path to
+                # the folder the config is in
+                basedir = os.path.dirname(config_path)
+                extended_config_path = os.path.join(basedir, extended_config_path)
+            extended_config = load_config(extended_config_path)
+            extended_config.update(config)
+            config = extended_config
         return config
     raise "Config could not be loaded."
 

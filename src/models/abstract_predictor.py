@@ -70,6 +70,7 @@ class AbstractPredictor():
             transforms.append(ConvertToFormat(self.config['CONVERT_DATA_TO']))
         transforms.append(Normalize(self.net.mean, self.net.std))
         transforms.append(ToTensor())
+        print(data_pred_raw_dirs)
         self.dataset = PredictionDataset(data_pred_raw_dirs,
                                          data_pred_gt_dirs,
                                          transform=transforms)

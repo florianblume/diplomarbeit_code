@@ -198,15 +198,15 @@ class PixelProbabilisticUNet(AbstractUNet):
         # [subnet, batch, C, H, W]
         sub_losses = torch.stack(sub_losses)
         # Transpose to [batch, subnet, C, H, W]
-        sub_losses = sub_losses.transpose(1, 0)
+        sub_losses = sub_losses.transpose(1, 0).detach()
         # To match sub_losses shape
         probabilities = probabilities.unsqueeze(2)
         loss = probabilities * sub_losses
         # Sum over subnet dimension
         loss = torch.sum(loss, 1)
-        loss = torch.log(loss)
+        loss = torch.log(loss + 1e-10)
         # Mean instead of sum is only a factor
-        return torch.mean(loss)
+        return -torch.mean(loss)
 
     def forward(self, x):
         encoder_outs = []

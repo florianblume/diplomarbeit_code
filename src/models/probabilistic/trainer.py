@@ -22,7 +22,7 @@ class ProbabilisticTrainer(AbstractTrainer):
         # Iterate over subnets
         for i, std_ in enumerate(std):
             name = 'std_example_{}.subnet.{}'.format(example_index, i)
-            std_ += np.min(std_)
+            std_ -= np.min(std_)
             std_ /= np.max(std_)
             std_ *= 255
             self.writer.add_image(name, std_, self.current_epoch, dataformats='HW')
@@ -40,7 +40,7 @@ class SubnetworkTrainer(AbstractTrainer):
         # We store the standard deviance because it allows assumptions about
         # how certain the network is about pixel values
         std = example_result['std'].squeeze()
-        std += np.min(std)
+        std -= np.min(std)
         std /= np.max(std)
         std *= 255
         name = 'std_example_{}'.format(example_index)

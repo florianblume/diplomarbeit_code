@@ -48,8 +48,8 @@ class SubUNet(AbstractUNet):
         std = result['std']
         ground_truth = result['gt']
 
-        c = 1 / (torch.sqrt(2 * math.pi * std**2))
-        exp = torch.exp(-((ground_truth - mean)**2)/(2 * std**2))
+        c = 1 / (torch.sqrt(2.0 * math.pi * (std**2)))
+        exp = torch.exp(-((ground_truth - mean)**2)/(2.0 * (std**2)))
         # We do not want to sum here as the loss is continued in the main network
         #loss = torch.sum(masks * (c * exp)/torch.sum(masks)
         # Return the Gaussian
