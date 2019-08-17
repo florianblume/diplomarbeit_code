@@ -70,7 +70,6 @@ class AbstractPredictor():
             transforms.append(ConvertToFormat(self.config['CONVERT_DATA_TO']))
         transforms.append(Normalize(self.net.mean, self.net.std))
         transforms.append(ToTensor())
-        print(data_pred_raw_dirs)
         self.dataset = PredictionDataset(data_pred_raw_dirs,
                                          data_pred_gt_dirs,
                                          transform=transforms)
@@ -81,7 +80,8 @@ class AbstractPredictor():
     def _write_data_to_output_path(self, raw_results, pred_image_filename):
         """This function writes additional data to the specified output path.
         The AbstractPredictor takes care of writing the denoised images that
-        the network outputs to the output folder.
+        the network outputs to the output folder. This method gets called even
+        if there is no ground-truth data as it does not require any.
         
         Arguments:
             output_path {str} -- the folder where to store prediction
@@ -89,14 +89,29 @@ class AbstractPredictor():
             image_name_base {str} -- the base of the name of the currently
                                      processed image, e.g. 0000_pred
         """
-        pass
 
     def _post_process_intermediate_results(self, image_name, raw_results,
                                            processed_results):
-        pass
+        """This method allows subclasses to write custom results to the results
+        dict which will be written as a JSON file after prediction. Keep in mind
+        that this function only gets called if ground-truth data is present
+        because otherwise there is no purpose for a results dictionary (no
+        PSNR or other values computable).
+        
+        Arguments:
+            image_name {str} -- the name of the image being processed (without ext)
+            raw_results {dict} -- the dictionary containing the current results
+            processed_results {dict} -- the dictionary containing the overall results
+        """
 
     def _post_process_final_results(self, processed_results):
-        pass
+        """This method allows subclasses to compute final values based on the
+        results of the prediction run. This method only gets called if there is
+        ground-truth data present.
+        
+        Arguments:
+            processed_results {dict} -- the dict containting the overall resuluts
+        """
 
     def predict(self):
         processed_results = {}

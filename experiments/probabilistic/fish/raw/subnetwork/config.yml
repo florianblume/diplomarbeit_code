@@ -36,5 +36,5 @@ WRITE_EXAMPLE_IMAGE: yes
 PRED_NETWORK_PATH: "best.net"
 PRED_OUTPUT_PATH: "prediction"
 OUTPUT_IMAGE_FORMATS: ["png", "tif"]
-WRITE_SUBNETWORK_IMAGES: yes
-WRITE_SUBNETWORK_WEIGHTS: yes
+# If specified, also writes std with the given output formats
+WRITE_STD: yes

@@ -49,7 +49,7 @@ class Predictor(AbstractPredictor):
             # Save weights for evaluation, etc.
             weights_filename = pred_image_filename + '_weights.tif'
             tif.imsave(os.path.join(self.pred_output_path,
-                                    weights_filename), weights)
+                                    weights_filename), weights.astype(np.float32))
         if self.config['WRITE_SUBNETWORK_IMAGES']:
             for i, sub_image in enumerate(sub_images):
                 # Squeeze to get rid of batch dimension
@@ -93,12 +93,17 @@ class Predictor(AbstractPredictor):
         self.weights_list = np.array(self.weights_list)
         # Compute average over all weights
         weights_average = np.mean(self.weights_list, axis=0)
+        if self.weight_mode == 'pixel':
+            weights_average = np.mean(weights_average, axis=(1, 2))
         weights_average_percentage = weights_average / np.sum(weights_average)
         formatted_weights = Predictor.pretty_string(weights_average,
                                                     weights_average_percentage)
         print('Average weights: {}'.format(formatted_weights))
         processed_results['average_weights'] = weights_average.tolist()
-        weights_std = np.std(self.weights_list, axis=0)
+        if self.weight_mode == 'image':
+            weights_std = np.std(self.weights_list, axis=0)
+        else:
+            weights_std = np.std(self.weights_list, axis=(0, 2, 3))
         weights_std_string = ', '.join('{:.4f}'.format(std) for std in weights_std)
         print('Weights std: {}'.format(weights_std_string))
         processed_results['weights_std'] = weights_std.tolist()

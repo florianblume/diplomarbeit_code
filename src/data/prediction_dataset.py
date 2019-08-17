@@ -20,7 +20,7 @@ class PredictionDataset(Dataset):
         with_ground_truth = gt_images_dirs is not None
         if with_ground_truth:
             self._gt_images = []
-            self._gt_images_dirs = gt_images_dirs       
+            self._gt_images_dirs = gt_images_dirs
 
         self._test_mode = None
         for i, raw_images_dir in enumerate(raw_images_dirs):
