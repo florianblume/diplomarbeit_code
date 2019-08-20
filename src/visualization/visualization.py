@@ -99,7 +99,7 @@ def print_weight_histogram_and_scatterplot_multi(json_paths,
             for image_key in results_data:
                 data = results_data[image_key]
                 if type(data) is dict:
-                    weights = data['weights']
+                    weights = data['mean_weights']
                     weights_list.append(weights)
             weights_list = np.array(weights_list)
             # scatter plot

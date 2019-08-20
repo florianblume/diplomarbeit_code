@@ -72,11 +72,7 @@ def _train_step(model, loss_fn, optim, batch, device):
     # clear gradient
     optim.zero_grad()
     result = model.training_predict(batch)
-    likelihood = result['output']
-    likelihood = likelihood.squeeze()
-    # calc loss
-    targets = batch['gt']
-    loss = loss_fn(likelihood, targets)
+    loss = model.loss_function(result)
     # backward
     loss.backward()
     # optimization step

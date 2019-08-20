@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 
 import util
+
 from models import AbstractUNet
 from models import conv1x1
 from models.probabilistic import SubUNet
@@ -17,6 +18,7 @@ class ImageProbabilisticUNet(AbstractUNet):
         self.weight_mode = 'image'
         self.subnet_config = copy.deepcopy(config)
         self.subnet_config['DEPTH'] = config['SUB_NET_DEPTH']
+        self.subnet_config['IS_INTEGRATED'] = True
 
         config['DEPTH'] = config['MAIN_NET_DEPTH']
         super(ImageProbabilisticUNet, self).__init__(config)
@@ -45,21 +47,32 @@ class ImageProbabilisticUNet(AbstractUNet):
 
         # Assemble dict for subnets on-the-fly because list comprehension is
         # faster in Python
-        sub_losses = torch.stack([self.subnets[i].loss_function_integrated(
-                                    {'mean' : result['sub_outputs'][i][0],
-                                     'std'  : result['sub_outputs'][i][1],
-                                     'gt'   : result['gt']}
-                                  ) for i in range(self.num_subnets)])
-        # Multiply over all pixels
-        sub_losses = torch.prod(torch.prod(sub_losses, dim=-1), dim=-1)
-        # Get rid of unnecessary channel dimension as a leftover from the
-        # integrated loss function
-        sub_losses = sub_losses.squeeze()
-        # Transpose to [batch, subnet]
+        losses = []
+        for i, subnet in enumerate(self.subnets):
+            subnet_result = {'mean' : result['sub_outputs'][i][0],
+                             'std'  : result['sub_outputs'][i][1],
+                             'gt'   : result['gt']}
+            loss = subnet.loss_function_integrated(subnet_result)
+            losses.append(loss)
+        sub_losses = torch.stack(losses)
+        ### We now do a log-exp modification to be able to subtract a constant
+        # Transpose to [batch, subnet, ...]
         sub_losses = sub_losses.transpose(1, 0)
-        weighted_losses = probabilities * sub_losses
-        # First sum up along "decision"-dimension, then take log, then sum up
-        return torch.sum(torch.log(torch.sum(weighted_losses, dim=1)))
+        sub_losses = torch.log(sub_losses)
+        # We can now sum up (instead of multiply) over all pixels (and channels)
+        sub_losses = torch.sum(torch.sum(torch.sum(sub_losses, dim=-1), dim=-1), dim=-1)
+        # We don't want gradients to be propagated along this path as it's a
+        # constant
+        # We need to take the maxima for each batch individually
+        max_sub_losses = torch.max(sub_losses).detach()
+        sub_losses -= max_sub_losses
+        sub_losses = torch.exp(sub_losses)
+        loss = torch.sum(probabilities * sub_losses, dim=1)
+        # Undo that we subtracted a constant
+        loss = torch.log(loss) + max_sub_losses
+        # Sum over all decisions (i.e. subnets)
+        summed_loss = torch.sum(loss)
+        return summed_loss
 
     def forward(self, x):
         encoder_outs = []
@@ -149,6 +162,7 @@ class ImageProbabilisticUNet(AbstractUNet):
         # to obtain the probabilities for the whole images of the subnetworks
         probabilities = np.mean(probabilities, axis=0)
         amalgamted_image = probabilities * mean
+        amalgamted_image = amalgamted_image[0]
         return {'output' : amalgamted_image,
                 'mean'   : mean,
                 'std'    : std}
@@ -161,6 +175,7 @@ class PixelProbabilisticUNet(AbstractUNet):
         self.weight_mode = 'pixel'
         self.subnet_config = copy.deepcopy(config)
         self.subnet_config['DEPTH'] = config['SUB_NET_DEPTH']
+        self.subnet_config['IS_INTEGRATED'] = True
 
         config['DEPTH'] = config['MAIN_NET_DEPTH']
         super(PixelProbabilisticUNet, self).__init__(config)
@@ -187,6 +202,7 @@ class PixelProbabilisticUNet(AbstractUNet):
         # Probabilites for each subnetwork per pixel,
         # i.e. [batch_size, num_subnets, H, W]
         probabilities = result['probabilities']
+        mask = result['mask']
 
         # Assemble dict for subnets on-the-fly because list comprehension is
         # faster in Python
@@ -198,12 +214,13 @@ class PixelProbabilisticUNet(AbstractUNet):
         # [subnet, batch, C, H, W]
         sub_losses = torch.stack(sub_losses)
         # Transpose to [batch, subnet, C, H, W]
-        sub_losses = sub_losses.transpose(1, 0).detach()
+        sub_losses = sub_losses.transpose(1, 0)
         # To match sub_losses shape
         probabilities = probabilities.unsqueeze(2)
         loss = probabilities * sub_losses
         # Sum over subnet dimension
         loss = torch.sum(loss, 1)
+        loss = mask * loss
         loss = torch.log(loss + 1e-10)
         # Mean instead of sum is only a factor
         return -torch.mean(loss)
@@ -299,9 +316,9 @@ class PixelProbabilisticUNet(AbstractUNet):
         amalgamted_image = probabilities * mean
         # Sum up over the subnets
         amalgamted_image = np.sum(amalgamted_image, axis=1)
-        amalgamted_image = np.squeeze(amalgamted_image)
+        amalgamted_image = amalgamted_image[0]
         probabilities = np.squeeze(probabilities)
-        mean = np.squeeze(mean)
+        #mean = np.squeeze(mean)
         std = np.squeeze(std)
         return {'output'        : amalgamted_image,
                 'probabilities' : probabilities,

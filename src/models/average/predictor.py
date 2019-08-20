@@ -51,6 +51,8 @@ class Predictor(AbstractPredictor):
             tif.imsave(os.path.join(self.pred_output_path,
                                     weights_filename), weights.astype(np.float32))
         if self.config['WRITE_SUBNETWORK_IMAGES']:
+            maximum = np.max(sub_images)
+            minimum = np.min(sub_images)
             for i, sub_image in enumerate(sub_images):
                 # Squeeze to get rid of batch dimension
                 sub_image = sub_image.squeeze()
@@ -62,6 +64,10 @@ class Predictor(AbstractPredictor):
                                             image_filename + '.tif'),
                                sub_image.astype(np.float32))
                 if 'png' in self.config['OUTPUT_IMAGE_FORMATS']:
+                    # To see actual contribution
+                    sub_image -= minimum
+                    sub_image = sub_image / maximum
+                    sub_image *= 255
                     plt.imsave(os.path.join(self.pred_output_path,
                                             image_filename + '.png'),
                                sub_image,

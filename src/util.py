@@ -1,9 +1,8 @@
 import os
 import numpy as np
-
+import torch
 
 def normal_dense(x, m_=0.0, std_=None):
-    import torch
     tmp = -((x-m_)**2)
     tmp = tmp / (2.0*std_*std_)
     tmp = torch.exp(tmp)
@@ -24,6 +23,15 @@ def img_to_tensor(img):
     imgOut = torchvision.transforms.functional.to_tensor(img)
     return imgOut
 
+def tile_tensor(a, dim, n_tile, device='cuda:0'):
+    init_dim = a.size(dim)
+    repeat_idx = [1] * a.dim()
+    repeat_idx[dim] = n_tile
+    a = a.repeat(*(repeat_idx))
+    order_index = torch.LongTensor(np.concatenate([init_dim * np.arange(n_tile)
+                                                   + i for i in range(init_dim)]))
+    order_index = order_index.to(device)
+    return torch.index_select(a, dim, order_index)
 
 def get_stratified_coords2D(box_size, shape):
     coords = []

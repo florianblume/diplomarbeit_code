@@ -1,5 +1,3 @@
-import os
-
 from models import AbstractTrainer
 from models.baseline import UNet
 
