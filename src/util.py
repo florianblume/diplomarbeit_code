@@ -2,13 +2,22 @@ import os
 import numpy as np
 import torch
 
+def cycle(iterable):
+    """Make a cycle of an iterable to avoid StopIteration exceptions.
+    
+    Arguments:
+        iterable {iter} -- the iterable object
+    """
+    while True:
+        for x in iterable:
+            yield x
+
 def normal_dense(x, m_=0.0, std_=None):
     tmp = -((x-m_)**2)
     tmp = tmp / (2.0*std_*std_)
     tmp = torch.exp(tmp)
     tmp = tmp / torch.sqrt((2.0*np.pi)*std_*std_)
     return tmp
-
 
 def img_to_tensor(img):
     import torchvision

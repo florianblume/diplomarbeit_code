@@ -25,6 +25,7 @@ class ProbabilisticTrainer(AbstractTrainer):
             std_ -= np.min(std_)
             std_ /= np.max(std_)
             std_ *= 255
+            std_ = std_.squeeze()
             self.writer.add_image(name, std_, self.current_epoch, dataformats='HW')
 
 class SubnetworkTrainer(AbstractTrainer):

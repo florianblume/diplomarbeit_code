@@ -5,6 +5,8 @@ import datetime
 import numpy as np
 import torch
 import torch.optim as optim
+from torch.utils.data import DataLoader
+from torch.utils.data.sampler import SubsetRandomSampler
 
 import util
 from data import TrainingDataset
@@ -20,7 +22,7 @@ class AbstractTrainer():
     def _init_attributes(self):
         self.experiment_base_path = None
 
-        # To measure how long training takes
+        # To measure how long the training took
         self.start_time = 0
 
         self.epochs = 0
@@ -112,6 +114,7 @@ class AbstractTrainer():
         # We let the dataset automatically add a normalization term with the
         # mean and std computed of the data
         convert_to_format = self.config.get('CONVERT_TO_FORMAT', None)
+        # No need to normalize our data as they are already normalized
         self.dataset = TrainingDataset(data_train_raw_dirs,
                                        data_train_gt_dirs,
                                        self.config['BATCH_SIZE'],
@@ -119,9 +122,26 @@ class AbstractTrainer():
                                        self.config['VALIDATION_RATIO'],
                                        transforms=transforms,
                                        convert_to_format=convert_to_format,
-                                       add_normalization_transform=True,
+                                       add_normalization_transform=False,
                                        keep_in_memory=True)
         self.training_examples = self.dataset.training_examples()
+        # NOTE: Using dataloader does not directly provide the possibility to
+        # sample from the datasets evenly. If you want to achieve this you either
+        # need to replicate the datasets so that their number of images match
+        # or you use the dataset directly. This omits loading data in parallel.
+        train_sampler = SubsetRandomSampler(self.dataset.flattened_train_indices)
+        self.train_dataloader = DataLoader(self.dataset,
+                                           batch_size=self.config['BATCH_SIZE'],
+                                           sampler=train_sampler,
+                                           num_workers=os.cpu_count())
+        # Although we use a random sampler here the validation losses should
+        # be comparable nevertheless because we were cropping our random patches
+        # already anyway.
+        val_sampler = SubsetRandomSampler(self.dataset.flattened_val_indices)
+        self.val_dataloader = DataLoader(self.dataset,
+                                         batch_size=self.config['BATCH_SIZE'],
+                                         sampler=val_sampler,
+                                         num_workers=os.cpu_count())
 
     def _load_network(self):
         raise NotImplementedError
@@ -169,8 +189,8 @@ class AbstractTrainer():
         default_dict.update(self._custom_checkpoint_data())
         return default_dict
 
-    def _write_custom_tensorboard_data_for_example(self, 
-                                                   example_result, 
+    def _write_custom_tensorboard_data_for_example(self,
+                                                   example_result,
                                                    example_index):
         # Can be overwritten by subclasses
         pass
@@ -183,7 +203,7 @@ class AbstractTrainer():
         print('')
         self.start_time = time.clock()
         # loop over the dataset multiple times
-        iterator = iter(self.dataset)
+        iterator = iter(util.cycle(self.train_dataloader))
         # We start at current_step because if we are further training the net
         # this gets saved to the dict
         for step in range(self.current_step, self.epochs):
@@ -249,16 +269,19 @@ class AbstractTrainer():
         self.net.train(False)
         self.val_losses = []
         self.val_counter = 0
-        validation_samples = self.dataset.validation_samples()
-        for i, sample in enumerate(validation_samples):
-            if i == self.config['MAX_VALIDATION_SIZE']:
-                print('Ran validation for only {} of {} available images.'\
-                      .format(i, len(validation_samples)))
+        i = 0
+        for sample in self.val_dataloader:
+            if i >= self.config['MAX_VALIDATION_SIZE']:
+                print('Ran validation for only {} of {} available images'\
+                      ' due to maximum validation size set to {}.'\
+                      .format(i, len(self.val_dataloader),
+                              self.config['MAX_VALIDATION_SIZE']))
                 break
             result = self.net.training_predict(sample)
             # Needed by subclasses that's why we store val_loss on self
             self.val_loss = self.net.loss_function(result)
             self.val_losses.append(self.val_loss.item())
+            i += self.val_dataloader.batch_size
         print("Validation loss: {}".format(self.val_loss.item()))
 
         # Need to store on class because subclasses need the loss

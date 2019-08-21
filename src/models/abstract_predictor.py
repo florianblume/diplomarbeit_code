@@ -165,10 +165,6 @@ class AbstractPredictor():
             if self.with_gt:
                 # We get Pytorch tensors from the dataset
                 ground_truth = sample['gt'].cpu().detach().numpy()
-                # Ground-truth is normalized in dataset
-                ground_truth = util.denormalize(ground_truth,
-                                                self.net.mean,
-                                                self.net.std)
                 psnr = util.PSNR(ground_truth, prediction, 255)
                 psnr_values.append(psnr)
                 mse = util.MSE(ground_truth, prediction)
@@ -176,8 +172,6 @@ class AbstractPredictor():
                 processed_results[pred_image_filename] = {'psnr' : psnr,
                                                           'mse'  : mse}
                 raw = raw.cpu().detach().numpy()
-                raw = util.denormalize(raw, self.net.mean, self.net.std)
-                #TODO 255 might not be correct for SimSim data
                 print("PSNR raw {:.4f}".format(util.PSNR(ground_truth, raw, 255)))
                 print("PSNR denoised {:.4f}".format(psnr))  # Without info from masked pixel
                 print('MSE {:.4f}'.format(mse))

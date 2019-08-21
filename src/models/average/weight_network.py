@@ -331,10 +331,7 @@ class PixelWeightUNet(AbstractWeightNetwork):
         amalgamted_image = amalgamted_image.cpu().detach().numpy()
         sub_images = sub_images.cpu().detach().numpy()
         weights = weights.cpu().detach().numpy()
-        # Since we only call the forward() method on the subimages which does
-        # not denormalize images we need to do this here manually
-        amalgamted_image = util.denormalize(amalgamted_image, self.mean, self.std)
-        sub_images = util.denormalize(sub_images, self.mean, self.std)
+        # No need to denormalize as ground truth is normalized
         return amalgamted_image, sub_images, weights
 
     def _post_process_predict(self, result):

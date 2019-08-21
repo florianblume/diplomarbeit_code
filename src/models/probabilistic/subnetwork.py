@@ -114,10 +114,8 @@ class SubUNet(AbstractUNet):
         # Get data from GPU
         mean = mean.cpu().detach().numpy()
         std = std.cpu().detach().numpy()
-
-        # Denormalize
-        mean = util.denormalize(mean, self.mean, self.std)
-        std = util.denormalize(std, self.mean, self.std)
+        
+        # No need to denormalize as ground truth is normalized
         return mean, std
 
     def _post_process_predict(self, result):

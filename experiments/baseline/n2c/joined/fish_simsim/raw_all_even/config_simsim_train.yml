@@ -2,8 +2,8 @@ EXTENDS_CONFIG: "config.yml"
 
 DATA_BASE_DIR: "data/processed/"
 
-DATA_PRED_RAW_DIRS: ["simsim/part1/raw/train", "simsim/part2/raw/train", "simsim/part3/raw/train"]
-DATA_PRED_GT_DIRS: ["simsim/part1/gt/train", "simsim/part2/gt/train", "simsim/part3/gt/train"]
+DATA_PRED_RAW_DIRS: ["simsim/all/raw/train"]
+DATA_PRED_GT_DIRS: ["simsim/all/gt/train"]
 
 PRED_NETWORK_PATH: "best.net"
 PRED_OUTPUT_PATH: "prediction_simsim_train"

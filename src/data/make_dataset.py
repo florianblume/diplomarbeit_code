@@ -1,9 +1,9 @@
 import os
-import numpy as np
+import sys
 import shutil
+import numpy as np
 import tifffile as tif
 
-import sys
 sys.path.insert(0, os.path.join(os.getcwd(), 'src'))
 
 import util
@@ -18,6 +18,53 @@ def expand_cells_dataset(base_dir, identifier):
     gauss_noises = [15, 30]
     # Size of SimSim images, we create cut outs of fish and mouse for that
     simsim_shape = [256, 256]
+
+    # Store to compute mean and std first
+    mean_std_data = []
+
+    for i, gt_file in enumerate(gt_files):
+        mean_std_data.extend(np.load(os.path.join(base_dir, 'data/raw',
+                                                  identifier, 'gt',
+                                                  gt_file)))
+    mean = np.mean(mean_std_data)
+    std = np.std(mean_std_data)
+    mean_std_data = None
+
+    # Extract gt images
+    for i, gt_file in enumerate(gt_files):
+        data = np.load(os.path.join(base_dir,
+                                    'data/raw',
+                                    identifier,
+                                    'gt',
+                                    gt_file))
+        data = util.normalize(data, mean, std)
+        for j, image in enumerate(data):
+            # Insert as many leading 0s as there are digits in the number of
+            # images in the data, e.g. 001 instead of 1 for up to 999 images
+            pretty_index = str(j).zfill(len(str(abs(data.shape[0]))))
+            filename = '{}_{}_{}.tif'.format(identifier,
+                                             'gt',
+                                             pretty_index)
+            output_dir = os.path.join(base_dir,
+                                      'data/processed',
+                                      identifier,
+                                      'gt',
+                                      raw_ouput_folders[i])
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+            cropped_output_dir = os.path.join(base_dir,
+                                              'data/processed',
+                                              identifier,
+                                              'cropped',
+                                              'gt',
+                                              raw_ouput_folders[i])
+            if not os.path.exists(cropped_output_dir):
+                os.makedirs(cropped_output_dir)
+            tif.imsave(os.path.join(output_dir, filename), image)
+            x = int(simsim_shape[0] / 2)
+            y = int(simsim_shape[1] / 2)
+            cropped_image = image[y:y+simsim_shape[0], x:x+simsim_shape[1]]
+            tif.imsave(os.path.join(cropped_output_dir, filename), cropped_image)
 
     # Extract raw images
     for raw_sub_folder in raw_sub_folders:
@@ -49,6 +96,7 @@ def expand_cells_dataset(base_dir, identifier):
                                                   raw_ouput_folders[i])
                 if not os.path.exists(cropped_output_dir):
                     os.makedirs(cropped_output_dir)
+                image = util.normalize(image, mean, std)
                 tif.imsave(os.path.join(output_dir, filename), image)
                 x = int(simsim_shape[0] / 2)
                 y = int(simsim_shape[1] / 2)
@@ -81,46 +129,12 @@ def expand_cells_dataset(base_dir, identifier):
                         if not os.path.exists(cropped_output_dir):
                             os.makedirs(cropped_output_dir)
                         image = image.astype(np.uint8)
+                        image = util.normalize(image, mean, std)
                         tif.imsave(os.path.join(output_dir, filename), image)
                         x = int(simsim_shape[0] / 2)
                         y = int(simsim_shape[1] / 2)
                         cropped_image = image[y:y+simsim_shape[0], x:x+simsim_shape[1]]
                         tif.imsave(os.path.join(cropped_output_dir, filename), cropped_image)
-
-    # Extract gt images
-    for i, gt_file in enumerate(gt_files):
-        data = np.load(os.path.join(base_dir,
-                                    'data/raw',
-                                    identifier,
-                                    'gt',
-                                    gt_file))
-        for j, image in enumerate(data):
-            # Insert as many leading 0s as there are digits in the number of
-            # images in the data, e.g. 001 instead of 1 for up to 999 images
-            pretty_index = str(j).zfill(len(str(abs(data.shape[0]))))
-            filename = '{}_{}_{}.tif'.format(identifier,
-                                             'gt',
-                                             pretty_index)
-            output_dir = os.path.join(base_dir,
-                                      'data/processed',
-                                      identifier,
-                                      'gt',
-                                      raw_ouput_folders[i])
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir)
-            cropped_output_dir = os.path.join(base_dir,
-                                              'data/processed',
-                                              identifier,
-                                              'cropped',
-                                              'gt',
-                                              raw_ouput_folders[i])
-            if not os.path.exists(cropped_output_dir):
-                os.makedirs(cropped_output_dir)
-            tif.imsave(os.path.join(output_dir, filename), image)
-            x = int(simsim_shape[0] / 2)
-            y = int(simsim_shape[1] / 2)
-            cropped_image = image[y:y+simsim_shape[0], x:x+simsim_shape[1]]
-            tif.imsave(os.path.join(cropped_output_dir, filename), cropped_image)
         
 def expand_simsim_dataset(base_dir):
     train_raw = tif.imread(os.path.join(base_dir,
@@ -131,11 +145,24 @@ def expand_simsim_dataset(base_dir):
     # Adjust value ranges of simsim, the dataset is shifted and scaled
     train_gt, train_raw, range_ = adjust_raw_and_scaled_shifted_gt(train_gt,
                                                                    train_raw)
+    mean, std = np.mean(train_gt), np.std(train_gt)
+    train_gt = util.normalize(train_gt, mean, std)
+    train_raw = util.normalize(train_raw, mean, std)
     # Three orientations in SimSim that's why we need to split it into 3 parts
     factor = int(train_raw.shape[0] / 3)
 
     out_dir = 'data/processed/simsim'
     part_dirs = ['part1', 'part2', 'part3']
+
+    # Also store all together
+    out_dir_all_raw_train = os.path.join(out_dir, 'all/raw/train')
+    out_dir_all_raw_test = os.path.join(out_dir, 'all/raw/test')
+    out_dir_all_gt_train = os.path.join(out_dir, 'all/gt/train')
+    out_dir_all_gt_test = os.path.join(out_dir, 'all/gt/test')
+    os.makedirs(out_dir_all_raw_train)
+    os.makedirs(out_dir_all_raw_test)
+    os.makedirs(out_dir_all_gt_train)
+    os.makedirs(out_dir_all_gt_test)
 
     for i, part_dir in enumerate(part_dirs):
         out_dir_raw_train = os.path.join(out_dir, part_dir, 'raw/train')
@@ -153,6 +180,7 @@ def expand_simsim_dataset(base_dir):
         test_gt_part = np.array([np.rot90(image, k=2) for image in train_gt_part])
         assert train_raw_part.shape[0] == train_gt_part.shape[0]\
                == test_raw_part.shape[0] == test_gt_part.shape[0]
+
         for j, raw in enumerate(train_raw_part):
             pretty_index = str(j).zfill(len(str(abs(train_raw_part.shape[0]))))
             filename = '{}_{}_{}.tif'.format('simsim',
@@ -162,6 +190,15 @@ def expand_simsim_dataset(base_dir):
             # data is actually only float 32
             tif.imsave(os.path.join(out_dir_raw_train, filename), raw.astype(np.float32))
             tif.imsave(os.path.join(out_dir_raw_test, filename), test_raw_part[j].astype(np.float32))
+            # To store all together
+            pretty_index = str(j).zfill(len(str(abs(train_raw_part.shape[0]))))
+            filename = '{}_{}_{}_{}_{}.tif'.format('simsim',
+                                                   'part',
+                                                   (i + 1),
+                                                   'raw',
+                                                   pretty_index)
+            tif.imsave(os.path.join(out_dir_all_raw_train, filename), raw.astype(np.float32))
+            tif.imsave(os.path.join(out_dir_all_raw_test, filename), test_raw_part[j].astype(np.float32))
         for j, gt in enumerate(train_gt_part):
             pretty_index = str(j).zfill(len(str(abs(train_gt_part.shape[0]))))
             filename = '{}_{}_{}.tif'.format('simsim',
@@ -169,6 +206,15 @@ def expand_simsim_dataset(base_dir):
                                              pretty_index)
             tif.imsave(os.path.join(out_dir_gt_train, filename), gt)
             tif.imsave(os.path.join(out_dir_gt_test, filename), test_gt_part[j])
+            # To store all together
+            pretty_index = str(j).zfill(len(str(abs(train_raw_part.shape[0]))))
+            filename = '{}_{}_{}_{}_{}.tif'.format('simsim',
+                                                   'part',
+                                                   (i + 1),
+                                                   'raw',
+                                                   pretty_index)
+            tif.imsave(os.path.join(out_dir_all_gt_train, filename), gt.astype(np.float32))
+            tif.imsave(os.path.join(out_dir_all_gt_test, filename), test_gt_part[j].astype(np.float32))
 
 def zero_mean(data):
     return data - np.mean(data)

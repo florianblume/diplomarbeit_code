@@ -1,10 +1,10 @@
 DATA_BASE_DIR: "data/processed/simsim"
 
-DATA_TRAIN_RAW_DIRS: ["part1/raw/train", "part2/raw/train", "part3/raw/train"]
-#DATA_TRAIN_GT_DIRS: ["part1/gt/train", "part2/gt/train", "part3/gt/train"]
+DATA_TRAIN_RAW_DIRS: ["all/raw/train"]
+#DATA_TRAIN_GT_DIRS: ["all/gt/train"]
 
-DATA_PRED_RAW_DIRS: ["part1/raw/test", "part2/raw/test", "part3/raw/test"]
-DATA_PRED_GT_DIRS: ["part1/gt/test", "part2/gt/test", "part3/gt/test"]
+DATA_PRED_RAW_DIRS: ["all/raw/test"]
+DATA_PRED_GT_DIRS: ["all/gt/test"]
 
 DISTRIBUTION_MODE: "proportional"
 

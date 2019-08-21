@@ -16,7 +16,9 @@ class TrainingDataset(Dataset):
 
     def _init_attributes(self):
         # How samples are drawn from the the specified datasets (i.e. image dirs)
-        # 'even' means even and 'proportional' according to dataset size
+        # 'even' means even and 'proportional' proportional to dataset size
+        # NOTE these modes are only relevant when using this dataset as an
+        # iterator directly wihtout using Pytorch's DataLoader class
         self.distribution_modes = ['even', 'proportional']
 
         self._num_datasets = 0
@@ -34,10 +36,14 @@ class TrainingDataset(Dataset):
         self._factors = []
         # list of lists of indices
         self.train_indices = []
+        # flattened list of training indices that have an offset to be able
+        # to retrieve the appropriate dataset
+        self.flattened_train_indices = []
         # currently remaining train indices, gets filled up when all have been
         # returned once
         self._current_train_indices = []
         self.val_indices = []
+        self.flattened_val_indices = []
         # we store one exapmle per dataset
         self._training_examples = []
 
@@ -148,6 +154,8 @@ class TrainingDataset(Dataset):
         self.image_shape = self._get_sample(0, 0)['raw'].shape
 
     def _load_datasets(self, seed):
+        # To be able to create a lattened list of indices
+        current_offset = 0
         for i, raw_images_dir in enumerate(self.raw_images_dirs):
             raw_image_paths, raw_images = self._load_raw_images(raw_images_dir)
             gt_images_dir = self.gt_images_dirs[i] if self.gt_images_dirs is\
@@ -188,11 +196,16 @@ class TrainingDataset(Dataset):
             # all experiments
             indices = TrainingDataset._shuffle_raw_indices(indices, seed)
             train_indices, val_indices = indices[split:], indices[:split]
-            self.train_indices.append(train_indices.tolist())
-            self.val_indices.append(val_indices.tolist())
             # We call tolist() here because the current indices get altered
             # a lot during sample retrieval which is faster for plain
             # Python lists
+            self.train_indices.append(train_indices.tolist())
+            self.flattened_train_indices.extend((train_indices + current_offset).tolist())
+            self.val_indices.append(val_indices.tolist())
+            self.flattened_val_indices.extend((val_indices + current_offset).tolist())
+            # Add offset for the next flattened indices, this way we are able
+            # to retrieve the appropriate dataset
+            current_offset += raw_image_paths.shape[0]
         self._current_train_indices = copy.deepcopy(self.train_indices)
 
     def _load_raw_images(self, raw_images_dir):
@@ -519,7 +532,7 @@ class TrainingDataset(Dataset):
         Returns:
             int -- the length of this dataset
         """
-        flattend_indices = [index for sublist in self.train_indices for index in sublist]
+        flattend_indices = [path for sublist in self.raw_image_paths for path in sublist]
         return len(flattend_indices)
 
     def __getitem__(self, idx):
@@ -536,11 +549,10 @@ class TrainingDataset(Dataset):
                     'mask' is of the shape [batch_size, heigh, width]
         """
         dataset_index = 0
-        # This is the actual index that the user requested
-        while idx > len(self.train_indices[dataset_index]):
+        # This is the actual index that the user requestedcal
+        while idx >= len(self.raw_image_paths[dataset_index]):
+            idx -= len(self.raw_image_paths[dataset_index])
             dataset_index += 1
-            idx -= len(self.train_indices[dataset_index])
-        idx = self.train_indices[dataset_index][idx]
         return self._get_sample(dataset_index, idx)
 
     def __iter__(self):

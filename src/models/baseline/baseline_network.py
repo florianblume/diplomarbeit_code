@@ -68,7 +68,7 @@ class UNet(AbstractUNet):
         inputs = patch.to(self.device)
         prediction = self(inputs)
         prediction = prediction.cpu().detach().numpy()
-        prediction = util.denormalize(prediction, self.mean, self.std)
+        # No need to denormalize as ground truth is normalized
         return prediction
 
     def _post_process_predict(self, result):

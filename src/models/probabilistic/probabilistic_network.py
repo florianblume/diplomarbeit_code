@@ -155,14 +155,16 @@ class ImageProbabilisticUNet(AbstractUNet):
         probabilities = result['probabilities']
         mean = result['mean']
         std = result['std']
+        # We do [0] because we only have one batch
         # Transpose from [subnet, batch, C, H, W] to [batch, subnet, H, W, C]
-        mean = mean.transpose((1, 0, 3, 4, 2))
-        std = std.transpose((1, 0, 3, 4, 2))
+        mean = mean.transpose((1, 0, 3, 4, 2))[0]
+        std = std.transpose((1, 0, 3, 4, 2))[0]
         # Take the mean of the probabilities computed for the individual patches
         # to obtain the probabilities for the whole images of the subnetworks
-        probabilities = np.mean(probabilities, axis=0)
+        probabilities = np.mean(probabilities, axis=0)[0]
+        probabilities = probabilities.reshape((probabilities.shape[0], 1, 1, 1))
         amalgamted_image = probabilities * mean
-        amalgamted_image = amalgamted_image[0]
+        amalgamted_image = np.sum(amalgamted_image, axis=0)
         return {'output' : amalgamted_image,
                 'mean'   : mean,
                 'std'    : std}

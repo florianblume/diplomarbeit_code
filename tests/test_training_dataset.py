@@ -141,7 +141,7 @@ def abstract_test_single_dataset_iteration_raw_only_with_val(in_memory):
                               val_ratio=0.5, add_normalization_transform=False,
                               keep_in_memory=in_memory)
     TrainingDataset._dataset_index_proportional = _dataset_index_proportional_single_dataset
-    assert len(dataset) == 2
+    assert len(dataset) == 4
     # indices[0] because we only have one dataset
     assert len(dataset.val_indices[0]) == 2
     # We get back a batch of size 4 with all images in order
@@ -152,11 +152,11 @@ def abstract_test_single_dataset_iteration_raw_only_with_val(in_memory):
         mask = sample['mask'].astype(np.bool)
         assert not mask.all()
         mask = ~mask
-        # Second half are training indices in TrainingDataset that's why we do
-        # i + 2
-        assert np.array_equal(raw[mask], dataset_1_raw[i + 2][mask])
-        assert not np.array_equal(raw, dataset_1_raw[i + 2])
-        assert np.array_equal(sample['gt'], dataset_1_raw[i + 2])
+        # Iterating over the dataset uses all images, regardless of whether
+        # they are for training or for validation
+        assert np.array_equal(raw[mask], dataset_1_raw[i][mask])
+        assert not np.array_equal(raw, dataset_1_raw[i])
+        assert np.array_equal(sample['gt'], dataset_1_raw[i])
     
 def test_single_dataset_iteration_raw_only_with_val_in_memory():
     abstract_test_single_dataset_iteration_raw_only_with_val(True)
@@ -171,8 +171,9 @@ def abstract_test_single_dataset_raw_only_with_val(in_memory):
                               val_ratio=0.5, add_normalization_transform=False,
                               keep_in_memory=in_memory)
     TrainingDataset._dataset_index_proportional = _dataset_index_proportional_single_dataset
-    assert len(dataset) == 2
+    assert len(dataset) == 4
     # indices[0] because we only have one dataset
+    assert len(dataset.train_indices[0]) == 2
     assert len(dataset.val_indices[0]) == 2
     # We get back a batch of size 4 with all images in order
     sample = next(iter(dataset))
@@ -207,8 +208,9 @@ def abstract_test_single_dataset_raw_only(in_memory):
                               val_ratio=0, add_normalization_transform=False,
                               keep_in_memory=in_memory)
     TrainingDataset._dataset_index_proportional = _dataset_index_proportional_single_dataset
-    # indices[0] because we only have one dataset
     assert len(dataset) == 4
+    # indices[0] because we only have one dataset
+    assert len(dataset.train_indices[0]) == 4
     assert len(dataset.val_indices[0]) == 0
     # We get back a batch of size 4 with all images in order
     sample = next(iter(dataset))
@@ -237,6 +239,7 @@ def abstract_test_single_dataset_raw_only_batch_size(in_memory):
     TrainingDataset._dataset_index_proportional = _dataset_index_proportional_single_dataset
     assert len(dataset) == 4
     # indices[0] because we only have one dataset
+    assert len(dataset.train_indices[0]) == 4
     assert len(dataset.val_indices[0]) == 0
     # We get back a batch of size 4 with all images in order
     sample = next(iter(dataset))
@@ -265,6 +268,7 @@ def abstract_test_single_dataset_raw_only_with_transforms(in_memory):
                               keep_in_memory=in_memory)
     assert len(dataset) == 4
     # indices[0] because we only have one dataset
+    assert len(dataset.train_indices[0]) == 4
     assert not dataset.val_indices[0]
     # We get back a batch of size 4 with all images in order
     sample = next(iter(dataset))
@@ -292,8 +296,9 @@ def abstract_test_single_dataset_raw_gt_with_val(in_memory):
                               add_normalization_transform=False,
                               keep_in_memory=in_memory)
     TrainingDataset._dataset_index_proportional = _dataset_index_proportional_single_dataset
-    assert len(dataset) == 2
+    assert len(dataset) == 4
     # indices[0] because we only have one dataset
+    assert len(dataset.train_indices[0]) == 2
     assert len(dataset.val_indices[0]) == 2
     # We get back a batch of size 4 with all images in order
     sample = next(iter(dataset))
@@ -327,8 +332,9 @@ def abstract_test_single_dataset_raw_only_with_val_even(in_memory):
                               val_ratio=0.5, add_normalization_transform=False,
                               distribution_mode='even', keep_in_memory=in_memory)
     TrainingDataset._dataset_index_even = _dataset_index_even_single_dataset
-    assert len(dataset) == 2
+    assert len(dataset) == 4
     # indices[0] because we only have one dataset
+    assert len(dataset.train_indices[0]) == 2
     assert len(dataset.val_indices[0]) == 2
     # We get back a batch of size 4 with all images in order
     sample = next(iter(dataset))
@@ -361,7 +367,6 @@ def test_single_dataset_raw_only_with_val_even_on_demand():
 ##################################
 
 def abstract_test_multi_dataset_raw_only(in_memory):
-    # Dataset 1 has 4 raw images and 2 gt images
     dataset_1_raw = conftest.dataset_1_raw_images()
     dataset_2_raw = conftest.dataset_2_raw_images()
     dataset_3_raw = conftest.dataset_3_raw_images()
@@ -374,8 +379,11 @@ def abstract_test_multi_dataset_raw_only(in_memory):
                               keep_in_memory=in_memory)
     TrainingDataset._dataset_index_proportional =\
                 IndexProportionalGenerator.index_without_val
-    # indices[0] because we only have one dataset
     assert len(dataset) == 9
+    # indices[0] because we only have one dataset
+    assert len(dataset.train_indices[0]) == 4
+    assert len(dataset.train_indices[1]) == 2
+    assert len(dataset.train_indices[2]) == 3
     assert len([idx for sub in dataset.val_indices for idx in sub]) == 0
     dataset_indices = [0, 0, 0, 0, 1, 1, 2, 2, 2]
     raw_indices = [0, 1, 2, 3, 0, 1, 0, 1, 2]
@@ -414,8 +422,7 @@ def abstract_test_multi_dataset_raw_only_with_val(in_memory):
     IndexProportionalGenerator.counter = 0
     TrainingDataset._dataset_index_proportional =\
                 IndexProportionalGenerator.index_with_val
-    # indices[0] because we only have one dataset
-    assert len(dataset) == 5
+    assert len([idx for sub in dataset.train_indices for idx in sub]) == 5
     assert len([idx for sub in dataset.val_indices for idx in sub]) == 4
     dataset_indices   = [0, 0, 1, 2, 2]
     raw_train_indices = [2, 3, 1, 1, 2]
@@ -472,6 +479,7 @@ def abstract_test_multi_dataset_raw_gt(in_memory):
                 IndexProportionalGenerator.index_without_val
     # indices[0] because we only have one dataset
     assert len(dataset) == 9
+    assert len([idx for sub in dataset.train_indices for idx in sub]) == 9
     assert len([idx for sub in dataset.val_indices for idx in sub]) == 0
     dataset_indices = [0, 0, 0, 0, 1, 1, 2, 2, 2]
     raw_indices     = [0, 1, 2, 3, 0, 1, 0, 1, 2]
@@ -518,7 +526,8 @@ def abstract_test_multi_dataset_raw_gt_with_val(in_memory):
     TrainingDataset._dataset_index_proportional =\
                 IndexProportionalGenerator.index_with_val
     # indices[0] because we only have one dataset
-    assert len(dataset) == 5
+    assert len(dataset) == 9
+    assert len([idx for sub in dataset.train_indices for idx in sub]) == 5
     assert len([idx for sub in dataset.val_indices for idx in sub]) == 4
     dataset_indices   = [0, 0, 1, 2, 2]
     raw_train_indices = [2, 3, 1, 1, 2]
@@ -576,6 +585,7 @@ def abstract_test_multi_dataset_raw_only_even(in_memory):
     TrainingDataset._dataset_index_proportional = IndexEvenGenerator.index
     # indices[0] because we only have one dataset
     assert len(dataset) == 9
+    assert len([idx for sub in dataset.train_indices for idx in sub]) == 9
     assert len([idx for sub in dataset.val_indices for idx in sub]) == 0
     # datasets     0  1  2  0  1  2  0  1  2  0
     raw_indices = [0, 0, 0, 1, 1, 1, 2, 0, 2, 3]
@@ -615,7 +625,8 @@ def abstract_test_multi_dataset_raw_only_with_val_even(in_memory):
     # dataset      0  1  2  0  1  2
     raw_indices = [2, 1, 1, 3, 1, 2]
     # indices[0] because we only have one dataset
-    assert len(dataset) == 5
+    assert len(dataset) == 9
+    assert len([idx for sub in dataset.train_indices for idx in sub]) == 5
     assert len([idx for sub in dataset.val_indices for idx in sub]) == 4
     # We get back a batch of size 4 with all images in order
     sample = next(iter(dataset))
@@ -674,6 +685,7 @@ def abstract_test_multi_dataset_raw_gt_even(in_memory):
     TrainingDataset._dataset_index_proportional = IndexEvenGenerator.index
     # indices[0] because we only have one dataset
     assert len(dataset) == 9
+    assert len([idx for sub in dataset.train_indices for idx in sub]) == 9
     assert len([idx for sub in dataset.val_indices for idx in sub]) == 0
     # datasets     0  1  2  0  1  2  0  1  2  0
     raw_indices = [0, 0, 0, 1, 1, 1, 2, 0, 2, 3]
@@ -723,7 +735,8 @@ def abstract_test_multi_dataset_raw_gt_with_val_even(in_memory):
     raw_indices = [2, 1, 1, 3, 1, 2]
     gt_indices  = [1, 1, 0, 1, 1, 0]
     # indices[0] because we only have one dataset
-    assert len(dataset) == 5
+    assert len(dataset) == 9
+    assert len([idx for sub in dataset.train_indices for idx in sub]) == 5
     assert len([idx for sub in dataset.val_indices for idx in sub]) == 4
     # We get back a batch of size 4 with all images in order
     sample = next(iter(dataset))
