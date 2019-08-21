@@ -1,0 +1,12 @@
+EXTENDS_CONFIG: "config.yml"
+
+DATA_BASE_DIR: "data/processed/"
+
+DATA_PRED_RAW_DIRS: ["fish/gauss30/test"]
+DATA_PRED_GT_DIRS: ["fish/gt/test"]
+
+PRED_NETWORK_PATH: "best.net"
+PRED_OUTPUT_PATH: "prediction_fish"
+OUTPUT_IMAGE_FORMATS: ["png", "tif"]
+WRITE_SUBNETWORK_IMAGES: yes
+WRITE_SUBNETWORK_WEIGHTS: yes
