@@ -17,8 +17,13 @@ class AbstractWeightNetwork(AbstractUNet):
         self.num_subnets = config['NUM_SUBNETS']
         self.sub_net_depth = config['SUB_NET_DEPTH']
         self.weight_mode = config['WEIGHT_MODE']
+        # It is possible to add a constraint on the weights like entropy
         self.weight_constraint = config['WEIGHT_CONSTRAINT']
         self.weight_constraint_lambda = config['WEIGHT_CONSTRAINT_LAMBDA']
+        # It is also possible to multiply a constant onto the weights before
+        # taking the exp to make the networks more different.
+        self.weight_multiplier = config.get('WEIGHT_MULTIPLIER', 1.0)
+
         self.subnet_config = copy.deepcopy(config)
         self.subnet_config['DEPTH'] = config['SUB_NET_DEPTH']
 
@@ -100,7 +105,7 @@ class ImageWeightUNet(AbstractWeightNetwork):
         # (this is the image-wise weight network) along all other dimensions
         # except for the batch dimension, since the individual entries in a
         # batch do not necessarily belong to the same image
-        x = torch.mean(x, (2, 3))
+        x = torch.mean(x, (2, 3)) * self.weight_multiplier
         x = torch.exp(x)
         # NOTE we can't put the computation of the subnetworks in here because
         # during inference we need to compute the final output image patch-wise
@@ -260,7 +265,7 @@ class PixelWeightUNet(AbstractWeightNetwork):
 
         # Compute the pixel-wise weights for the subnetworks
         # x = [batch_size, num_subnets, H, W]
-        weights = self.final_conv(x)
+        weights = self.final_conv(x) * self.weight_multiplier
         # Make positive and add broadcast dimension
         weights = torch.exp(weights).unsqueeze(2)
         sub_images = weights * sub_outputs
