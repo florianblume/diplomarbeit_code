@@ -4,24 +4,30 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-import tifffile as tif
-
 from models import AbstractUNet
 from models import conv1x1
 from models.probabilistic import SubUNet
 
-class ImageProbabilisticUNet(AbstractUNet):
+class ProbabilisticUNet(AbstractUNet):
+    """Abstract UNet class that gathers similarities between the image and
+    pixel based versions of the probabilistic UNet.
+    """
 
     def __init__(self, config):
+        # It is also possible to multiply a constant onto the weights before
+        # taking the exp to make the networks more different.
+        self.weight_multiplier = config.get('WEIGHT_MULTIPLIER', 1.0)
         self.sub_net_depth = config['SUB_NET_DEPTH']
         self.num_subnets = config['NUM_SUBNETS']
-        self.weight_mode = 'image'
+        self.weight_mode = config['WEIGHT_MODE']
         self.subnet_config = copy.deepcopy(config)
         self.subnet_config['DEPTH'] = config['SUB_NET_DEPTH']
         self.subnet_config['IS_INTEGRATED'] = True
 
         config['DEPTH'] = config['MAIN_NET_DEPTH']
-        super(ImageProbabilisticUNet, self).__init__(config)
+        super(ProbabilisticUNet, self).__init__(config)
+
+class ImageProbabilisticUNet(ProbabilisticUNet):
 
     def _build_network_head(self, outs):
         self.subnets = nn.ModuleList()
@@ -40,6 +46,37 @@ class ImageProbabilisticUNet(AbstractUNet):
         # of a decision given the input image. To obtain a weighted "average" of the
         # predictions of the subnets, we multiply this weight to their output.
         self.weight_probabilities = conv1x1(outs, count)
+
+    def forward(self, x):
+        encoder_outs = []
+
+        # encoder pathway, save outputs for merging
+        for i, module in enumerate(self.down_convs):
+            x, before_pool = module(x)
+            encoder_outs.append(before_pool)
+
+        for i, module in enumerate(self.up_convs):
+            before_pool = encoder_outs[-(i+2)]
+            x = module(before_pool, x)
+
+        # Compute the individual weight probabilities
+        # One probability (weight) for each subnet
+        if self.num_subnets == 2:
+            # probabilities are of shape [batch, subnet, H, W] before taking mean
+            probabilities = self.weight_probabilities(x)
+            # Take mean across H and W (and subnets because that dim is 1 anyways
+            # as for two subnets we only have one output channel)
+            probabilities = torch.mean(probabilities, (1, 2, 3))
+            first_prob = torch.sigmoid(probabilities * self.weight_multiplier)
+            ones = torch.ones(first_prob.shape).to(self.device)
+            outs = torch.stack([first_prob, ones - first_prob])
+            outs = outs.transpose(1, 0)
+        else:
+            # probabilities are of shape [batch, subnet, H, W] before taking mean
+            outs = torch.mean(self.weight_probabilities(x), (-2, -1))
+            # Dim 1 is the subnet dimension
+            outs = F.softmax(outs * self.weight_multiplier, dim=1)
+        return outs
 
     def loss_function(self, result):
         # Probabilites for each subnetwork per image, i.e. [batch_size, num_subnets]
@@ -78,36 +115,6 @@ class ImageProbabilisticUNet(AbstractUNet):
         # Sum over all decisions (i.e. subnets)
         summed_loss = torch.sum(loss) + torch.sum(max_sub_losses)
         return -summed_loss
-
-    def forward(self, x):
-        encoder_outs = []
-
-        # encoder pathway, save outputs for merging
-        for i, module in enumerate(self.down_convs):
-            x, before_pool = module(x)
-            encoder_outs.append(before_pool)
-
-        for i, module in enumerate(self.up_convs):
-            before_pool = encoder_outs[-(i+2)]
-            x = module(before_pool, x)
-
-        # Compute the individual weight probabilities
-        # One probability (weight) for each subnet
-        if self.num_subnets == 2:
-            # probabilities are of shape [batch, subnet, H, W] before taking mean
-            probabilities = self.weight_probabilities(x)
-            # Take mean across H and W (and subnets because that dim is 1 anyways)
-            probabilities = torch.mean(probabilities, (1, 2, 3))
-            first_prob = torch.sigmoid(probabilities)
-            ones = torch.ones(first_prob.shape).to(self.device)
-            outs = torch.stack([first_prob, ones - first_prob])
-            outs = outs.transpose(1, 0)
-        else:
-            # probabilities are of shape [batch, subnet, H, W] before taking mean
-            outs = torch.mean(self.weight_probabilities(x), (-2, -1))
-            # Dim 1 is the subnet dimension
-            outs = F.softmax(outs, dim=1)
-        return outs
 
     def training_predict(self, sample):
         raw, ground_truth, mask = sample['raw'], sample['gt'], sample['mask']
@@ -174,18 +181,7 @@ class ImageProbabilisticUNet(AbstractUNet):
                 'mean'   : mean,
                 'std'    : std}
 
-class PixelProbabilisticUNet(AbstractUNet):
-
-    def __init__(self, config):
-        self.sub_net_depth = config['SUB_NET_DEPTH']
-        self.num_subnets = config['NUM_SUBNETS']
-        self.weight_mode = 'pixel'
-        self.subnet_config = copy.deepcopy(config)
-        self.subnet_config['DEPTH'] = config['SUB_NET_DEPTH']
-        self.subnet_config['IS_INTEGRATED'] = True
-
-        config['DEPTH'] = config['MAIN_NET_DEPTH']
-        super(PixelProbabilisticUNet, self).__init__(config)
+class PixelProbabilisticUNet(ProbabilisticUNet):
 
     def _build_network_head(self, outs):
         self.subnets = nn.ModuleList()
@@ -204,6 +200,36 @@ class PixelProbabilisticUNet(AbstractUNet):
         # of a decision given the input image. To obtain a weighted "average" of the
         # predictions of the subnets, we multiply this weight to their output.
         self.weight_probabilities = conv1x1(outs, count)
+
+    def forward(self, x):
+        encoder_outs = []
+
+        # encoder pathway, save outputs for merging
+        for i, module in enumerate(self.down_convs):
+            x, before_pool = module(x)
+            encoder_outs.append(before_pool)
+
+        for i, module in enumerate(self.up_convs):
+            before_pool = encoder_outs[-(i+2)]
+            x = module(before_pool, x)
+
+        # Compute the individual weight probabilities
+        # One probability (weight) for each subnet
+        if self.num_subnets == 2:
+            # probabilities are of shape [batch, subnet, H, W] before taking mean
+            probabilities = self.weight_probabilities(x)
+            first_prob = torch.sigmoid(probabilities * self.weight_multiplier)
+            ones = torch.ones(first_prob.shape).to(self.device)
+            outs = torch.stack([first_prob, ones - first_prob])
+            # Transpose to [batch, subnet]
+            outs = outs.transpose(1, 0)
+        else:
+            # probabilities are of shape [batch, subnet, H, W] before taking mean
+            outs = self.weight_probabilities(x)
+            outs = F.softmax(outs * self.weight_multiplier, dim=1)
+        # Remove unnecessary channel dimension
+        outs = outs.squeeze(2)
+        return outs
 
     def loss_function(self, result):
         # Probabilites for each subnetwork per pixel,
@@ -231,36 +257,6 @@ class PixelProbabilisticUNet(AbstractUNet):
         loss = torch.log(loss + 1e-10)
         # Mean instead of sum is only a factor
         return -torch.mean(loss)
-
-    def forward(self, x):
-        encoder_outs = []
-
-        # encoder pathway, save outputs for merging
-        for i, module in enumerate(self.down_convs):
-            x, before_pool = module(x)
-            encoder_outs.append(before_pool)
-
-        for i, module in enumerate(self.up_convs):
-            before_pool = encoder_outs[-(i+2)]
-            x = module(before_pool, x)
-
-        # Compute the individual weight probabilities
-        # One probability (weight) for each subnet
-        if self.num_subnets == 2:
-            # probabilities are of shape [batch, subnet, H, W] before taking mean
-            probabilities = self.weight_probabilities(x)
-            first_prob = torch.sigmoid(probabilities)
-            ones = torch.ones(first_prob.shape).to(self.device)
-            outs = torch.stack([first_prob, ones - first_prob])
-            # Transpose to [batch, subnet]
-            outs = outs.transpose(1, 0)
-        else:
-            # probabilities are of shape [batch, subnet, H, W] before taking mean
-            outs = self.weight_probabilities(x)
-            outs = F.softmax(outs, dim=1)
-        # Remove unnecessary channel dimension
-        outs = outs.squeeze(2)
-        return outs
 
     def training_predict(self, sample):
         raw, ground_truth, mask = sample['raw'], sample['gt'], sample['mask']
@@ -325,8 +321,8 @@ class PixelProbabilisticUNet(AbstractUNet):
         amalgamted_image = np.sum(amalgamted_image, axis=1)
         amalgamted_image = amalgamted_image[0]
         probabilities = np.squeeze(probabilities)
-        #mean = np.squeeze(mean)
-        #std = np.squeeze(std)
+        mean = mean[0]
+        std = std[0]
         return {'output'        : amalgamted_image,
                 'probabilities' : probabilities,
                 'mean'          : mean,

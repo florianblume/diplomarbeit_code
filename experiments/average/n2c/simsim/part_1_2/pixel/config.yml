@@ -1,16 +1,15 @@
-DATA_BASE_DIR: "data/processed/"
+DATA_BASE_DIR: "data/processed/simsim"
 
-DATA_TRAIN_RAW_DIRS: ["fish/cropped/raw/train", "simsim/part1/raw/train"]
-DATA_TRAIN_GT_DIRS: ["fish/cropped/gt/train", "simsim/part1/gt/train"]
+DATA_TRAIN_RAW_DIRS: ["part1/raw/train", "part2/raw/train"]
+DATA_TRAIN_GT_DIRS: ["part1/gt/train", "part2/gt/train"]
 
-DATA_PRED_RAW_DIRS: ["fish/cropped/raw/test", "simsim/part1/raw/test"]
-DATA_PRED_GT_DIRS: ["fish/cropped/gt/test", "simsim/part1/gt/test"]
+DATA_PRED_RAW_DIRS: ["part1/raw/test", "part2/raw/test"]
+DATA_PRED_GT_DIRS: ["part1/gt/test", "part2/gt/test"]
 
-# Simsim is float32, i.e. do not convert it
 DISTRIBUTION_MODE: "proportional"
 
 MODEL: "average"
-WEIGHT_MODE: "image"
+WEIGHT_MODE: "pixel"
 WEIGHT_CONSTRAINT: null
 WEIGHT_CONSTRAINT_LAMBDA: null
 MAIN_NET_DEPTH: 3
@@ -23,12 +22,12 @@ UP_MODE: "transpose"
 MERGE_MODE: "add"
 DEVICE: "cuda:0"
 
-EPOCHS: 1000
+EPOCHS: 1200
 STEPS_PER_EPOCH: 5
 VALIDATION_RATIO: 0.1
 BATCH_SIZE: 24
 AUGMENT_DATA: False
-TRAIN_PATCH_SIZE: 100
+TRAIN_PATCH_SIZE: 128
 PRED_PATCH_SIZE: 128
 VIRTUAL_BATCH_SIZE: 20
 OVERLAP: 48
