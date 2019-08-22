@@ -127,7 +127,7 @@ class AbstractTrainer():
                                        transforms=transforms,
                                        convert_to_format=convert_to_format,
                                        add_normalization_transform=False,
-                                       keep_in_memory=True)
+                                       keep_in_memory=False)
         self.training_examples = self.dataset.training_examples()
         # NOTE: Using dataloader does not directly provide the possibility to
         # sample from the datasets evenly. If you want to achieve this you either
@@ -245,7 +245,7 @@ class AbstractTrainer():
             self.writer.close()
 
         training_time = time.clock() - self.start_time
-        print('Training took {}.'.format(datetime.timedelta(training_time)))
+        print('Training took {}.'.format(datetime.timedelta(training_time / 1000.0)))
         print('Finished Training')
 
     def _on_epoch_end(self):
