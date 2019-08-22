@@ -7,6 +7,6 @@ DATA_PRED_GT_DIRS: ["simsim/part1/gt/test"]
 
 PRED_NETWORK_PATH: "best.net"
 PRED_OUTPUT_PATH: "prediction_part1"
-OUTPUT_IMAGE_FORMATS: ["png", "tif"]
+OUTPUT_IMAGE_FORMATS: ["tif"]
 WRITE_SUBNETWORK_IMAGES: yes
 WRITE_SUBNETWORK_WEIGHTS: yes

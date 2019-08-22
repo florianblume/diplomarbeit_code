@@ -4,6 +4,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
+import tifffile as tif
+
 from models import AbstractUNet
 from models import conv1x1
 from models.probabilistic import SubUNet
@@ -72,10 +74,10 @@ class ImageProbabilisticUNet(AbstractUNet):
         sub_losses = torch.exp(sub_losses)
         loss = torch.sum(probabilities * sub_losses, dim=1)
         # Undo that we subtracted a constant
-        #loss = torch.log(loss) + torch.sum(max_sub_losses)
+        loss = torch.log(loss)
         # Sum over all decisions (i.e. subnets)
-        summed_loss = torch.mean(loss)
-        return summed_loss
+        summed_loss = torch.sum(loss) + torch.sum(max_sub_losses)
+        return -summed_loss
 
     def forward(self, x):
         encoder_outs = []
@@ -324,7 +326,7 @@ class PixelProbabilisticUNet(AbstractUNet):
         amalgamted_image = amalgamted_image[0]
         probabilities = np.squeeze(probabilities)
         #mean = np.squeeze(mean)
-        std = np.squeeze(std)
+        #std = np.squeeze(std)
         return {'output'        : amalgamted_image,
                 'probabilities' : probabilities,
                 'mean'          : mean,

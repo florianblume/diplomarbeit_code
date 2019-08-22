@@ -56,7 +56,7 @@ PRED_NETWORK_PATH: "best.net"
 # Path where to store denoised images, can be "" to omit storing prediction results
 PRED_OUTPUT_PATH: "prediction"
 # Images will be stored using the specified formats. Possible values are 'png' and 'tif'.
-OUTPUT_IMAGE_FORMATS: ["png", "tif"]
+OUTPUT_IMAGE_FORMATS: ["tif"]
 # If set to yes, the network also writes the individual images weighted by their
 # respective weight to the prediction output folder [PRED_OUTPUT_PATH]
 WRITE_SUBNETWORK_IMAGES: yes

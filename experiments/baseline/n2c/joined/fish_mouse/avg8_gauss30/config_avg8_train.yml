@@ -7,6 +7,6 @@ DATA_PRED_GT_DIRS: ["fish/gt/train"]
 
 PRED_NETWORK_PATH: "best.net"
 PRED_OUTPUT_PATH: "prediction_avg8_train"
-OUTPUT_IMAGE_FORMATS: ["png", "tif"]
+OUTPUT_IMAGE_FORMATS: ["tif"]
 WRITE_SUBNETWORK_IMAGES: yes
 WRITE_SUBNETWORK_WEIGHTS: yes

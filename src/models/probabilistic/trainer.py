@@ -5,7 +5,7 @@ from models.probabilistic import SubUNet
 from models.probabilistic import ImageProbabilisticUNet
 from models.probabilistic import PixelProbabilisticUNet
 
-class ProbabilisticTrainer(AbstractTrainer):
+class Trainer(AbstractTrainer):
 
     def _load_network(self):
         self.config['IS_INTEGRATED'] = True
