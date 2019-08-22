@@ -33,7 +33,7 @@ VALIDATION_RATIO: 0.1
 VALIDATION_SIZE: 20
 STEPS_PER_EPOCH: 5
 EPOCHS: 1000
-# Number of classes, in case of Probabilistic N2V we have 800, 1 otherwise
+STEPS_PER_EPOCH: 5
 NUM_CLASSES: 1
 
 ### EXperiment configuration
