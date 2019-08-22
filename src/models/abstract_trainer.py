@@ -25,6 +25,7 @@ class AbstractTrainer():
 
         # To measure how long the training took
         self.start_time = 0
+        self._train_mode = None
 
         self.epochs = 0
         self.virtual_batch_size = 0
@@ -105,12 +106,14 @@ class AbstractTrainer():
             data_train_raw_dir = os.path.join(data_base_dir, data_train_raw_dir)
             data_train_raw_dirs.append(data_train_raw_dir)
         if 'DATA_TRAIN_GT_DIRS' in self.config:
+            self._train_mode = 'clean'
             data_train_gt_dirs = []
             for data_train_gt_dir in self.config['DATA_TRAIN_GT_DIRS']:
                 data_train_gt_dir = os.path.join(data_base_dir, data_train_gt_dir)
                 data_train_gt_dirs.append(data_train_gt_dir)
         else:
             data_train_gt_dirs = None
+            self._train_mode = 'void'
 
         # We let the dataset automatically add a normalization term with the
         # mean and std computed of the data
@@ -325,7 +328,7 @@ class AbstractTrainer():
             # Predict for one example image
             result = self.net.predict(training_example['raw'])
             prediction = result['output']
-            if 'gt' in training_example:
+            if self._train_mode == 'clean':
                 ground_truth = training_example['gt']
                 psnr = util.PSNR(ground_truth, prediction, self.dataset.range())
                 self.writer.add_scalar('psnr_example_{}'.format(i),
@@ -343,10 +346,13 @@ class AbstractTrainer():
                 self.writer.add_image('pred_example_{}'.format(i), prediction,
                                       print_step, dataformats='HWC')
             self._write_custom_tensorboard_data_for_example(result, i)
-        mean_psnr = np.mean(psnrs)
-        print('Avg. PSNR on {} examples'.format(len(self.training_examples)),
-              mean_psnr)
-        self.writer.add_scalar('mean_psnr', mean_psnr, print_step)
+
+        if self._train_mode == 'clean':
+            mean_psnr = np.mean(psnrs)
+            print('Avg. PSNR on {} examples'.format(len(self.training_examples)),
+                mean_psnr)
+            self.writer.add_scalar('mean_psnr', mean_psnr, print_step)
+            
         self.net.train(True)
 
         for name, param in self.net.named_parameters():

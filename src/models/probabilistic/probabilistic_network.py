@@ -4,8 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-import util
-
 from models import AbstractUNet
 from models import conv1x1
 from models.probabilistic import SubUNet
@@ -45,6 +43,7 @@ class ImageProbabilisticUNet(AbstractUNet):
         # Probabilites for each subnetwork per image, i.e. [batch_size, num_subnets]
         probabilities = result['probabilities']
 
+
         # Assemble dict for subnets on-the-fly because list comprehension is
         # faster in Python
         losses = []
@@ -54,24 +53,28 @@ class ImageProbabilisticUNet(AbstractUNet):
                              'gt'   : result['gt']}
             loss = subnet.loss_function_integrated(subnet_result)
             losses.append(loss)
+            
         sub_losses = torch.stack(losses)
         ### We now do a log-exp modification to be able to subtract a constant
         # Transpose to [batch, subnet, ...]
         sub_losses = sub_losses.transpose(1, 0)
-        sub_losses = torch.log(sub_losses)
+        # Add a small factor to avoid log(0)
+        sub_losses = torch.log(sub_losses + 1e-10)
         # We can now sum up (instead of multiply) over all pixels (and channels)
         sub_losses = torch.sum(torch.sum(torch.sum(sub_losses, dim=-1), dim=-1), dim=-1)
         # We don't want gradients to be propagated along this path as it's a
         # constant
         # We need to take the maxima for each batch individually
-        max_sub_losses = torch.max(sub_losses).detach()
+        max_sub_losses = torch.max(sub_losses, dim=1).values
+        # Add singleton dimension to ensure shape compatibility
+        max_sub_losses = max_sub_losses.unsqueeze(-1)
         sub_losses -= max_sub_losses
         sub_losses = torch.exp(sub_losses)
         loss = torch.sum(probabilities * sub_losses, dim=1)
         # Undo that we subtracted a constant
-        loss = torch.log(loss) + max_sub_losses
+        #loss = torch.log(loss) + torch.sum(max_sub_losses)
         # Sum over all decisions (i.e. subnets)
-        summed_loss = torch.sum(loss)
+        summed_loss = torch.mean(loss)
         return summed_loss
 
     def forward(self, x):
