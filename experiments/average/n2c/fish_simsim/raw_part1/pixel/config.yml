@@ -7,7 +7,6 @@ DATA_PRED_RAW_DIRS: ["fish/cropped/raw/test", "simsim/part1/raw/test"]
 DATA_PRED_GT_DIRS: ["fish/cropped/gt/test", "simsim/part1/gt/test"]
 
 # Simsim is float32, i.e. do not convert it
-#CONVERT_DATA_TO: "uint8"
 DISTRIBUTION_MODE: "proportional"
 
 MODEL: "average"
@@ -27,7 +26,6 @@ DEVICE: "cuda:0"
 EPOCHS: 1000
 STEPS_PER_EPOCH: 5
 VALIDATION_RATIO: 0.1
-MAX_VALIDATION_SIZE: 20
 BATCH_SIZE: 24
 AUGMENT_DATA: False
 TRAIN_PATCH_SIZE: 100

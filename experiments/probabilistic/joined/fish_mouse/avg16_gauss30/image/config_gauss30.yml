@@ -3,7 +3,6 @@ DATA_BASE_DIR: "data/processed/mouse"
 DATA_PRED_RAW_DIRS: ["gauss30/test"]
 DATA_PRED_GT_DIRS: ["gt/test"]
 
-CONVERT_DATA_TO: "uint8"
 DISTRIBUTION_MODE: "proportional"
 
 MODEL: "probabilistic"
@@ -21,7 +20,6 @@ DEVICE: "cuda:0"
 EPOCHS: 1000
 STEPS_PER_EPOCH: 5
 VALIDATION_RATIO: 0.1
-MAX_VALIDATION_SIZE: 20
 BATCH_SIZE: 24
 AUGMENT_DATA: True
 TRAIN_PATCH_SIZE: 100

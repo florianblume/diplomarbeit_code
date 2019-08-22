@@ -6,7 +6,6 @@ DATA_TRAIN_GT_DIRS: ["gt/train"]
 DATA_PRED_RAW_DIRS: ["avg16/test"]
 DATA_PRED_GT_DIRS: ["gt/test"]
 
-CONVERT_DATA_TO: "uint8"
 DISTRIBUTION_MODE: "proportional"
 
 MODEL: "baseline"
@@ -21,7 +20,6 @@ DEVICE: "cuda:0"
 EPOCHS: 1000
 STEPS_PER_EPOCH: 5
 VALIDATION_RATIO: 0.1
-MAX_VALIDATION_SIZE: 20
 BATCH_SIZE: 24
 AUGMENT_DATA: True
 # To achieve higher depth the patch size needs to be dividible by 2 6 times

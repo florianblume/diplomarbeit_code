@@ -145,7 +145,12 @@ class TrainingDataset(Dataset):
                   .format(raws_size,
                           len(flattend_gt_image_paths)))
 
-        self.mean, self.std = self._compute_mean_and_std()
+        # In case of Noise2Void training we do not have any ground-truth images
+        # to compute the range with
+        if self._train_mode == 'clean':
+            self.mean, self.std, self.min, self.max = self._compute_mean_std_min_max()
+        else:
+            self.mean, self.std = self._compute_mean_std_min_max()
         print('Dataset has mean {} and standard deviation {}.'\
                                 .format(self.mean, self.std))
 
@@ -327,7 +332,7 @@ class TrainingDataset(Dataset):
             transforms.append(convert_to_format)
         return transforms
 
-    def _compute_mean_and_std(self):
+    def _compute_mean_std_min_max(self):
         """
         This works approximately and can be used for large datasets that never
         fit in memory.
@@ -344,24 +349,41 @@ class TrainingDataset(Dataset):
             std += tmp / float(self._raw_images.shape[0] * image.shape[0] * image.shape[1] - 1)
         """
         if self._keep_in_memory:
-            # TODO not a nice solution since we store all images again
-            raws_flattened = [raw for sub in self.raw_images for raw in sub]
-            return np.mean(raws_flattened), np.std(raws_flattened)
+            flattened = [raw for sub in self.raw_images for raw in sub]
+            mean, std = np.mean(flattened), np.std(flattened)
+            if self._train_mode == 'clean':
+                flattened = [gt for sub in self.gt_images for gt in sub]
+                minimum, maximum = np.min(flattened), np.max(flattened)
         else:
             images = []
             for raw_image_paths in self.raw_image_paths:
                 for raw_image_path in raw_image_paths:
                     image = tif.imread(raw_image_path)
                     images.append(image)
-
             try:
                 mean, std = np.mean(images), np.std(images)
+                if self._train_mode == 'clean':
+                    minimum, maximum = np.min(images), np.max(images)
             except ValueError:
                 raise ValueError('Are you using images of different shapes?')
 
             # Make sure the images get deleted right away
             del images
+        if self._train_mode == 'clean':
+            return mean, std, minimum, maximum
+        else:
             return mean, std
+
+    def range(self):
+        """Returns the range of the ground-truth data of this dataset. If training
+        is Noise2Void training this method raises a ValueError.
+        
+        Returns:
+            float -- the range of this dataset
+        """
+        if self._train_mode == 'void':
+            raise ValueError('Cannot return range for Noise2Void training.')
+        return self.max - self.min
 
     @staticmethod
     def get_stratified_coords_2D(box_size, shape):
@@ -469,7 +491,6 @@ class TrainingDataset(Dataset):
             # Important that we copy the image otherwise we are editing the
             # original
             raw_image = self.raw_images[dataset_index][sample_index].copy()
-            images = self.gt_images[dataset_index]
             gt_image = self.gt_images[dataset_index][gt_index]
         else:
             raw_image = tif.imread(self.raw_image_paths[dataset_index][sample_index])

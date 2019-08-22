@@ -62,12 +62,36 @@ class PredictionDataset(Dataset):
                 self._test_mode = 'void'
 
         self._raw_images = np.array(self._raw_images)
-        if gt_images_dirs is not None:
+        if self._test_mode == 'clean':
             self._gt_images = np.array(self._gt_images)
         if transform is not None:
             self._transform = Compose(transform)
         else:
             self._transform = None
+
+        if self._test_mode == 'clean':
+            self.mean, self.std, self.min, self.max = self._compute_mean_std_min_max()
+        else:
+            self.mean, self.std = self._compute_mean_std_min_max()
+
+    def _compute_mean_std_min_max(self):
+        flattened = [tif.imread(raw) for sub in self._raw_images for raw in sub]
+        mean, std = np.mean(flattened), np.std(flattened)
+        if self._test_mode == 'clean':
+            flattened = [tif.imread(gt) for sub in self._gt_images for gt in sub]
+            minimum, maximum = np.min(flattened), np.max(flattened)
+            return mean, std, minimum, maximum
+        return mean, std
+
+    def range(self):
+        """Returns the range of the data of this dataset.
+        
+        Returns:
+            float -- the range of this dataset
+        """
+        if self._test_mode == 'void':
+            raise ValueError('Cannot return range for Noise2Void training.')
+        return self.max - self.min
 
     def __len__(self):
         return len(self._indices)

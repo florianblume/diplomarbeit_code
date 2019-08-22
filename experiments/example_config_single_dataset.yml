@@ -12,7 +12,6 @@ DATA_PRED_GT_DIRS: ["gt/test"]
 
 # If specified, the data that is kept in memory and processed is converted to
 # this format
-CONVERT_DATA_TO: "uint8"
 # Can be 'proportional' or 'even', in the first case the probability of selecting
 # a dataset is proportional to its size, in the latter datasets are chosen
 # completely at ranom

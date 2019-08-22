@@ -10,6 +10,7 @@ from torch.utils.data.sampler import SubsetRandomSampler
 
 import util
 from data import TrainingDataset
+from data import SequentialSampler
 from data.transforms import RandomCrop, RandomFlip, RandomRotation, ToTensor
 
 class AbstractTrainer():
@@ -137,7 +138,7 @@ class AbstractTrainer():
         # Although we use a random sampler here the validation losses should
         # be comparable nevertheless because we were cropping our random patches
         # already anyway.
-        val_sampler = SubsetRandomSampler(self.dataset.flattened_val_indices)
+        val_sampler = SequentialSampler(self.dataset.flattened_val_indices)
         self.val_dataloader = DataLoader(self.dataset,
                                          batch_size=self.config['BATCH_SIZE'],
                                          sampler=val_sampler,
@@ -270,19 +271,23 @@ class AbstractTrainer():
         self.val_losses = []
         self.val_counter = 0
         i = 0
+        val_start_time = time.clock()
         for sample in self.val_dataloader:
-            if i >= self.config['MAX_VALIDATION_SIZE']:
-                print('Ran validation for only {} of {} available images'\
-                      ' due to maximum validation size set to {}.'\
-                      .format(i, len(self.val_dataloader),
-                              self.config['MAX_VALIDATION_SIZE']))
-                break
+            if 'MAX_VALIDATION_SIZE' in self.config:
+                if i >= self.config['MAX_VALIDATION_SIZE']:
+                    print('Ran validation for only {} of {} available images'\
+                        ' due to maximum validation size set to {}.'\
+                        .format(i, len(self.dataset.flattened_val_indices),
+                                self.config['MAX_VALIDATION_SIZE']))
+                    break
             result = self.net.training_predict(sample)
             # Needed by subclasses that's why we store val_loss on self
             self.val_loss = self.net.loss_function(result)
             self.val_losses.append(self.val_loss.item())
             i += self.val_dataloader.batch_size
         print("Validation loss: {}".format(self.val_loss.item()))
+        logging.debug('Validation on {} images took {:.4f}s.'
+                        .format(i, time.clock() - val_start_time))
 
         # Need to store on class because subclasses need the loss
         self.avg_val_loss = np.mean(self.val_losses)
@@ -322,7 +327,7 @@ class AbstractTrainer():
             prediction = result['output']
             if 'gt' in training_example:
                 ground_truth = training_example['gt']
-                psnr = util.PSNR(ground_truth, prediction, 255)
+                psnr = util.PSNR(ground_truth, prediction, self.dataset.range())
                 self.writer.add_scalar('psnr_example_{}'.format(i),
                                        psnr,
                                        print_step)

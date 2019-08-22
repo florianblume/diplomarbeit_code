@@ -10,7 +10,6 @@ DATA_TRAIN_GT_PATH: ["fish/gt/train", "mouse/gt/train"]
 DATA_PRED_RAW_PATH: ["fish/avg16/test", "mouse/gauss30/test"]
 DATA_PRED_GT_PATH: ["fish/gt/test", "mouse/gt/test"]
 
-CONVERT_DATA_TO: "uint8"
 DISTRIBUTION_MODE: "proportional"
 
 ### Network configuration

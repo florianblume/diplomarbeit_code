@@ -68,7 +68,8 @@ class AbstractPredictor():
         transforms = []
         if 'CONVERT_DATA_TO' in self.config:
             transforms.append(ConvertToFormat(self.config['CONVERT_DATA_TO']))
-        transforms.append(Normalize(self.net.mean, self.net.std))
+        # Data is already normalized
+        #transforms.append(Normalize(self.net.mean, self.net.std))
         transforms.append(ToTensor())
         self.dataset = PredictionDataset(data_pred_raw_dirs,
                                          data_pred_gt_dirs,
@@ -165,14 +166,14 @@ class AbstractPredictor():
             if self.with_gt:
                 # We get Pytorch tensors from the dataset
                 ground_truth = sample['gt'].cpu().detach().numpy()
-                psnr = util.PSNR(ground_truth, prediction, 255)
+                psnr = util.PSNR(ground_truth, prediction, self.dataset.range())
                 psnr_values.append(psnr)
                 mse = util.MSE(ground_truth, prediction)
                 mse_values.append(mse)
                 processed_results[pred_image_filename] = {'psnr' : psnr,
                                                           'mse'  : mse}
                 raw = raw.cpu().detach().numpy()
-                print("PSNR raw {:.4f}".format(util.PSNR(ground_truth, raw, 255)))
+                print("PSNR raw {:.4f}".format(util.PSNR(ground_truth, raw, self.dataset.range())))
                 print("PSNR denoised {:.4f}".format(psnr))  # Without info from masked pixel
                 print('MSE {:.4f}'.format(mse))
                 # Weights etc only get stored if ground-truth data is available
