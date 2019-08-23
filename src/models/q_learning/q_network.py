@@ -49,12 +49,19 @@ class QUNet(AbstractUNet):
         # shape[0] is batch size
         shape = (mask.shape[0], self.num_subnets)
         probabilities = torch.tensor(random_probability).repeat(shape)
+        maxima, indices = torch.max(q_values, dim=1)
+        length = indices.shape[0] - 1
+        primary_index = torch.linspace(0, length, length).long().to(self.device)
+        indices = torch.cat([primary_index, indices.long().to(self.device)], dim=1)
+        print(indices)
+        print('q', q_values)
+        print('max', maxima)
+        print('index', q_values[indices])
         probabilities[q_values == torch.max(q_values)] += self.epsilon
         # We do not want any gradient along the probabilities
         probabilities = probabilities.detach()
         # Full param update inlcudes the losses of the subnetworks scaled
         # by their respective probability
-        print(probabilities)
         return loss_diff * probabilities + sub_losses * probabilities
 
     def forward(self, x):
