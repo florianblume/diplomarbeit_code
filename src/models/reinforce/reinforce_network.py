@@ -1,242 +1,59 @@
+import copy
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
-from collections import OrderedDict
-from torch.nn import init
-import numpy as np
-import util
 
+from models import AbstractUNet
+from models import conv1x1
+from models.baseline import UNet as SubUNet
 
-def conv3x3(in_channels, out_channels, stride=1,
-            padding=1, bias=True, groups=1):
-    return nn.Conv2d(
-        in_channels,
-        out_channels,
-        kernel_size=3,
-        stride=stride,
-        padding=padding,
-        bias=bias,
-        groups=groups)
+class ReinforceUNet(AbstractUNet):
 
+    def __init__(self, config):
+        self.num_subnets = config['NUM_SUBNETS']
+        self.sub_net_depth = config['SUB_NET_DEPTH']
+        self.epsilon = config['EPSILON']
+        self.subnet_config = copy.deepcopy(config)
+        self.subnet_config['DEPTH'] = config['SUB_NET_DEPTH']
 
-def upconv2x2(in_channels, out_channels, mode='transpose'):
-    if mode == 'transpose':
-        return nn.ConvTranspose2d(
-            in_channels,
-            out_channels,
-            kernel_size=2,
-            stride=2)
-    else:
-        # out_channels is always going to be the same
-        # as in_channels
-        return nn.Sequential(
-            nn.Upsample(mode='bilinear', scale_factor=2),
-            conv1x1(in_channels, out_channels))
+        config['DEPTH'] = config['MAIN_NET_DEPTH']
+        super(QUNet, self).__init__(config)
 
+    def _build_network_head(self, outs):
+        self.subnets = nn.ModuleList()
+        for _ in range(self.num_subnets):
+            # We create each requested subnet
+            # TODO Make main and subnets individually configurable
+            self.subnets.append(SubUNet(self.subnet_config))
+        self.final_conv = conv1x1(outs, self.num_subnets)
 
-def conv1x1(in_channels, out_channels, groups=1):
-    return nn.Conv2d(
-        in_channels,
-        out_channels,
-        kernel_size=1,
-        groups=groups,
-        stride=1)
-
-
-class DownConv(nn.Module):
-    """
-    A helper Module that performs 2 convolutions and 1 MaxPool.
-    A ReLU activation follows each convolution.
-    """
-
-    def __init__(self, in_channels, out_channels, pooling=True):
-        super(DownConv, self).__init__()
-
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.pooling = pooling
-
-        self.conv1 = conv3x3(self.in_channels, self.out_channels)
-        self.conv2 = conv3x3(self.out_channels, self.out_channels)
-
-        if self.pooling:
-            self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
-
-    def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        before_pool = x
-        if self.pooling:
-            x = self.pool(x)
-        return x, before_pool
-
-
-class UpConv(nn.Module):
-    """
-    A helper Module that performs 2 convolutions and 1 UpConvolution.
-    A ReLU activation follows each convolution.
-    """
-
-    def __init__(self, in_channels, out_channels,
-                 merge_mode='concat', up_mode='transpose'):
-        super(UpConv, self).__init__()
-
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.merge_mode = merge_mode
-        self.up_mode = up_mode
-
-        self.upconv = upconv2x2(self.in_channels, self.out_channels,
-                                mode=self.up_mode)
-
-        if self.merge_mode == 'concat':
-            self.conv1 = conv3x3(
-                2*self.out_channels, self.out_channels)
-        else:
-            # num of input channels to conv2 is same
-            self.conv1 = conv3x3(self.out_channels, self.out_channels)
-        self.conv2 = conv3x3(self.out_channels, self.out_channels)
-
-    def forward(self, from_down, from_up):
-        """ Forward pass
-        Arguments:
-            from_down: tensor from the encoder pathway
-            from_up: upconv'd tensor from the decoder pathway
-        """
-        from_up = self.upconv(from_up)
-        if self.merge_mode == 'concat':
-            x = torch.cat((from_up, from_down), 1)
-        else:
-            x = from_up + from_down
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        return x
-
-
-class ReinforceUNet(nn.Module):
-    """ `UNet` class is based on https://arxiv.org/abs/1505.04597
-    The U-Net is a convolutional encoder-decoder neural network.
-    Contextual spatial information (from the decoding,
-    expansive pathway) about an input tensor is merged with
-    information representing the localization of details
-    (from the encoding, compressive pathway).
-    Modifications to the original paper:
-    (1) padding is used in 3x3 convolutions to prevent loss
-        of border pixels
-    (2) merging outputs does not require cropping due to (1)
-    (3) residual connections can be used by specifying
-        UNet(merge_mode='add')
-    (4) if non-parametric upsampling is used in the decoder
-        pathway (specified by upmode='upsample'), then an
-        additional 1x1 2d convolution occurs after upsampling
-        to reduce channel dimensionality by a factor of 2.
-        This channel halving happens with the convolution in
-        the tranpose convolution (specified by upmode='transpose')
-    """
-
-    def __init__(self, num_classes, mean, std, in_channels=1, depth=5,
-                 start_filts=64, up_mode='transpose',
-                 merge_mode='add',
-                 device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")):
-        """
-        NOTE: mean and std will be persisted by the model and restored on loading
-
-        Arguments:
-            mean: int, the mean of the raw data that this network was trained with. 
-            std: int, the std of the raw data that this network was trained with.
-            in_channels: int, number of channels in the input tensor.
-                Default is 3 for RGB images.
-            depth: int, number of MaxPools in the U-Net.
-            start_filts: int, number of convolutional filters for the
-                first conv.
-            up_mode: string, type of upconvolution. Choices: 'transpose'
-                for transpose convolution or 'upsample' for nearest neighbour
-                upsampling.
-        """
-        super(UNet, self).__init__()
-
-        if up_mode in ('transpose', 'upsample'):
-            self.up_mode = up_mode
-        else:
-            raise ValueError("\"{}\" is not a valid mode for "
-                             "upsampling. Only \"transpose\" and "
-                             "\"upsample\" are allowed.".format(up_mode))
-
-        if merge_mode in ('concat', 'add'):
-            self.merge_mode = merge_mode
-        else:
-            raise ValueError("\"{}\" is not a valid mode for"
-                             "merging up and down paths. "
-                             "Only \"concat\" and "
-                             "\"add\" are allowed.".format(up_mode))
-
-        # NOTE: up_mode 'upsample' is incompatible with merge_mode 'add'
-        if self.up_mode == 'upsample' and self.merge_mode == 'add':
-            raise ValueError("up_mode \"upsample\" is incompatible "
-                             "with merge_mode \"add\" at the moment "
-                             "because it doesn't make sense to use "
-                             "nearest neighbour to reduce "
-                             "depth channels (by half).")
-
-        self.num_classes = num_classes
-        self.in_channels = in_channels
-        self.start_filts = start_filts
-        self.depth = depth
-        self.device = device
-        self.mean = mean
-        self.std = std
-
-        self.down_convs = []
-        self.up_convs = []
-
-        self.noiseSTD = nn.Parameter(data=torch.log(torch.tensor(0.5)))
-
-        # create the encoder pathway and add to a list
-        for i in range(depth):
-            ins = self.in_channels if i == 0 else outs
-            outs = self.start_filts*(2**i)
-            pooling = True if i < depth-1 else False
-
-            down_conv = DownConv(ins, outs, pooling=pooling)
-            self.down_convs.append(down_conv)
-
-        # create the decoder pathway and add to a list
-        # - careful! decoding only requires depth-1 blocks
-        for i in range(depth-1):
-            ins = outs
-            outs = ins // 2
-            up_conv = UpConv(ins, outs, up_mode=up_mode,
-                             merge_mode=merge_mode)
-            self.up_convs.append(up_conv)
-
-        self.conv_final = conv1x1(outs, self.num_classes)
-
-        # add the list of modules to current module
-        self.down_convs = nn.ModuleList(self.down_convs)
-        self.up_convs = nn.ModuleList(self.up_convs)
-
-        self.reset_params()
-
-        # Push network to respective device
-        self.to(self.device)
-
-    @staticmethod
-    def weight_init(m):
-        if isinstance(m, nn.Conv2d):
-            init.xavier_normal(m.weight)
-            init.constant(m.bias, 0)
-
-    @staticmethod
-    def loss_function(outputs, labels, masks):
-        outs = outputs[:, 0, ...]
-        # print(outs.shape,labels.shape,masks.shape)
-        loss = torch.sum(masks*(labels-outs)**2)/torch.sum(masks)
-        return loss
-
-    def reset_params(self):
-        for i, m in enumerate(self.modules()):
-            self.weight_init(m)
+    def loss_function(self, result):
+        q_values = result['q_values']
+        sub_outputs = result['sub_outputs']
+        ground_truth = result['gt']
+        mask = result['mask']
+        sub_losses = torch.stack([subnet.loss_function({'output' : sub_outputs[i],
+                                                        'gt'     : ground_truth,
+                                                        'mask'   : mask})
+                                  for i, subnet in enumerate(self.subnets)])
+        # We use the sub losses to compute the probabilities of the updates
+        # (i.e. their weights), along these probabilities we do not want a
+        # gradient to be computed
+        detached_sub_losses = sub_losses.detach()
+        # We try to approximate the loss functions of the subnetworks through
+        # the q values
+        loss_diff = (q_values - detached_sub_losses)**2
+        # The probability of each subnetwork to be chosen in the random case
+        # With probability 1 - epsilon we draw a subnetwork completely at random
+        random_probability = (1.0 / self.num_subnets) * (1 - self.epsilon)
+        # shape[0] is batch size
+        shape = (mask.shape[0], self.num_subnets)
+        probabilities = torch.tensor(random_probability).repeat(shape)
+        probabilities[q_values == torch.max(q_values)] += self.epsilon
+        # We do not want any gradient along the probabilities
+        probabilities = probabilities.detach()
+        # Full param update inlcudes the losses of the subnetworks scaled
+        # by their respective probability
+        return loss_diff * probabilities + sub_losses * probabilities
 
     def forward(self, x):
         encoder_outs = []
@@ -250,103 +67,50 @@ class ReinforceUNet(nn.Module):
             before_pool = encoder_outs[-(i+2)]
             x = module(before_pool, x)
 
-        # No softmax is used. This means you need to use
-        # nn.CrossEntropyLoss is your training script,
-        # as this module includes a softmax already.
-        x = self.conv_final(x)
+        x = self.final_conv(x)
+        # Mean along H and W dim -> [batch, subnet]
+        x = torch.mean(x, dim=(2, 3))
         return x
 
-    def training_predict(self, train_data, train_data_clean, data_counter, size, box_size, bs):
-        """Performs a forward step during training.
+    def training_predict(self, sample):
+        raw, ground_truth, mask = sample['raw'], sample['gt'], sample['mask']
+        raw, ground_truth, mask = raw.to(self.device),\
+                                   ground_truth.to(self.device),\
+                                   mask.to(self.device)
+        q_values = self(raw)
+        sub_outputs = torch.stack([subnet(raw) for subnet in self.subnets])
+        return {'q_values'    : q_values,
+                'sub_outputs' : sub_outputs,
+                'gt'          : ground_truth,
+                'mask'        : mask}
 
-        Arguments:
-            train_data {np.array} -- the normalized raw training data
-            train_data_clean {np.array} -- the normalized ground-truth targets, if available
-            data_counter {int} -- the counter when to shuffle the training data
-            size {int} -- the patch size
-            bs {int} -- the batch size
+    def _pre_process_predict(self, image):
+        q_values = []
+        sub_outputs = np.zeros(image.shape)
+        return {'q_values'     : q_values,
+                'sub_outputs' : sub_outputs}
 
-        Returns:
-            np.array, np.array, np.array, int -- outputs, labels, masks, data_counter
-        """
-        # Init Variables
-        inputs = torch.zeros(bs, 1, size, size)
-        labels = torch.zeros(bs, size, size)
-        masks = torch.zeros(bs, size, size)
+    def _process_patch(self, data, ymin, ymax, xmin, xmax, ovTop, ovLeft):
+        q_values = data['q_values']
+        sub_outputs = data['sub_outputs']
+        image = data['image']
+        patch = image[ymin:ymax, xmin:xmax]
+        output = self.predict_patch(patch)
+        q_values.append(output[ovTop:, ovLeft:])
+        _sub_outputs = np.stack([subnet.predict_patch(patch) for subnet in self.subnets])
+        sub_outputs[:, :, :, ymin:ymax, xmin:xmax][:, :, :, ovTop:, ovLeft:]\
+            = _sub_outputs[:, :, :, ovTop:, ovLeft:]
 
-        # Assemble mini batch
-        for j in range(bs):
-            im, l, m, data_counter = util.random_crop_fri(
-                train_data, size, size, box_size, counter=data_counter, dataClean=train_data_clean)
-            inputs[j, :, :, :] = util.img_to_tensor(im)
-            labels[j, :, :] = util.img_to_tensor(l)
-            masks[j, :, :] = util.img_to_tensor(m)
-
-        # Move to GPU
-        inputs, labels, masks = inputs.to(
-            self.device), labels.to(self.device), masks.to(self.device)
-
-        # Forward step
-        outputs = self(inputs)
-        return outputs, labels, masks, data_counter
-
-    def predict(self, image, patch_size, overlap):
-        means = np.zeros(image.shape)
-        # We have to use tiling because of memory constraints on the GPU
-        xmin = 0
-        ymin = 0
-        xmax = patch_size
-        ymax = patch_size
-        ovLeft = 0
-        while (xmin < image.shape[1]):
-            ovTop = 0
-            while (ymin < image.shape[0]):
-                a = self.predict_patch(image[ymin:ymax, xmin:xmax])
-                means[ymin:ymax, xmin:xmax][ovTop:,
-                                            ovLeft:] = a[ovTop:, ovLeft:]
-                ymin = ymin-overlap+patch_size
-                ymax = ymin+patch_size
-                ovTop = overlap//2
-            ymin = 0
-            ymax = patch_size
-            xmin = xmin-overlap+patch_size
-            xmax = xmin+patch_size
-            ovLeft = overlap//2
-        return means
+    def _post_process_predict(self, result):
+        q_values = result['q_values']
+        sub_outputs = result['sub_outputs']
+        index = np.where(q_values == np.min(q_values))
+        return {'output'      : sub_outputs[index],
+                'q_values'    : q_values,
+                'sub_outputs' : sub_outputs}
 
     def predict_patch(self, patch):
-        """Performs network prediction on a patch of an image using the
-        specified parameters. The network expects the image to be normalized
-        with its mean and std. Likewise, it denormalizes the output images
-        using the same mean and std.
-
-        Arguments:
-            patch {np.array} -- the patch to perform prediction on
-            mean {int} -- the mean of the data the network was trained with
-            std {int} -- the std of the data the network was trained with
-
-        Returns:
-            np.array -- the denoised and denormalized patch
-        """
-        inputs = torch.zeros(1, 1, patch.shape[0], patch.shape[1])
-        inputs[0, :, :, :] = util.img_to_tensor(patch)
-
-        # copy to GPU
-        inputs = inputs.to(self.device)
-
-        output = self(inputs)
-
-        samples = (output).permute(1, 0, 2, 3)
-
-        # In contrast to probabilistic N2V we only have one sample
-        means = samples[0, ...]
-
-        # Get data from GPU
-        means = means.cpu().detach().numpy()
-
-        # Reshape to 2D images and remove padding
-        means.shape = (output.shape[2], output.shape[3])
-
-        # Denormalize
-        means = util.denormalize(means, self.mean, self.std)
-        return means
+        inputs = patch.to(self.device)
+        weigths = self(inputs)
+        weigths = weigths.cpu().detach().numpy()
+        return weigths

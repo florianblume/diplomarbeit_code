@@ -19,7 +19,7 @@ class Predictor(AbstractPredictor):
             Network = ImageProbabilisticUNet
         else:
             Network = PixelProbabilisticUNet
-        net = Network(checkpoint['mean'], checkpoint['std'], depth=self.config['DEPTH'])
+        net = Network(self.config)
         net.load_state_dict(checkpoint['model_state_dict'])
         return net
 

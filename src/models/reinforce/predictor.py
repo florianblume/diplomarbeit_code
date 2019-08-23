@@ -1,7 +1,7 @@
 import torch
 
 from models import AbstractPredictor
-from models.q_learning import QUNet
+from models.reinforce import ReinforceUNet
 
 class Predictor(AbstractPredictor):
 
@@ -18,7 +18,7 @@ class Predictor(AbstractPredictor):
         checkpoint = torch.load(self.network_path)
         self.config['MEAN'] = checkpoint['mean']
         self.config['STD'] = checkpoint['std']
-        net = QUNet(self.config)
+        net = ReinforceUNet(self.config)
         state_dict = checkpoint['model_state_dict']
         net.load_state_dict(state_dict)
         return net
