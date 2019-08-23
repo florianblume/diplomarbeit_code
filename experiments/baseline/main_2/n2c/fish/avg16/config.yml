@@ -1,10 +1,10 @@
-DATA_BASE_DIR: "data/processed/"
+DATA_BASE_DIR: "data/processed/fish/"
 
-DATA_TRAIN_RAW_DIRS: ["fish/cropped/raw/train", "simsim/all/raw/train"]
-DATA_TRAIN_GT_DIRS: ["fish/cropped/gt/train", "simsim/all/gt/train"]
+DATA_TRAIN_RAW_DIRS: ["avg16/train"]
+DATA_TRAIN_GT_DIRS: ["gt/train"]
 
-DATA_PRED_RAW_DIRS: ["fish/cropped/raw/test", "simsim/all/raw/test"]
-DATA_PRED_GT_DIRS: ["fish/cropped/gt/test", "simsim/all/gt/test"]
+DATA_PRED_RAW_DIRS: ["avg16/test"]
+DATA_PRED_GT_DIRS: ["gt/test"]
 
 DISTRIBUTION_MODE: "proportional"
 
@@ -22,10 +22,11 @@ STEPS_PER_EPOCH: 5
 VALIDATION_RATIO: 0.1
 BATCH_SIZE: 24
 AUGMENT_DATA: True
+# To achieve higher depth the patch size needs to be dividible by 2 6 times
 TRAIN_PATCH_SIZE: 128
 PRED_PATCH_SIZE: 128
 VIRTUAL_BATCH_SIZE: 20
-OVERLAP: 48
+OVERLAP: 32
 
 #TRAIN_NETWORK_PATH: "best.net"
 WRITE_TENSORBOARD_DATA: yes
