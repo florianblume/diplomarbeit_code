@@ -2,6 +2,7 @@ import os
 import time
 import logging
 import datetime
+import shutil
 import numpy as np
 import torch
 import torch.optim as optim
@@ -63,6 +64,28 @@ class AbstractTrainer():
             self.optimizer, 'min', patience=10, factor=0.5, verbose=True)
         self._load_state_from_checkpoint()
         self.net.train(True)
+
+        """
+        A bit dangerous... If accidentially the wrong training was started the
+        data is gone. To get rid of wrong tensorboard data just keep only the
+        latest events file.
+
+        if 'TRAIN_NETWORK_PATH' not in self.config:
+            print('Removing previous training data...')
+            # Remove old training artifacts if not specified to continue training
+            path = os.path.join(self.experiment_base_path, 'tensorboard')
+            if os.path.exists(path):
+                shutil.rmtree(path)
+            path = os.path.join(self.experiment_base_path, 'best.net')
+            if os.path.exists(path):
+                os.remove(path)
+            path = os.path.join(self.experiment_base_path, 'last.net')
+            if os.path.exists(path):
+                os.remove(path)
+            path = os.path.join(self.experiment_base_path, 'history.npy')
+            if os.path.exists(path):
+                os.remove(path)
+        """
 
         # If tensorboard logs are requested create the writer
         if self.write_tensorboard_data:

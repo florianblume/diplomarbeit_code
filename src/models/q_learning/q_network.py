@@ -54,6 +54,7 @@ class QUNet(AbstractUNet):
         probabilities = probabilities.detach()
         # Full param update inlcudes the losses of the subnetworks scaled
         # by their respective probability
+        print(probabilities)
         return loss_diff * probabilities + sub_losses * probabilities
 
     def forward(self, x):
