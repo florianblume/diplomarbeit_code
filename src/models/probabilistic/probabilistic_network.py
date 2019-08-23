@@ -81,7 +81,7 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
     def loss_function(self, result):
         # Probabilites for each subnetwork per image, i.e. [batch_size, num_subnets]
         probabilities = result['probabilities']
-
+        mask = result['mask']
 
         # Assemble dict for subnets on-the-fly because list comprehension is
         # faster in Python
@@ -99,6 +99,7 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
         sub_losses = sub_losses.transpose(1, 0)
         # Add a small factor to avoid log(0)
         sub_losses = torch.log(sub_losses + 1e-10)
+        sub_losses = mask * sub_losses
         # We can now sum up (instead of multiply) over all pixels (and channels)
         sub_losses = torch.sum(torch.sum(torch.sum(sub_losses, dim=-1), dim=-1), dim=-1)
         # We don't want gradients to be propagated along this path as it's a
@@ -111,7 +112,7 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
         sub_losses = torch.exp(sub_losses)
         loss = torch.sum(probabilities * sub_losses, dim=1)
         # Undo that we subtracted a constant
-        loss = torch.log(loss)
+        loss = torch.log(loss + 1e-10)
         # Sum over all decisions (i.e. subnets)
         summed_loss = torch.sum(loss) + torch.sum(max_sub_losses)
         return -summed_loss
