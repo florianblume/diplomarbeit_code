@@ -99,6 +99,8 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
         sub_losses = sub_losses.transpose(1, 0)
         # Add a small factor to avoid log(0)
         sub_losses = torch.log(sub_losses + 1e-10)
+        # To enable broadcasting
+        mask = mask.unsqueeze(1)
         sub_losses = mask * sub_losses
         # We can now sum up (instead of multiply) over all pixels (and channels)
         sub_losses = torch.sum(torch.sum(torch.sum(sub_losses, dim=-1), dim=-1), dim=-1)
@@ -110,6 +112,7 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
         max_sub_losses = max_sub_losses.unsqueeze(-1)
         sub_losses -= max_sub_losses
         sub_losses = torch.exp(sub_losses)
+        # Sum the sub losses up with their respective probabilities
         loss = torch.sum(probabilities * sub_losses, dim=1)
         # Undo that we subtracted a constant
         loss = torch.log(loss + 1e-10)
