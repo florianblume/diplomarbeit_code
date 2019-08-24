@@ -267,7 +267,7 @@ class AbstractTrainer():
             #self.writer.add_graph(self.net, outputs)
             self.writer.close()
 
-        print('Training took {}.'.format(datetime.datetime.now() - self.start_time)
+        print('Training took {}.'.format(datetime.datetime.now() - self.start_time))
         print('Finished Training')
 
     def _on_epoch_end(self):
