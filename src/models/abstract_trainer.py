@@ -228,7 +228,7 @@ class AbstractTrainer():
         """
         print('Training...')
         print('')
-        self.start_time = time.clock()
+        self.start_time = datetime.datetime.now()
         # loop over the dataset multiple times
         iterator = iter(util.cycle(self.train_dataloader))
         # We start at current_step because if we are further training the net
@@ -267,8 +267,7 @@ class AbstractTrainer():
             #self.writer.add_graph(self.net, outputs)
             self.writer.close()
 
-        training_time = time.clock() - self.start_time
-        print('Training took {}.'.format(datetime.timedelta(training_time / 1000.0)))
+        print('Training took {}.'.format(datetime.datetime.now() - self.start_time)
         print('Finished Training')
 
     def _on_epoch_end(self):
