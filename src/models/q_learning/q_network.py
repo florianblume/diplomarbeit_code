@@ -103,22 +103,16 @@ class QUNet(AbstractUNet):
 
     def _pre_process_predict(self, image):
         q_values = []
-        sub_outputs = np.zeros((self.num_subnets,) + image.shape)
         return {'image'       : image,
-                'q_values'    : q_values,
-                'sub_outputs' : sub_outputs}
+                'q_values'    : q_values}
 
     def _process_patch(self, data, ymin, ymax, xmin, xmax, ovTop, ovLeft):
         q_values = data['q_values']
-        sub_outputs = data['sub_outputs']
         image = data['image']
         patch = image[:, :, ymin:ymax, xmin:xmax]
         output = self.predict_patch(patch)
         # output[0] because we only have batch size 1
         q_values.append(output[0])
-        _sub_outputs = np.stack([subnet.predict_patch(patch) for subnet in self.subnets])
-        sub_outputs[:, :, :, ymin:ymax, xmin:xmax][:, :, :, ovTop:, ovLeft:]\
-            = _sub_outputs[:, :, :, ovTop:, ovLeft:]
 
     def predict_patch(self, patch):
         inputs = patch.to(self.device)
@@ -127,16 +121,10 @@ class QUNet(AbstractUNet):
         return weigths
 
     def _post_process_predict(self, result):
+        image = result['image']
         q_values = result['q_values']
         q_values = np.mean(q_values, axis=0)
-        sub_outputs = result['sub_outputs']
         index = np.where(q_values == np.min(q_values))
-        # [0][0] for [subnet, batch]
-        output = sub_outputs[index][0][0]
-        # Transpose to [H, W, C]
-        output = output.transpose((1, 2, 0))
-        # Transpose from [subnet, batch, C, H, W] to [subnet, H, W, C]
-        sub_outputs = sub_outputs.transpose((1, 0, 3, 4, 2))[0]
+        output = self.subnets[index](image)
         return {'output'      : output,
-                'q_values'    : q_values,
-                'sub_outputs' : sub_outputs}
+                'q_values'    : q_values}

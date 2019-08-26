@@ -1,10 +1,12 @@
 import copy
+import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from models import AbstractUNet
 from models import conv1x1
-from models.baseline import UNet as SubUNet
+from models.q_learning import SubUNet
 
 class ReinforceUNet(AbstractUNet):
 
@@ -16,44 +18,13 @@ class ReinforceUNet(AbstractUNet):
         self.subnet_config['DEPTH'] = config['SUB_NET_DEPTH']
 
         config['DEPTH'] = config['MAIN_NET_DEPTH']
-        super(QUNet, self).__init__(config)
+        super(ReinforceUNet, self).__init__(config)
 
     def _build_network_head(self, outs):
         self.subnets = nn.ModuleList()
         for _ in range(self.num_subnets):
-            # We create each requested subnet
-            # TODO Make main and subnets individually configurable
             self.subnets.append(SubUNet(self.subnet_config))
         self.final_conv = conv1x1(outs, self.num_subnets)
-
-    def loss_function(self, result):
-        q_values = result['q_values']
-        sub_outputs = result['sub_outputs']
-        ground_truth = result['gt']
-        mask = result['mask']
-        sub_losses = torch.stack([subnet.loss_function({'output' : sub_outputs[i],
-                                                        'gt'     : ground_truth,
-                                                        'mask'   : mask})
-                                  for i, subnet in enumerate(self.subnets)])
-        # We use the sub losses to compute the probabilities of the updates
-        # (i.e. their weights), along these probabilities we do not want a
-        # gradient to be computed
-        detached_sub_losses = sub_losses.detach()
-        # We try to approximate the loss functions of the subnetworks through
-        # the q values
-        loss_diff = (q_values - detached_sub_losses)**2
-        # The probability of each subnetwork to be chosen in the random case
-        # With probability 1 - epsilon we draw a subnetwork completely at random
-        random_probability = (1.0 / self.num_subnets) * (1 - self.epsilon)
-        # shape[0] is batch size
-        shape = (mask.shape[0], self.num_subnets)
-        probabilities = torch.tensor(random_probability).repeat(shape)
-        probabilities[q_values == torch.max(q_values)] += self.epsilon
-        # We do not want any gradient along the probabilities
-        probabilities = probabilities.detach()
-        # Full param update inlcudes the losses of the subnetworks scaled
-        # by their respective probability
-        return loss_diff * probabilities + sub_losses * probabilities
 
     def forward(self, x):
         encoder_outs = []
@@ -70,47 +41,85 @@ class ReinforceUNet(AbstractUNet):
         x = self.final_conv(x)
         # Mean along H and W dim -> [batch, subnet]
         x = torch.mean(x, dim=(2, 3))
+        # Do not take softmax here because we are processing images patch-wise
+        # during prediction which forces us to average the output after
+        # processing the full image and not individually for every patch
+        #x = F.softmax(x, dim=1)
         return x
+
+    def get_action(self, output):
+        """Returns an action for each entry in the batch in 'output', i.e. an
+        array of batch-size with actions as numbers.
+        
+        Arguments:
+            output {torch.tensor} -- the output of the neural network
+        
+        Returns:
+            torch.tensor -- array containting the actions for each entry in the
+                            batch
+            torch.tensor -- array containting the log probabilities of the
+                            selected actions
+            torch.tensor -- the softmax probabilities of all batches
+        """
+        probs = F.softmax(output, dim=1)
+        # Sample 1 action according to the action probabilities
+        actions = torch.multinomial(probs, 1)
+        actions = actions.squeeze(-1)
+        log_probs = torch.log(probs[actions])
+        return actions, log_probs, probs
+
+    def loss_function(self, result):
+        output = result['output']
+        sub_outputs = result['sub_outputs']
+        ground_truth = result['gt']
+        mask = result['mask']
+        sub_losses = torch.stack([subnet.loss_function_integrated(
+                                                    {'output' : sub_outputs[i],
+                                                     'gt'     : ground_truth,
+                                                     'mask'   : mask})
+                                  for i, subnet in enumerate(self.subnets)])
+        actions, log_probs, _ = self.get_action(output)
+        # shape[0] is batch size
+        length = actions.shape[0]
+        primary_index = torch.linspace(0, length - 1, length).long().to(self.device)
+        loss = sub_losses[primary_index, actions] * log_probs[primary_index, actions]
+        # Normally we would have to return -loss as we want to maximize the
+        # rewards, i.e. minimize the negative reward but in our case the reward
+        # is the loss of the subnets which we want to minimize
+        return loss.mean()
 
     def training_predict(self, sample):
         raw, ground_truth, mask = sample['raw'], sample['gt'], sample['mask']
         raw, ground_truth, mask = raw.to(self.device),\
                                    ground_truth.to(self.device),\
                                    mask.to(self.device)
-        q_values = self(raw)
+        output = self(raw)
         sub_outputs = torch.stack([subnet(raw) for subnet in self.subnets])
-        return {'q_values'    : q_values,
+        return {'output'      : output,
                 'sub_outputs' : sub_outputs,
                 'gt'          : ground_truth,
                 'mask'        : mask}
 
     def _pre_process_predict(self, image):
-        q_values = []
-        sub_outputs = np.zeros(image.shape)
-        return {'q_values'     : q_values,
-                'sub_outputs' : sub_outputs}
+        output = [np.zeros(image.shape)]
+        return {'output' : output}
 
     def _process_patch(self, data, ymin, ymax, xmin, xmax, ovTop, ovLeft):
-        q_values = data['q_values']
-        sub_outputs = data['sub_outputs']
         image = data['image']
         patch = image[ymin:ymax, xmin:xmax]
         output = self.predict_patch(patch)
-        q_values.append(output[ovTop:, ovLeft:])
-        _sub_outputs = np.stack([subnet.predict_patch(patch) for subnet in self.subnets])
-        sub_outputs[:, :, :, ymin:ymax, xmin:xmax][:, :, :, ovTop:, ovLeft:]\
-            = _sub_outputs[:, :, :, ovTop:, ovLeft:]
-
-    def _post_process_predict(self, result):
-        q_values = result['q_values']
-        sub_outputs = result['sub_outputs']
-        index = np.where(q_values == np.min(q_values))
-        return {'output'      : sub_outputs[index],
-                'q_values'    : q_values,
-                'sub_outputs' : sub_outputs}
+        data['output'] = output[ovTop:, ovLeft:]
 
     def predict_patch(self, patch):
         inputs = patch.to(self.device)
-        weigths = self(inputs)
-        weigths = weigths.cpu().detach().numpy()
-        return weigths
+        output = self(inputs)
+        output = output.cpu().detach().numpy()
+        return output
+
+    def _post_process_predict(self, result):
+        image = result['image']
+        output = result['output']
+        action, _, probs = self.get_action(output)
+        output = self.subnets[action](image)
+        return {'output'       : output,
+                'action_probs' : probs}
