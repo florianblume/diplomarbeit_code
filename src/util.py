@@ -56,6 +56,9 @@ def get_stratified_coords2D(box_size, shape):
                 coords.append((y, x))
     return coords
 
+def seed_numpy(seed):
+    print('Seeding numpy with {}.'.format(seed))
+    np.random.seed(seed)
 
 def joint_shuffle(inA, inB, seed=None):
     """Shuffles both numpy arrays consistently.
@@ -74,8 +77,7 @@ def joint_shuffle(inA, inB, seed=None):
     assert inA.shape[0] == inB.shape[0]
     indices = np.arange(inA.shape[0])
     if seed is not None:
-        print('Seeding numpy with {}.'.format(seed))
-        np.random.seed(seed)
+        seed_numpy(seed)
     np.random.shuffle(indices)
     return inA[indices], inB[indices]
 
@@ -92,8 +94,7 @@ def shuffle(inA, seed=None):
         np.array -- the shuffled array
     """
     if seed is not None:
-        print('Seeding numpy with {}.'.format(seed))
-        np.random.seed(seed)
+        seed_numpy(seed)
     indices = np.arange(inA.shape[0])
     np.random.shuffle(indices)
     return inA[indices]

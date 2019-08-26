@@ -2,14 +2,17 @@ import os
 import time
 import logging
 import datetime
-import shutil
 import numpy as np
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 
+import tifffile as tif
+
 import util
+import constants
+
 from data import TrainingDataset
 from data import SequentialSampler
 from data.transforms import RandomCrop, RandomFlip, RandomRotation, ToTensor
@@ -297,6 +300,10 @@ class AbstractTrainer():
         self.val_counter = 0
         i = 0
         val_start_time = time.clock()
+        # Seed so that all training runs use the same crops of the validation
+        # images and produce comparalbe PSNRs
+        util.seed_numpy(self.current_epoch * constants.NP_RANDOM_SEED)
+        psnrs = []
         for sample in self.val_dataloader:
             if 'MAX_VALIDATION_SIZE' in self.config:
                 if i >= self.config['MAX_VALIDATION_SIZE']:
@@ -310,6 +317,19 @@ class AbstractTrainer():
             self.val_loss = self.net.loss_function(result)
             self.val_losses.append(self.val_loss.item())
             i += self.val_dataloader.batch_size
+
+            if self._train_mode == 'clean':
+                ground_truth = sample['gt'].cpu().detach().numpy()
+                output = result['output'].cpu().detach().numpy()
+                psnr = util.PSNR(ground_truth, output, self.dataset.range())
+                psnrs.append(psnr)
+
+        if self._train_mode == 'clean':
+            mean_psnr = np.mean(psnrs)
+            print('Avg. PSNR on {} examples'.format(i),
+                mean_psnr)
+            self.writer.add_scalar('mean_psnr', mean_psnr, self.current_epoch + 1)
+
         print("Validation loss: {}".format(self.val_loss.item()))
         logging.debug('Validation on {} images took {:.4f}s.'
                         .format(i, time.clock() - val_start_time))
@@ -345,18 +365,10 @@ class AbstractTrainer():
         self.writer.add_scalar('val_loss', self.avg_val_loss, print_step)
 
         self.net.train(False)
-        psnrs = []
         for i, training_example in enumerate(self.training_examples):
             # Predict for one example image
             result = self.net.predict(training_example['raw'])
             prediction = result['output']
-            if self._train_mode == 'clean':
-                ground_truth = training_example['gt']
-                psnr = util.PSNR(ground_truth, prediction, self.dataset.range())
-                self.writer.add_scalar('psnr_example_{}'.format(i),
-                                       psnr,
-                                       print_step)
-                psnrs.append(psnr)
             prediction = prediction.astype(np.uint8)
             if prediction.shape[-1] == 1 or len(prediction.shape) == 2:
                 # Grayscale image
@@ -368,12 +380,6 @@ class AbstractTrainer():
                 self.writer.add_image('pred_example_{}'.format(i), prediction,
                                       print_step, dataformats='HWC')
             self._write_custom_tensorboard_data_for_example(result, i)
-
-        if self._train_mode == 'clean':
-            mean_psnr = np.mean(psnrs)
-            print('Avg. PSNR on {} examples'.format(len(self.training_examples)),
-                mean_psnr)
-            self.writer.add_scalar('mean_psnr', mean_psnr, print_step)
             
         self.net.train(True)
 
