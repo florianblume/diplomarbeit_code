@@ -1,6 +1,6 @@
 
 from models import AbstractTrainer
-from models.q_learning import QUNet
+from models.reinforce import ReinforceUNet
 
 class Trainer(AbstractTrainer):
 
@@ -24,7 +24,7 @@ class Trainer(AbstractTrainer):
         """
         self.config['MEAN'] = self.dataset.mean
         self.config['STD'] = self.dataset.std
-        return QUNet(self.config)
+        return ReinforceUNet(self.config)
 
     def _write_custom_tensorboard_data_for_example(self,
                                                    example_result,
