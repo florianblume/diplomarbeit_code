@@ -30,10 +30,10 @@ class Trainer(AbstractTrainer):
                                                    example_result,
                                                    example_index):
         # weights are either of shape [subnets] or [subnets, H, W]
-        reinforce_values = example_result['reinforce']
-        for i, reinforce_value in enumerate(reinforce_values):
-            reinforce_value_name = 'example_{}.reinforce.subnet.{}'.format(example_index, i)
-            self.writer.add_histogram(reinforce_value_name,
-                                      reinforce_value,
+        action_probs = example_result['action_probs']
+        for i, action_prob in enumerate(action_probs):
+            action_prob_name = 'example_{}.action_prob.subnet.{}'.format(example_index, i)
+            self.writer.add_histogram(action_prob_name,
+                                      action_prob,
                                       self.current_epoch,
                                       bins='auto')

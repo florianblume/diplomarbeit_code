@@ -125,6 +125,8 @@ class QUNet(AbstractUNet):
         q_values = result['q_values']
         q_values = np.mean(q_values, axis=0)
         index = np.where(q_values == np.min(q_values))
-        output = self.subnets[index](image)
-        return {'output'      : output,
+        # Somehow np.where produces a tuple with an array inside
+        index = index[0][0]
+        output = self.subnets[index].predict(image)
+        return {'output'      : output['output'],
                 'q_values'    : q_values}
