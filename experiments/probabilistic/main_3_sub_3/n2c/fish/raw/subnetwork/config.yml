@@ -34,5 +34,6 @@ WRITE_EXAMPLE_IMAGE: yes
 PRED_NETWORK_PATH: "best.net"
 PRED_OUTPUT_PATH: "prediction"
 OUTPUT_IMAGE_FORMATS: ["tif"]
-# If specified, also writes std with the given output formats
+WRITE_SUBNETWORK_IMAGES: yes
+WRITE_SUBNETWORK_PROBABILITIES: yes
 WRITE_STD: yes

@@ -15,7 +15,7 @@ def expand_cells_dataset(base_dir, identifier):
     raw_files = ['test_noisy.npy', 'training_big_raw.npy']
     raw_ouput_folders = ['test', 'train']
     gt_files = ['test_gt.npy', 'training_big_GT.npy']
-    gauss_noises = [15, 30]
+    gauss_noises = [15, 30, 60]
     # Size of SimSim images, we create cut outs of fish and mouse for that
     simsim_shape = [256, 256]
 
