@@ -1,0 +1,12 @@
+EXTENDS_CONFIG: "config.yml"
+
+DATA_BASE_DIR: "data/processed/mouse"
+
+DATA_PRED_RAW_DIRS: ["gauss30/train"]
+DATA_PRED_GT_DIRS: ["gt/train"]
+
+PRED_NETWORK_PATH: "best.net"
+PRED_OUTPUT_PATH: "prediction_gauss30_train"
+OUTPUT_IMAGE_FORMATS: ["tif"]
+WRITE_SUBNETWORK_IMAGES: yes
+WRITE_SUBNETWORK_WEIGHTS: yes

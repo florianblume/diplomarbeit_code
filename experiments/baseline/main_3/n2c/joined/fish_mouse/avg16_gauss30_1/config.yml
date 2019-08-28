@@ -8,10 +8,8 @@ DATA_PRED_GT_DIRS: ["fish/gt/test", "mouse/gt/test"]
 
 DISTRIBUTION_MODE: "proportional"
 
-MODEL: "reinforce"
-MAIN_NET_DEPTH: 3
-NUM_SUBNETS: 2
-SUB_NET_DEPTH: 3
+MODEL: "baseline"
+DEPTH: 3
 NUM_CLASSES: 1
 IN_CHANNELS: 1
 START_FILTS: 64
