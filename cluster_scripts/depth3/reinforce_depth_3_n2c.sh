@@ -1,5 +1,5 @@
 #!/bin/sh
-#SBATCH --job-name=reinforce-depth3-depth3-n2c
+#SBATCH --job-name=reinforce-depth3-n2c
 #SBATCH -A p_biomedicalmodel
 #SBATCH -n 1
 #SBATCH -N 1
@@ -7,7 +7,7 @@
 #SBATCH --mem 64G
 #SBATCH --mail-type=END,FAIL,TIME_LIMIT_90
 #SBATCH --mail-user=florian.blume@mailbox.tu-dresden.de
-#SBATCH -o reinforce-depth3-depth3-n2c.log
+#SBATCH -o reinforce-depth3-n2c.log
 #SBATCH -c 6
 #SBATCH --gres=gpu:1
 #SBATCH --partition=hpdlf
