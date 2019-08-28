@@ -4,6 +4,8 @@ import numpy as np
 import tifffile as tif
 import matplotlib.pyplot as plt
 
+import util
+
 from models import AbstractPredictor
 from models.average import ImageWeightUNet
 from models.average import PixelWeightUNet
@@ -11,14 +13,6 @@ from models.average import PixelWeightUNet
 class Predictor(AbstractPredictor):
     """Predictor for averaging network.
     """
-
-    @staticmethod
-    def pretty_string(weights, percentages):
-        # Print it in a nice format like 15.6754 (3.1203%)
-        string = ', '.join('{:.4f} ({:.4f}%)'.format(*t) for
-                           t in zip(weights, percentages))
-        formatted_weights = string.format(weights, percentages)
-        return formatted_weights
 
     def __init__(self, config, config_path):
         self.weights_list = []
@@ -82,7 +76,7 @@ class Predictor(AbstractPredictor):
             weights_sum = np.sum(weights)
             weights_percentages = [(weight / float(weights_sum)) * 100.0 for
                                 weight in weights]
-            formatted_weights = Predictor.pretty_string(weights,
+            formatted_weights = util.pretty_string_with_percentages(weights,
                                                         weights_percentages)
             print("Weights of subnetworks: {}".format(formatted_weights))
             processed_results[image_name]['weights'] = weights.tolist()
@@ -102,7 +96,7 @@ class Predictor(AbstractPredictor):
         if self.weight_mode == 'pixel':
             weights_average = np.mean(weights_average, axis=(1, 2))
         weights_average_percentage = weights_average / np.sum(weights_average)
-        formatted_weights = Predictor.pretty_string(weights_average,
+        formatted_weights = util.pretty_string_with_percentages(weights_average,
                                                     weights_average_percentage)
         print('Average weights: {}'.format(formatted_weights))
         processed_results['average_weights'] = weights_average.tolist()

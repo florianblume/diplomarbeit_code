@@ -170,8 +170,8 @@ class AbstractPredictor():
                 psnr_values.append(psnr)
                 mse = util.MSE(ground_truth, prediction)
                 mse_values.append(mse)
-                processed_results[pred_image_filename] = {'psnr' : psnr,
-                                                          'mse'  : mse}
+                processed_results[pred_image_filename] = {'psnr' : float(psnr),
+                                                          'mse'  : float(mse)}
                 raw = raw.cpu().detach().numpy()
                 print("PSNR raw {:.4f}".format(util.PSNR(ground_truth, raw, self.dataset.range())))
                 print("PSNR denoised {:.4f}".format(psnr))  # Without info from masked pixel
@@ -197,12 +197,14 @@ class AbstractPredictor():
             print("Standard error: {:.4f}".format(std))
 
             if self.pred_output_path:
-                with open(os.path.join(self.pred_output_path, 
+                with open(os.path.join(self.pred_output_path,
                                        'results.json'), 'w') as json_output:
-                    processed_results['average_runtime'] = avg_runtime
-                    processed_results['psnr_average'] = psnr_average
-                    processed_results['mse_average'] = mse_average
-                    processed_results['std'] = std
+                    processed_results['average_runtime'] = float(avg_runtime)
+                    processed_results['psnr_average'] = float(psnr_average)
+                    processed_results['mse_average'] = float(mse_average)
+                    processed_results['std'] = float(std)
                     self._post_process_final_results(processed_results)
                     # We are pretty printing
+                    for test in processed_results:
+                        test2 = processed_results[test]
                     json.dump(processed_results, json_output, indent=4)

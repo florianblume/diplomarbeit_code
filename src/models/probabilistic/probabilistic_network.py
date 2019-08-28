@@ -189,9 +189,10 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
         probabilities = probabilities.reshape((probabilities.shape[0], 1, 1, 1))
         amalgamted_image = probabilities * mean
         amalgamted_image = np.sum(amalgamted_image, axis=0)
-        return {'output' : amalgamted_image,
-                'mean'   : mean,
-                'std'    : std}
+        return {'output'        : amalgamted_image,
+                'probabilities' : probabilities.squeeze(),
+                'mean'          : mean,
+                'std'           : std}
 
 class PixelProbabilisticUNet(ProbabilisticUNet):
 

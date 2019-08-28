@@ -4,6 +4,8 @@ import tifffile as tif
 import matplotlib.pyplot as plt
 import torch
 
+import util
+
 from models import AbstractPredictor
 from models.probabilistic import ImageProbabilisticUNet
 from models.probabilistic import PixelProbabilisticUNet
@@ -13,12 +15,13 @@ class Predictor(AbstractPredictor):
 
     def _load_net(self):
         self.std_list = []
-        weight_mode = self.config['WEIGHT_MODE']
-        assert weight_mode in ['image', 'pixel']
+        self.probabilities_list = []
+        self.weight_mode = self.config['WEIGHT_MODE']
+        assert self.weight_mode in ['image', 'pixel']
         checkpoint = torch.load(self.network_path)
         self.config['MEAN'] = checkpoint['mean']
         self.config['STD'] = checkpoint['std']
-        if weight_mode == 'image':
+        if self.weight_mode == 'image':
             Network = ImageProbabilisticUNet
         else:
             Network = PixelProbabilisticUNet
@@ -86,10 +89,28 @@ class Predictor(AbstractPredictor):
         print("Mean of std: {:.4f}".format(mean_std))
         processed_results[image_name]['mean_std'] = mean_std
 
+        probabilities = raw_results['probabilities']
+
+        if self.weight_mode == 'pixel':
+            probabilities = np.mean(probabilities, axis=(1, 2))
+        processed_results[image_name]['probabilities'] = probabilities.tolist()
+        
+        print("Probabilities of subnetworks: {}".format(util.pretty_string(probabilities)))
+        self.probabilities_list.append(probabilities)
+
     def _post_process_final_results(self, processed_results):
         mean_std = np.mean(self.std_list)
         print('Overall mean of std: {:.4f}'.format(mean_std))
         processed_results['mean_std'] = mean_std
+
+        probabilities_list = np.array(self.probabilities_list)
+        probabilities_average = np.mean(probabilities_list, axis=0)
+        print('Average probabilities: {}'.format(util.pretty_string(probabilities_average)))
+        processed_results['average_probabilities'] = probabilities_average.tolist()
+
+        probabilities_std = np.std(self.probabilities_list, axis=0)
+        print('Probabilities std: {}'.format(util.pretty_string(probabilities_std)))
+        processed_results['probabilities_std'] = probabilities_std.tolist()
 
 class SubnetworkPredictor(AbstractPredictor):
 

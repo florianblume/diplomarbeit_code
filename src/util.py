@@ -327,3 +327,16 @@ def load_trainer_or_predictor(type_, config, config_path):
     type_class = getattr(type_module, type_class_name)
     result = type_class(config, os.path.dirname(config_path))
     return result
+
+def pretty_string_with_percentages(weights, percentages):
+    # Print it in a nice format like 15.6754 (3.1203%)
+    string = ', '.join('{:.4f} ({:.4f}%)'.format(*t) for
+                        t in zip(weights, percentages))
+    formatted_weights = string.format(weights, percentages)
+    return formatted_weights
+
+def pretty_string(weights):
+    # Print it in a nice format like 15.6754 (3.1203%)
+    string = ', '.join('{:.4f}'.format(w) for w in weights)
+    formatted_weights = string.format(weights)
+    return formatted_weights

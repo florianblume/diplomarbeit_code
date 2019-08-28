@@ -85,7 +85,8 @@ class ReinforceUNet(AbstractUNet):
         primary_index = torch.linspace(0, length - 1, length).long().to(self.device)
         primary_index = primary_index.detach()
         actions = actions.detach()
-        loss = sub_losses[primary_index, actions] * log_probs[primary_index, actions]
+        # Prevent 0 loss because the network chooses a subnetwork with 100% prob
+        loss = sub_losses[primary_index, actions] * (log_probs[primary_index, actions] + 1e-10)
         return -loss.mean()
 
     def training_predict(self, sample):
