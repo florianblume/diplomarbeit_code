@@ -326,7 +326,7 @@ class AbstractTrainer():
 
         if self._train_mode == 'clean':
             mean_psnr = np.mean(psnrs)
-            print('Avg. PSNR on {} examples'.format(i),
+            print('Avg. PSNR of {} validation samples'.format(i),
                 mean_psnr)
             self.writer.add_scalar('mean_psnr', mean_psnr, self.current_epoch + 1)
 

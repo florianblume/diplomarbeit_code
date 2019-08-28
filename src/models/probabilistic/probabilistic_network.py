@@ -129,8 +129,16 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
         # Forward step
         probabilities = self(raw)
         sub_outputs = [subnet(raw) for subnet in self.subnets]
+        # 0 is the mean
+        means = torch.stack([sub_output[0] for sub_output in sub_outputs])
+        # Put batch first
+        means = means.transpose(1, 0)
+        # Unsqueeze to match dimensions
+        probabilities_ = probabilities.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+        output = torch.sum(means * probabilities_, dim=1)
 
-        return {'probabilities': probabilities,
+        return {'output'       : output,
+                'probabilities': probabilities,
                 'sub_outputs'  : sub_outputs,
                 'gt'           : ground_truth,
                 'mask'         : mask}
@@ -271,8 +279,16 @@ class PixelProbabilisticUNet(ProbabilisticUNet):
         # Forward step
         probabilities = self(raw)
         sub_outputs = [subnet(raw) for subnet in self.subnets]
+        # 0 is the mean
+        means = torch.stack([sub_output[0] for sub_output in sub_outputs])
+        # Put batch first
+        means = means.transpose(1, 0)
+        # Make shapes compatible and add channel dimension
+        probabilities_ = probabilities.unsqueeze(2)
+        output = torch.sum(means * probabilities_, dim=1)
 
-        return {'probabilities': probabilities,
+        return {'output'       : output,
+                'probabilities': probabilities,
                 'sub_outputs'  : sub_outputs,
                 'gt'           : ground_truth,
                 'mask'         : mask}
