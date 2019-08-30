@@ -8,6 +8,8 @@ class Trainer(AbstractTrainer):
         self.train_loss = 0.0
         self.train_losses = []
         self.val_loss = 0.0
+        # Network expects key EPSILON
+        config['EPSILON'] = config['EPSILON_START']
         super(Trainer, self).__init__(config, config_path)
 
     def _load_network(self):
@@ -37,3 +39,7 @@ class Trainer(AbstractTrainer):
                                       q_value,
                                       self.current_epoch,
                                       bins='auto')
+
+    def _on_step_end(self):
+        next_epsilon = self.net.epsilon * self.config['EPSILON_DECAY']
+        self.net.epsilon = max(next_epsilon, self.config['EPSILON_MIN'])

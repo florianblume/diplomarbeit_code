@@ -71,6 +71,7 @@ class ReinforceUNet(AbstractUNet):
         sub_outputs = result['sub_outputs']
         actions = result['actions']
         log_probs = result['log_probs']
+        probs = result['probs']
         ground_truth = result['gt']
         mask = result['mask']
         sub_losses = torch.stack([subnet.loss_function_integrated(
@@ -81,13 +82,10 @@ class ReinforceUNet(AbstractUNet):
         # Put batch first
         sub_losses = sub_losses.transpose(1, 0)
         # shape[0] is batch size
-        length = actions.shape[0]
-        primary_index = torch.linspace(0, length - 1, length).long().to(self.device)
-        primary_index = primary_index.detach()
-        actions = actions.detach()
         # Prevent 0 loss because the network chooses a subnetwork with 100% prob
-        loss = sub_losses[primary_index, actions] * (log_probs[primary_index, actions] + 1e-10)
-        return -loss.mean()
+        probs = probs.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+        loss = sub_losses.detach() * torch.log(probs) * probs.detach() + sub_losses
+        return loss.mean()
 
     def training_predict(self, sample):
         raw, ground_truth, mask = sample['raw'], sample['gt'], sample['mask']
@@ -97,7 +95,7 @@ class ReinforceUNet(AbstractUNet):
         reinforce = self(raw)
         sub_outputs = torch.stack([subnet(raw) for subnet in self.subnets])
         transposed_sub_outputs = sub_outputs.transpose(1, 0)
-        actions, log_probs, _ = self.get_action(reinforce)
+        actions, log_probs, probs = self.get_action(reinforce)
         # Detach indices, just to be sure
         actions = actions.detach()
         # shape[0] is batch size
@@ -107,6 +105,7 @@ class ReinforceUNet(AbstractUNet):
                 'sub_outputs' : sub_outputs,
                 'actions'     : actions,
                 'log_probs'   : log_probs,
+                'probs'       : probs,
                 'gt'          : ground_truth,
                 'mask'        : mask}
 

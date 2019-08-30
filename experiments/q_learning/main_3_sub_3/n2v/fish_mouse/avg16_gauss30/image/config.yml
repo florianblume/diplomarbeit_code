@@ -9,7 +9,9 @@ DATA_PRED_GT_DIRS: ["fish/gt/test", "mouse/gt/test"]
 DISTRIBUTION_MODE: "proportional"
 
 MODEL: "q_learning"
-EPSILON: 0.9
+EPSILON_START: 0.1
+EPSILON_MIN: 0.005
+EPSILON_DECAY: 1.0
 #WEIGHT_MODE: "image"
 MAIN_NET_DEPTH: 3
 NUM_SUBNETS: 2

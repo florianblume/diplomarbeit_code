@@ -264,6 +264,8 @@ class AbstractTrainer():
                 logging.debug('Validation took {:.4f}s'
                               .format(time.clock() - start))
 
+            self._on_step_end()
+
         if self.write_tensorboard_data:
             # The graph is nonsense and otherwise we have to
             # store the outputs on the class
@@ -272,6 +274,12 @@ class AbstractTrainer():
 
         print('Training took {}.'.format(datetime.datetime.now() - self.start_time))
         print('Finished Training')
+
+    def _on_step_end(self):
+        """Can be used by subclasses to perform some custom operations after
+        each step during training.
+        """
+        pass
 
     def _on_epoch_end(self):
         # Needed by subclasses

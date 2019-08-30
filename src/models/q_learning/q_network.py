@@ -64,7 +64,7 @@ class QUNet(AbstractUNet):
         loss_diff = (q_values - detached_sub_losses)**2
         # The probability of each subnetwork to be chosen in the random case
         # With probability 1 - epsilon we draw a subnetwork completely at random
-        random_probability = (1.0 / self.num_subnets) * (1 - self.epsilon)
+        random_probability = (1.0 / self.num_subnets) * self.epsilon
         # shape[0] is batch size
         shape = (mask.shape[0], self.num_subnets)
         probabilities = torch.tensor(random_probability).repeat(shape).to(self.device)
@@ -74,7 +74,7 @@ class QUNet(AbstractUNet):
         _, indices = torch.min(q_values, dim=1)
         length = indices.shape[0]
         primary_index = torch.linspace(0, length - 1, length).long().to(self.device)
-        probabilities[primary_index, indices] += self.epsilon
+        probabilities[primary_index, indices] += (1 - self.epsilon)
         # We do not want any gradient along the probabilities
         probabilities = probabilities.detach()
         # Full param update inlcudes the losses of the subnetworks scaled
