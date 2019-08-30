@@ -340,3 +340,64 @@ def pretty_string(weights):
     string = ', '.join('{:.4f}'.format(w) for w in weights)
     formatted_weights = string.format(weights)
     return formatted_weights
+
+def _psnrs_of_multiple_runs(path):
+    import glob
+    import json
+    # Initial paths that should be present in all experiments
+    initial_paths = glob.glob(path + '/prediction*')
+    psnrs = {}
+
+    for initial_path in initial_paths:
+        basename = os.path.basename(initial_path)
+        psnrs[basename] = []
+
+    i = 0
+    path_ = path + '_' + str(i)
+    while os.path.exists(path_):
+        sub_paths = glob.glob(path_ + '/prediction*')
+        for sub_path in sub_paths:
+            with open(os.path.join(sub_path, 'results.json'), 'r') as results_file:
+                results = json.load(results_file)
+                basename = os.path.basename(sub_path)
+                psnrs[basename].append(results['psnr_average'])
+        i += 1
+        path_ = path + '_' + str(i)
+    return psnrs
+
+def compute_mean_std_multiple_runs(path):
+    psnrs = _psnrs_of_multiple_runs(path)
+    for key in psnrs:
+        psnr_values = psnrs[key]
+        print('{}: {} (mean) - {} (std) - {} (std err)'
+                    .format(key, np.mean(psnr_values), np.std(psnr_values), np.std(psnr_values) / np.sqrt(len(psnr_values))))
+
+def compute_mean_std_multiple_runs_fuse_external(path1, path2):
+    psnrs1 = _psnrs_of_multiple_runs(path1)
+    psnrs2 = _psnrs_of_multiple_runs(path2)
+
+    for key in psnrs1:
+        assert key in psnrs2
+        psnrs = np.array(psnrs1[key])
+        psnrs = (psnrs + np.array(psnrs2[key])) / 2.0
+        print('{}: {} (mean) - {} (std) - {} (std err)'.format(key, np.mean(psnrs), np.std(psnrs), np.std(psnrs)/np.sqrt(psnrs.shape[0])))
+
+def _psnrs_for_fuse(path, fuse):
+    import json
+    psnrs = []
+
+    i = 1
+    path_ = path + '_' + str(i)
+    while os.path.exists(path_):
+        with open(os.path.join(path_, fuse, 'results.json'), 'r') as results_file:
+            results = json.load(results_file)
+            psnrs.append(results['psnr_average'])
+        i += 1
+        path_ = path + '_' + str(i)
+    return psnrs
+
+def compute_mean_std_multiple_runs_fuse_internal(path, fuse1, fuse2):
+    psnrs1 = _psnrs_for_fuse(path, fuse1)
+    psnrs2 = _psnrs_for_fuse(path, fuse2)
+    fused_psnrs = (np.array(psnrs1) + np.array(psnrs2)) / 2
+    print('{} (mean) - {} (std) - {} (std err)'.format(np.mean(fused_psnrs), np.std(fused_psnrs), np.std(fused_psnrs)/np.sqrt(fused_psnrs.shape[0])))
