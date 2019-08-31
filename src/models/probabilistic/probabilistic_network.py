@@ -98,16 +98,18 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
         # Transpose to [batch, subnet, ...]
         sub_losses = sub_losses.transpose(1, 0)
         # Add a small factor to avoid log(0)
-        sub_losses = torch.log(sub_losses + 1e-10)
+        log_sub_losses = torch.log(sub_losses + 1e-10)
+        if sub_losses.isnan().any():
+            # Oops we encountered a NaN loss
+            print('First loss', sub_losses)
+        sub_losses = log_sub_losses
         # To enable broadcasting
         mask = mask.unsqueeze(1)
         sub_losses = mask * sub_losses
         # We can now sum up (instead of multiply) over all pixels (and channels)
         sub_losses = torch.sum(torch.sum(torch.sum(sub_losses, dim=-1), dim=-1), dim=-1)
-        # We don't want gradients to be propagated along this path as it's a
-        # constant
         # We need to take the maxima for each batch individually
-        max_sub_losses = torch.max(sub_losses, dim=1).values
+        max_sub_losses = torch.max(sub_losses, dim=1).detach().values
         # Add singleton dimension to ensure shape compatibility
         max_sub_losses = max_sub_losses.unsqueeze(-1)
         sub_losses -= max_sub_losses
@@ -115,9 +117,12 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
         # Sum the sub losses up with their respective probabilities
         loss = torch.sum(probabilities * sub_losses, dim=1)
         # Undo that we subtracted a constant
-        loss = torch.log(loss + 1e-10)
+        final_loss = torch.log(loss + 1e-10)
+        if final_loss.isnan().any():
+            # Oops we encountered a NaN loss
+            print('Second loss', loss)
         # Sum over all decisions (i.e. subnets)
-        summed_loss = torch.sum(loss) + torch.sum(max_sub_losses)
+        summed_loss = torch.sum(final_loss) + torch.sum(max_sub_losses)
         return -summed_loss
 
     def training_predict(self, sample):
