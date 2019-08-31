@@ -13,5 +13,5 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=hpdlf
 
-python src/train_model.py experiments_it/probabilistic/main_3_sub_3/n2c/fish_mouse/avg16_gauss30/image_${SLURM_ARRAY_TASK_ID}/config.yml
-python src/train_model.py experiments_it/probabilistic/main_3_sub_3/n2c/fish_mouse/avg16_gauss30/pixel_${SLURM_ARRAY_TASK_ID}/config.yml
+python src/train_model.py experiments_it/probabilistic/fish_mouse/avg16_gauss30/image_${SLURM_ARRAY_TASK_ID}/config.yml
+python src/train_model.py experiments_it/probabilistic/fish_mouse/avg16_gauss30/pixel_${SLURM_ARRAY_TASK_ID}/config.yml

@@ -13,4 +13,4 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=hpdlf
 
-python src/train_model.py experiments_it/q_learning/main_3_sub_3/n2c/fish_mouse/avg16_gauss30_${SLURM_ARRAY_TASK_ID}/config.yml
+python src/train_model.py experiments_it/q_learning/fish_mouse/avg16_gauss30_${SLURM_ARRAY_TASK_ID}/config.yml
