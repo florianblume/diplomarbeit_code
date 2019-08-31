@@ -1,19 +1,15 @@
 DATA_BASE_DIR: "data/processed/"
 
-DATA_TRAIN_RAW_DIRS: ["fish/cropped/raw/train", "simsim/all/raw/train", "simsim/all/raw/train", "simsim/all/raw/train"]
-DATA_TRAIN_GT_DIRS: ["fish/cropped/gt/train", "simsim/all/gt/train", "simsim/all/gt/train", "simsim/all/gt/train"]
+DATA_TRAIN_RAW_DIRS: ["fish/avg16/train", "mouse/gauss30/train", , "simsim/all/raw/train", "simsim/all/raw/train", "simsim/all/raw/train"]
+DATA_TRAIN_GT_DIRS: ["fish/gt/train", "mouse/gt/train", , "simsim/all/gt/train", "simsim/all/gt/train", "simsim/all/gt/train"]
 
-DATA_PRED_RAW_DIRS: ["fish/cropped/raw/test"]
-DATA_PRED_GT_DIRS: ["fish/cropped/gt/test"]
+DATA_PRED_RAW_DIRS: ["fish/avg16/test", "mouse/gauss30/test", "simsim/all/raw/test"]
+DATA_PRED_GT_DIRS: ["fish/gt/test", "mouse/gt/test", "simsim/all/gt/test"]
 
-# Simsim is float32, i.e. do not convert it
-# Even is not actually used any more, we need to replicate the dataset manually
 DISTRIBUTION_MODE: "even"
 
-MODEL: "average"
-WEIGHT_MODE: "image"
-WEIGHT_CONSTRAINT: null
-WEIGHT_CONSTRAINT_LAMBDA: null
+MODEL: "probabilistic"
+WEIGHT_MODE: "pixel"
 MAIN_NET_DEPTH: 3
 NUM_SUBNETS: 2
 SUB_NET_DEPTH: 3
@@ -24,7 +20,7 @@ UP_MODE: "transpose"
 MERGE_MODE: "add"
 DEVICE: "cuda:0"
 
-EPOCHS: 1000
+EPOCHS: 1500
 STEPS_PER_EPOCH: 5
 VALIDATION_RATIO: 0.1
 BATCH_SIZE: 24

@@ -10,10 +10,10 @@ DATA_PRED_GT_DIRS: ["fish/cropped/gt/test"]
 # Even is not actually used any more, we need to replicate the dataset manually
 DISTRIBUTION_MODE: "even"
 
-MODEL: "average"
-WEIGHT_MODE: "image"
-WEIGHT_CONSTRAINT: null
-WEIGHT_CONSTRAINT_LAMBDA: null
+MODEL: "q_learning"
+EPSILON_START: 0.1
+EPSILON_MIN: 0.0
+EPSILON_DECAY: 1.0
 MAIN_NET_DEPTH: 3
 NUM_SUBNETS: 2
 SUB_NET_DEPTH: 3
