@@ -344,13 +344,8 @@ def pretty_string(weights):
 def _psnrs_of_multiple_runs(path):
     import glob
     import json
-    # Initial paths that should be present in all experiments
-    initial_paths = glob.glob(path + '/prediction*')
-    psnrs = {}
 
-    for initial_path in initial_paths:
-        basename = os.path.basename(initial_path)
-        psnrs[basename] = []
+    psnrs = {}
 
     i = 0
     path_ = path + '_' + str(i)
@@ -360,6 +355,8 @@ def _psnrs_of_multiple_runs(path):
             with open(os.path.join(sub_path, 'results.json'), 'r') as results_file:
                 results = json.load(results_file)
                 basename = os.path.basename(sub_path)
+                if basename not in psnrs:
+                    psnrs[basename] = []
                 psnrs[basename].append(results['psnr_average'])
         i += 1
         path_ = path + '_' + str(i)
@@ -386,7 +383,7 @@ def _psnrs_for_fuse(path, fuse):
     import json
     psnrs = []
 
-    i = 1
+    i = 0
     path_ = path + '_' + str(i)
     while os.path.exists(path_):
         with open(os.path.join(path_, fuse, 'results.json'), 'r') as results_file:
@@ -401,3 +398,28 @@ def compute_mean_std_multiple_runs_fuse_internal(path, fuse1, fuse2):
     psnrs2 = _psnrs_for_fuse(path, fuse2)
     fused_psnrs = (np.array(psnrs1) + np.array(psnrs2)) / 2
     print('{} (mean) - {} (std) - {} (std err)'.format(np.mean(fused_psnrs), np.std(fused_psnrs), np.std(fused_psnrs)/np.sqrt(fused_psnrs.shape[0])))
+
+def psnr_of_dataset(raw_path, gt_path, range_=None):
+    import glob
+    import tifffile as tif
+    raw_image_files = glob.glob(raw_path + '/*.tif')
+    gt_image_files = glob.glob(gt_path + '/*.tif')
+    factor = len(raw_image_files) / len(gt_image_files)
+
+    raw_images = []
+    for raw_image_file in raw_image_files:
+        raw_images.append(tif.imread(raw_image_file))
+    raw_images = np.array(raw_images)
+
+    gt_images = []
+    for gt_image_file in gt_image_files:
+        gt_images.append(tif.imread(gt_image_file))
+    gt_images = np.array(gt_images)
+
+    if range_ is None:
+        range_max = np.max(gt_images)
+        range_min = np.min(gt_images)
+        range_ = range_max - range_min
+
+    gt_images = np.repeat(gt_images, factor, axis=0)
+    print('Avg. PSNR', PSNR(gt_images, raw_images, range_))

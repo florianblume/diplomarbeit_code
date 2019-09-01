@@ -99,7 +99,7 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
         sub_losses = sub_losses.transpose(1, 0)
         # Add a small factor to avoid log(0)
         log_sub_losses = torch.log(sub_losses + 1e-10)
-        if sub_losses.isnan().any():
+        if torch.isnan(sub_losses).any():
             # Oops we encountered a NaN loss
             print('First loss', sub_losses)
         sub_losses = log_sub_losses
@@ -109,7 +109,7 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
         # We can now sum up (instead of multiply) over all pixels (and channels)
         sub_losses = torch.sum(torch.sum(torch.sum(sub_losses, dim=-1), dim=-1), dim=-1)
         # We need to take the maxima for each batch individually
-        max_sub_losses = torch.max(sub_losses, dim=1).detach().values
+        max_sub_losses = torch.max(sub_losses, dim=1).values.detach()
         # Add singleton dimension to ensure shape compatibility
         max_sub_losses = max_sub_losses.unsqueeze(-1)
         sub_losses -= max_sub_losses
@@ -118,7 +118,7 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
         loss = torch.sum(probabilities * sub_losses, dim=1)
         # Undo that we subtracted a constant
         final_loss = torch.log(loss + 1e-10)
-        if final_loss.isnan().any():
+        if torch.isnan(final_loss).any():
             # Oops we encountered a NaN loss
             print('Second loss', loss)
         # Sum over all decisions (i.e. subnets)
