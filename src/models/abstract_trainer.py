@@ -147,9 +147,9 @@ class AbstractTrainer():
 
         # If SimSim is part of the data we can only crop with 128 offset as the
         # images are 256 x 256
-        offset = 128 if is_with_simsim else 192
+        offset = 78 if is_with_simsim else 206
         # 128 x 128 fits in memory for the batch sizes we use
-        eval_transforms = [Crop(offset, offset, 128, 128), ToTensor()]
+        eval_transforms = [Crop(offset, offset, 100, 100), ToTensor()]
 
         # We let the dataset automatically add a normalization term with the
         # mean and std computed of the data
