@@ -14,39 +14,6 @@ import constants
 
 class TrainingDataset(Dataset):
 
-    def _init_attributes(self):
-        # How samples are drawn from the the specified datasets (i.e. image dirs)
-        # 'even' means even and 'proportional' proportional to dataset size
-        # NOTE these modes are only relevant when using this dataset as an
-        # iterator directly wihtout using Pytorch's DataLoader class
-        self.distribution_modes = ['even', 'proportional']
-
-        self._num_datasets = 0
-        # list of list of loaded raw images, if keep in memory is true
-        self.raw_images = []
-        self.gt_images = []
-        # list of folders with raw images
-        self.raw_images_dirs = []
-        # list of lists of full paths to raw images
-        self.raw_image_paths = []
-        # analogously
-        self.gt_images_dirs = []
-        self.gt_image_paths = []
-        # individual raw to gt factors
-        self._factors = []
-        # list of lists of indices
-        self.train_indices = []
-        # flattened list of training indices that have an offset to be able
-        # to retrieve the appropriate dataset
-        self.flattened_train_indices = []
-        # currently remaining train indices, gets filled up when all have been
-        # returned once
-        self._current_train_indices = []
-        self.val_indices = []
-        self.flattened_val_indices = []
-        # we store one exapmle per dataset
-        self._training_examples = []
-
     # Random functions extenalized such that tests can inject random functions
     # with known outcome
     @staticmethod
@@ -86,27 +53,63 @@ class TrainingDataset(Dataset):
         probabilities = dataset_sizes / np.sum(dataset_sizes)
         return np.random.choice(len(dataset_sizes), 1, p=probabilities)[0]
 
+    def _init_attributes(self):
+        # How samples are drawn from the the specified datasets (i.e. image dirs)
+        # 'even' means even and 'proportional' proportional to dataset size
+        # NOTE these modes are only relevant when using this dataset as an
+        # iterator directly wihtout using Pytorch's DataLoader class
+        self.distribution_modes = ['even', 'proportional']
+
+        self._train = True
+
+        self._num_datasets = 0
+        # list of list of loaded raw images, if keep in memory is true
+        self.raw_images = []
+        self.gt_images = []
+        # list of folders with raw images
+        self.raw_images_dirs = []
+        # list of lists of full paths to raw images
+        self.raw_image_paths = []
+        # analogously
+        self.gt_images_dirs = []
+        self.gt_image_paths = []
+        # individual raw to gt factors
+        self._factors = []
+        # list of lists of indices
+        self.train_indices = []
+        # flattened list of training indices that have an offset to be able
+        # to retrieve the appropriate dataset
+        self.flattened_train_indices = []
+        # currently remaining train indices, gets filled up when all have been
+        # returned once
+        self._current_train_indices = []
+        self.val_indices = []
+        self.flattened_val_indices = []
+        # we store one exapmle per dataset
+        self._training_examples = []
+
     def __init__(self, raw_images_dirs, gt_images_dirs=None, batch_size=24,
                  distribution_mode='proportional', val_ratio=0.1,
-                 transforms=None, convert_to_format=None,
-                 add_normalization_transform=True, keep_in_memory=True,
-                 num_pixels=32.0, seed=constants.NP_RANDOM_SEED):
+                 train_transforms=None, eval_transforms=None,
+                 convert_to_format=None, add_normalization_transform=True,
+                 keep_in_memory=True, num_pixels=32.0,
+                 seed=constants.NP_RANDOM_SEED):
         self._init_attributes()
         assert isinstance(raw_images_dirs, list),\
                 'Expected list of raw image dirs but got {} instead.'\
-                    .format(type(transforms))
+                    .format(type(train_transforms))
         if gt_images_dirs is not None:
             assert isinstance(gt_images_dirs, list),\
                     'Expected list of gt image dirs but got {} instead.'\
-                        .format(type(transforms))
+                        .format(type(train_transforms))
             self._train_mode = 'clean'
         else:
             self._train_mode = 'void'
         print('Performing Noise2{} training.'.format(self._train_mode.capitalize()))
-        if transforms is not None:
-            assert isinstance(transforms, list),\
+        if train_transforms is not None:
+            assert isinstance(train_transforms, list),\
                     'Expected list of transforms but got {} instead.'\
-                        .format(type(transforms))
+                        .format(type(train_transforms))
         assert batch_size > 0
         if distribution_mode not in self.distribution_modes:
             raise ValueError('Illegal distribution mode \"{}\". Possible \
@@ -154,8 +157,10 @@ class TrainingDataset(Dataset):
         print('Dataset has mean {} and standard deviation {}.'\
                                 .format(self.mean, self.std))
 
-        self._init_transform(transforms, add_normalization_transform,
-                             convert_to_format)
+        self.train_transforms = self._init_transform(train_transforms,
+                                add_normalization_transform, convert_to_format)
+        self.eval_transforms = self._init_transform(eval_transforms,
+                                add_normalization_transform, convert_to_format)
         self.image_shape = self._get_sample(0, 0)['raw'].shape
 
     def _load_datasets(self, seed):
@@ -273,11 +278,6 @@ class TrainingDataset(Dataset):
                                         transforms is not None and\
                                         len(transforms) > 0 else False
 
-
-        # We need a different set of transforms for evaluation as we do not
-        # want to randomly crop, rotate and flip images
-        eval_transforms = []
-
         # We have to go this special way for conversion because if the user
         # specifies to keep the data in memory then the data is converted to
         # the desired format during loading to save memory (the sole purpose of
@@ -285,7 +285,6 @@ class TrainingDataset(Dataset):
         if data_format is not None:
             transforms = self._add_convert_to_format_transform(requested_transforms,
                                                                     data_format)
-            eval_transforms.append(ConvertToFormat(data_format))
 
         # From now on we can be sure that self.transform is a Compose or None
         # If requested we append a normalization transform, this allows us to
@@ -298,26 +297,13 @@ class TrainingDataset(Dataset):
                 if not transforms:
                     transforms = []
                 transforms.append(Normalize(self.mean, self.std))
-            eval_transforms.append(Normalize(self.mean, self.std))
 
         # transforms can be None at this point if the user of this Dataset
         # passed None as the transforms argument, i.e. does not want any
         # transforms
         if transforms is not None:
-            self.transforms = Compose(transforms)
-        else:
-            self.transforms = None
-
-        if eval_transforms:
-            # No need to check if self.transforms is None as it gets set only
-            # if transforms is not None
-            if self._last_op_is_to_tensor:
-                # If we have a ToTensor transform for train mode we need the
-                # same for eval mode
-                eval_transforms.append(ToTensor())
-            self.eval_transforms = Compose(eval_transforms)
-        else:
-            self.eval_transforms = None
+            transforms = Compose(transforms)
+        return transforms
 
     def _add_convert_to_format_transform(self, transforms, data_format):
         convert_to_format = ConvertToFormat(data_format)
@@ -373,6 +359,16 @@ class TrainingDataset(Dataset):
             return mean, std, minimum, maximum
         else:
             return mean, std
+
+    def train(self, train):
+        """Sets whether this dataset is used for training or evaluation currently.
+        This is necessary so that the dataset knows which transforms to use.
+        
+        Arguments:
+            train {bool} -- whether this dataset is used for trainig currently
+        """
+        assert type(train) == bool
+        self._train = train
 
     def range(self):
         """Returns the range of the ground-truth data of this dataset. If training
@@ -497,8 +493,10 @@ class TrainingDataset(Dataset):
             gt_image = tif.imread(self.gt_image_paths[dataset_index][gt_index])
 
         sample = {'raw' : raw_image, 'gt' : gt_image}
-        if self.transforms is not None:
-            sample = self.transforms(sample)
+        if self._train and self.train_transforms is not None:
+            sample = self.train_transforms(sample)
+        elif not self._train and self.eval_transforms is not None:
+            sample = self.eval_transforms(sample)
 
         # Retrieve the transformed image
         transformed_raw_image = sample['raw']
@@ -574,6 +572,7 @@ class TrainingDataset(Dataset):
         while idx >= len(self.raw_image_paths[dataset_index]):
             idx -= len(self.raw_image_paths[dataset_index])
             dataset_index += 1
+        print(dataset_index, idx)
         return self._get_sample(dataset_index, idx)
 
     def __iter__(self):
@@ -673,8 +672,8 @@ class TrainingDataset(Dataset):
             if len(gt_image.shape) == 2:
                 # for compatibility
                 gt_image.shape = gt_image.shape + (1,)
-            if self.transforms is not None and\
-                isinstance(self.transforms.transforms[-1], ToTensor):
+            if self.train_transforms is not None and\
+                isinstance(self.train_transforms.transforms[-1], ToTensor):
                 raw_image = torch.stack([raw_image]).float()
             sample = {'raw' : raw_image,
                       'gt'  : gt_image}

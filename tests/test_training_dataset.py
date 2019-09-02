@@ -7,7 +7,7 @@ from tests import conftest
 
 import util
 from data import TrainingDataset
-from data.transforms import RandomCrop, ToTensor
+from data.transforms import Crop, RandomCrop, ToTensor
 
 def joint_shuffle(inA, inB):
     return inA, inB
@@ -261,10 +261,12 @@ def test_single_dataset_raw_only_batch_size_on_demand():
 def abstract_test_single_dataset_raw_only_with_transforms(in_memory):
     # Dataset 1 has 4 raw images and 2 gt images
     dataset_1_raw = conftest.dataset_1_raw_images()
-    transforms = [RandomCrop(20, 20), ToTensor()]
+    train_transforms = [RandomCrop(20, 20), ToTensor()]
+    eval_transforms = [Crop(0, 0, 20, 20), ToTensor()]
     dataset = TrainingDataset([conftest.dataset_1_raw_dir.name], batch_size=4,
                               val_ratio=0, add_normalization_transform=True,
-                              transforms=transforms,
+                              train_transforms=train_transforms,
+                              eval_transforms=eval_transforms,
                               keep_in_memory=in_memory)
     assert len(dataset) == 4
     # indices[0] because we only have one dataset

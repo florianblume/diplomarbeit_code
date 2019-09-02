@@ -23,6 +23,7 @@ def test_probabilistic_model(config):
     batch = {'raw' : inputs,
              'gt'  : targets,
              'mask': mask}
+    config['WEIGHT_MODE'] = 'image'
     model = ImageProbabilisticUNet(config)
 
     # what are the variables?
@@ -40,6 +41,7 @@ def test_probabilistic_model(config):
         device=torch.device('cpu'))
 
 def test_average_model_parameter_setting(config):
+    config['WEIGHT_MODE'] = 'image'
     model = ImageProbabilisticUNet(config)
     assert model.mean == 1
     assert model.std == 0
@@ -47,6 +49,7 @@ def test_average_model_parameter_setting(config):
     assert model.depth == 1
     assert model.num_subnets == 2
 
+    config['WEIGHT_MODE'] = 'pixel'
     model = PixelProbabilisticUNet(config)
     assert model.mean == 1
     assert model.std == 0
@@ -58,6 +61,7 @@ def test_average_model_parameter_setting(config):
     config['MEAN'] = 0
     config['STD'] = 1
     config['NUM_SUBNETS'] = 1
+    config['WEIGHT_MODE'] = 'image'
     model = ImageProbabilisticUNet(config)
     assert model.mean == 0
     assert model.std == 1
@@ -65,6 +69,7 @@ def test_average_model_parameter_setting(config):
     assert model.depth == 1
     assert model.num_subnets == 1
 
+    config['WEIGHT_MODE'] = 'pixel'
     model = PixelProbabilisticUNet(config)
     assert model.mean == 0
     assert model.std == 1

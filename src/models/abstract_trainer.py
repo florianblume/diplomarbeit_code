@@ -15,7 +15,7 @@ import constants
 
 from data import TrainingDataset
 from data import SequentialSampler
-from data.transforms import RandomCrop, RandomFlip, RandomRotation, ToTensor
+from data.transforms import Crop, RandomCrop, RandomFlip, RandomRotation, ToTensor
 
 class AbstractTrainer():
     """Class AbstractTrainer is the base class of all trainers. It automatically
@@ -54,6 +54,7 @@ class AbstractTrainer():
         self.val_counter = 0
 
     def __init__(self, config, config_path):
+        torch.manual_seed(int((time.time() * 100000) % 100000))
         self._init_attributes()
         self.config = config
         self.config_path = config_path
@@ -114,17 +115,21 @@ class AbstractTrainer():
         crop_width = self.config['TRAIN_PATCH_SIZE']
         crop_height = self.config['TRAIN_PATCH_SIZE']
 
-        transforms = []
+        train_transforms = []
         if self.config['AUGMENT_DATA']:
-            transforms = [RandomCrop(crop_width, crop_height),
+            train_transforms = [RandomCrop(crop_width, crop_height),
                           RandomFlip(),
                           RandomRotation(),
                           ToTensor()]
         else:
             # Not entirely correct that this is without augmentation but we
             # need the random crops to reduce image size
-            transforms = [RandomCrop(crop_width, crop_height),
+            train_transforms = [RandomCrop(crop_width, crop_height),
                           ToTensor()]
+
+        # 128 x 128 fits in memory for the batch sizes we use
+        # 192 is just to crop it from the center
+        eval_transforms = [Crop(192, 192, 128, 128), ToTensor()]
 
         data_base_dir = self.config['DATA_BASE_DIR']
         data_train_raw_dirs = []
@@ -150,7 +155,8 @@ class AbstractTrainer():
                                        self.config['BATCH_SIZE'],
                                        self.config['DISTRIBUTION_MODE'],
                                        self.config['VALIDATION_RATIO'],
-                                       transforms=transforms,
+                                       train_transforms=train_transforms,
+                                       eval_transforms=eval_transforms,
                                        convert_to_format=convert_to_format,
                                        add_normalization_transform=False,
                                        keep_in_memory=False)
@@ -229,6 +235,7 @@ class AbstractTrainer():
         """This method performs training of this network using the earlier
         set configuration and parameters.
         """
+        np.random.seed(int((time.time() * 100000) % 100000))
         print('Training...')
         print('')
         self.start_time = datetime.datetime.now()
@@ -310,8 +317,9 @@ class AbstractTrainer():
         val_start_time = time.clock()
         # Seed so that all training runs use the same crops of the validation
         # images and produce comparalbe PSNRs
-        util.seed_numpy(self.current_epoch * constants.NP_RANDOM_SEED)
         psnrs = []
+        # To make the dataset use the evaluation transforms
+        self.dataset.train(False)
         for sample in self.val_dataloader:
             if 'MAX_VALIDATION_SIZE' in self.config:
                 if i >= self.config['MAX_VALIDATION_SIZE']:
@@ -344,6 +352,7 @@ class AbstractTrainer():
 
         # Need to store on class because subclasses need the loss
         self.avg_val_loss = np.mean(self.val_losses)
+        self.dataset.train(True)
         self.net.train(True)
 
         # Save the current best network

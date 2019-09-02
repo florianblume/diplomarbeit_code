@@ -3,6 +3,37 @@ import torchvision
 
 import util
 
+class Crop():
+    """Class RandomCrop is a transformation that randomly crops out a part of
+    the input data in the sample. It is only applicable to training data as it
+    expects the gt data to be present.
+    """
+
+    def __init__(self, x: int, y: int, width: int, height: int):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+
+    def __call__(self, sample):
+        # We are in training so there is a gt image, even if it has been set
+        # to the raw image earlier
+        raw_image = sample['raw']
+        gt_image = sample['gt']
+        assert raw_image.shape[0] >= self.height + self.y
+        assert raw_image.shape[1] >= self.width + self.x
+        assert raw_image.shape == gt_image.shape
+
+        y = self.y
+        x = self.x
+        height = self.height
+        width = self.width
+
+        cropped_raw_image = raw_image[y:y+height, x:x+width].copy()
+        cropped_gt_image = gt_image[y:y+height, x:x+width].copy()
+
+        return {'raw' : cropped_raw_image, 'gt' : cropped_gt_image}
+
 class RandomCrop():
     """Class RandomCrop is a transformation that randomly crops out a part of
     the input data in the sample. It is only applicable to training data as it
