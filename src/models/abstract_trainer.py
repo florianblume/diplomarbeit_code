@@ -118,24 +118,23 @@ class AbstractTrainer():
         train_transforms = []
         if self.config['AUGMENT_DATA']:
             train_transforms = [RandomCrop(crop_width, crop_height),
-                          RandomFlip(),
-                          RandomRotation(),
-                          ToTensor()]
+                                RandomFlip(),
+                                RandomRotation(),
+                                ToTensor()]
         else:
             # Not entirely correct that this is without augmentation but we
             # need the random crops to reduce image size
             train_transforms = [RandomCrop(crop_width, crop_height),
-                          ToTensor()]
+                                ToTensor()]
 
-        # 128 x 128 fits in memory for the batch sizes we use
-        # 192 is just to crop it from the center
-        eval_transforms = [Crop(192, 192, 128, 128), ToTensor()]
-
+        is_with_simsim = False
         data_base_dir = self.config['DATA_BASE_DIR']
         data_train_raw_dirs = []
         for data_train_raw_dir in self.config['DATA_TRAIN_RAW_DIRS']:
             data_train_raw_dir = os.path.join(data_base_dir, data_train_raw_dir)
             data_train_raw_dirs.append(data_train_raw_dir)
+            if 'simsim' in data_train_raw_dir:
+                is_with_simsim = True
         if 'DATA_TRAIN_GT_DIRS' in self.config:
             self._train_mode = 'clean'
             data_train_gt_dirs = []
@@ -145,6 +144,12 @@ class AbstractTrainer():
         else:
             data_train_gt_dirs = None
             self._train_mode = 'void'
+
+        # If SimSim is part of the data we can only crop with 128 offset as the
+        # images are 256 x 256
+        offset = 128 if is_with_simsim else 192
+        # 128 x 128 fits in memory for the batch sizes we use
+        eval_transforms = [Crop(offset, offset, 128, 128), ToTensor()]
 
         # We let the dataset automatically add a normalization term with the
         # mean and std computed of the data

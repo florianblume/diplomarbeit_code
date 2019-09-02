@@ -572,7 +572,6 @@ class TrainingDataset(Dataset):
         while idx >= len(self.raw_image_paths[dataset_index]):
             idx -= len(self.raw_image_paths[dataset_index])
             dataset_index += 1
-        print(dataset_index, idx)
         return self._get_sample(dataset_index, idx)
 
     def __iter__(self):
