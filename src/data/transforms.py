@@ -29,10 +29,11 @@ class Crop():
         height = self.height
         width = self.width
 
-        cropped_raw_image = raw_image[y:y+height, x:x+width].copy()
-        cropped_gt_image = gt_image[y:y+height, x:x+width].copy()
-
-        return {'raw' : cropped_raw_image, 'gt' : cropped_gt_image}
+        cropped_raw_image = raw_image[y:y+height, x:x+width]
+        cropped_gt_image = gt_image[y:y+height, x:x+width]
+        sample['raw'] = cropped_raw_image
+        sample['gt'] = cropped_gt_image
+        return sample
 
 class RandomCrop():
     """Class RandomCrop is a transformation that randomly crops out a part of
@@ -56,10 +57,12 @@ class RandomCrop():
         x = np.random.randint(0, raw_image.shape[1] - self.width + 1)
         y = np.random.randint(0, raw_image.shape[0] - self.height + 1)
 
-        cropped_raw_image = raw_image[y:y+self.height, x:x+self.width].copy()
-        cropped_gt_image = gt_image[y:y+self.height, x:x+self.width].copy()
+        cropped_raw_image = raw_image[y:y+self.height, x:x+self.width]
+        cropped_gt_image = gt_image[y:y+self.height, x:x+self.width]
 
-        return {'raw' : cropped_raw_image, 'gt' : cropped_gt_image}
+        sample['raw'] = cropped_raw_image
+        sample['gt'] = cropped_gt_image
+        return sample
 
 class RandomFlip():
     """Transformation that randomly flips the data in the sample.
@@ -72,7 +75,9 @@ class RandomFlip():
             # (-2, -1) because when we have batch and channels as first dims
             raw_image = np.flip(np.flip(raw_image, -2), -1)
             gt_image = np.flip(np.flip(gt_image, -2), -1)
-        return {'raw' : raw_image, 'gt' : gt_image}
+        sample['raw'] = raw_image
+        sample['gt'] = gt_image
+        return sample
 
 class RandomRotation():
     """Transformation that randomly rotates the data in the sample.
@@ -84,7 +89,9 @@ class RandomRotation():
         gt_image = sample['gt']
         raw_image = np.rot90(raw_image, rot)
         gt_image = np.rot90(gt_image, rot)
-        return {'raw' : raw_image, 'gt' : gt_image}
+        sample['raw'] = raw_image
+        sample['gt'] = gt_image
+        return sample
 
 class SingleActionTransformation():
     """Base class for a transformation that apply actions to raw and ground-truth
@@ -100,13 +107,15 @@ class SingleActionTransformation():
     def __call__(self, sample):
         raw_image = sample['raw']
         raw_image = self.action(raw_image)
+        sample['raw'] = raw_image
         if 'gt' in sample:
             gt_image = sample['gt']
             gt_image = self.action(gt_image)
             # Prediction with clean images or training
-            return {'raw' : raw_image, 'gt' : gt_image}
+            sample['gt'] = gt_image
+            return sample
         # Prediction without clean images
-        return {'raw' : raw_image}
+        return sample
 
 class ConvertToFormat(SingleActionTransformation):
     """Class ConvertToFormat converts the contents of the sample to the specified

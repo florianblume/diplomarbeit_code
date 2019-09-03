@@ -33,13 +33,17 @@ class Trainer(AbstractTrainer):
         weights = example_result['weights']
         # Normalize weights
         weights = weights / np.sum(weights, axis=0)
+        if self.weight_mode == 'image':
+            self.writer.add_histogram('examples.weights.subnets',
+                                      weights,
+                                      self.current_epoch,
+                                      bins='auto')
         for i, weights_ in enumerate(weights):
             weights_name = 'example_{}.weights.subnet.{}'.format(example_index, i)
             if self.weight_mode == 'image':
-                self.writer.add_histogram(weights_name,
-                                          weights_,
-                                          self.current_epoch,
-                                          bins='auto')
+                self.writer.add_scalar(weights_name,
+                                       weights_,
+                                       self.current_epoch)
             elif self.weight_mode == 'pixel':
                 color_space = weights_ * 255
                 color_space = color_space.astype(np.uint8)

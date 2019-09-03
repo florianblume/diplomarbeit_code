@@ -97,6 +97,7 @@ class QUNet(AbstractUNet):
 
         return {'output'      : transposed_sub_outputs[primary_index, indices],
                 'q_values'    : q_values,
+                'indices'     : indices,
                 'sub_outputs' : sub_outputs,
                 'gt'          : ground_truth,
                 'mask'        : mask}

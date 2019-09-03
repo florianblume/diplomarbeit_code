@@ -1,3 +1,4 @@
+import copy
 import pytest
 import torch
 import numpy as np
@@ -66,13 +67,13 @@ def test_random_rotation_raw_gt(raw_gt):
 # Tests for class RandomFlip
 
 def test_random_flip_raw_gt(raw_gt):
-    raw_image = raw_gt['raw'].copy()
+    raw_image = copy.deepcopy(raw_gt['raw'])
     raw_image_flipped = np.array(np.flip(raw_image))
-    gt_image = raw_gt['gt'].copy()
+    gt_image = copy.deepcopy(raw_gt['gt'])
     gt_image_flipped = np.array(np.flip(gt_image))
     # Seed such that the flip is true
     np.random.seed(0)
-    result = RandomFlip()(raw_gt)
+    result = RandomFlip()(copy.deepcopy(raw_gt))
     result_raw_flipped = result['raw']
     result_gt_flipped = result['gt']
     assert np.array_equal(raw_image_flipped, result_raw_flipped)

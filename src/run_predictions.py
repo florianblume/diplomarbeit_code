@@ -5,12 +5,11 @@ import util
 import predict_model
 
 with open('log.txt', 'w+') as log:
-    for config in glob.glob('experiments/**/*.yml', recursive=True):
+    for config in glob.glob('experiments_depth_*/**/*.yml', recursive=True):
         loaded_config = util.load_config(config)
         dirname = os.path.dirname(config)
         path = os.path.join(dirname, loaded_config['PRED_OUTPUT_PATH'])
-        if not os.path.exists(path) or len(os.listdir(path))==0 or \
-            len(os.listdir(path))==1:
+        if not os.path.exists(path) or len(os.listdir(path)) < 10:
             try:
                 predict_model.main(config)
             except Exception as e:

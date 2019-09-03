@@ -334,6 +334,7 @@ class AbstractTrainer():
                                 self.config['MAX_VALIDATION_SIZE']))
                     break
             result = self.net.training_predict(sample)
+            self._post_process_eval_sample(sample, result)
             # Needed by subclasses that's why we store val_loss on self
             self.val_loss = self.net.loss_function(result)
             self.val_losses.append(self.val_loss.item())
@@ -378,12 +379,19 @@ class AbstractTrainer():
 
         self.scheduler.step(self.avg_val_loss)
 
+    def _post_process_eval_sample(self, sample, result):
+        """This method can be implemented by subclasses to perform some post
+        processing on the evaluation samples, like logging additional metrics.
+        
+        Arguments:
+            sample {dict} -- the sample containing at least the keys 'raw' and 'gt'
+            result {dict} -- the result computed by the network
+        """
+
     def _write_tensorboard_data(self):
         # +1 because epochs start at 0
         print_step = self.current_epoch + 1
-        self.writer.add_scalar('train_loss',
-                               self.avg_train_loss,
-                               print_step)
+        self.writer.add_scalar('train_loss', self.avg_train_loss, print_step)
         self.writer.add_scalar('val_loss', self.avg_val_loss, print_step)
 
         self.net.train(False)

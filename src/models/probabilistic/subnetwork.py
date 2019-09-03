@@ -53,6 +53,10 @@ class SubUNet(AbstractUNet):
         # We do not want to sum here as the loss is continued in the main network
         #loss = torch.sum(masks * (c * exp)/torch.sum(masks)
         # Return the Gaussian
+        if torch.isnan(c).any():
+            print(c)
+        if torch.isnan(exp).any():
+            print(exp)
         return c * exp
 
     def forward(self, x):

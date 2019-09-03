@@ -62,7 +62,7 @@ class TrainingDataset(Dataset):
 
         self._train = True
 
-        self._num_datasets = 0
+        self.num_datasets = 0
         # list of list of loaded raw images, if keep in memory is true
         self.raw_images = []
         self.gt_images = []
@@ -130,7 +130,7 @@ class TrainingDataset(Dataset):
         # to 'eval' not
         self.val_ratio = val_ratio
         self.raw_images_dirs = raw_images_dirs
-        self._num_datasets = len(raw_images_dirs)
+        self.num_datasets = len(raw_images_dirs)
         self.gt_images_dirs = gt_images_dirs
 
         self._load_datasets(seed)
@@ -486,8 +486,8 @@ class TrainingDataset(Dataset):
         if self._keep_in_memory:
             # Important that we copy the image otherwise we are editing the
             # original
-            raw_image = self.raw_images[dataset_index][sample_index].copy()
-            gt_image = self.gt_images[dataset_index][gt_index]
+            raw_image = copy.deepcopy(self.raw_images[dataset_index][sample_index])
+            gt_image = copy.deepcopy(self.gt_images[dataset_index][gt_index])
         else:
             raw_image = tif.imread(self.raw_image_paths[dataset_index][sample_index])
             gt_image = tif.imread(self.gt_image_paths[dataset_index][gt_index])
@@ -542,6 +542,7 @@ class TrainingDataset(Dataset):
             mask.shape = (mask.shape[0], mask.shape[1], 1)
             mask = functional.to_tensor(mask)
         sample['mask'] = mask
+        sample['dataset'] = dataset_index
         return sample
 
     def __len__(self):
@@ -614,7 +615,7 @@ class TrainingDataset(Dataset):
         for i in range(self.batch_size):
             if self.distribution_mode == 'even':
                 dataset_index = TrainingDataset._dataset_index_even(
-                                                        self._num_datasets)
+                                                        self.num_datasets)
             else:
                 dataset_sizes = [len(dataset) for dataset in self.train_indices]
                 dataset_index = TrainingDataset._dataset_index_proportional(

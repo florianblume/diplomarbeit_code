@@ -27,6 +27,11 @@ class ProbabilisticUNet(AbstractUNet):
         config['DEPTH'] = config['MAIN_NET_DEPTH']
         super(ProbabilisticUNet, self).__init__(config)
 
+    def _unzero_tensor(self, tensor):
+        zeros = torch.zeros(tensor.shape).to(self.device)
+        tensor[torch.isclose(tensor, zeros)] += 1e-10
+        return tensor
+
 class ImageProbabilisticUNet(ProbabilisticUNet):
 
     def _build_network_head(self, outs):
@@ -97,12 +102,12 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
         ### We now do a log-exp modification to be able to subtract a constant
         # Transpose to [batch, subnet, ...]
         sub_losses = sub_losses.transpose(1, 0)
+
         # Add a small factor to avoid log(0)
-        log_sub_losses = torch.log(sub_losses + 1e-10)
-        if torch.isnan(sub_losses).any():
-            # Oops we encountered a NaN loss
-            print('First loss', sub_losses)
+        sub_losses = self._unzero_tensor(sub_losses)
+        log_sub_losses = torch.log(sub_losses)
         sub_losses = log_sub_losses
+
         # To enable broadcasting
         mask = mask.unsqueeze(1)
         sub_losses = mask * sub_losses
@@ -114,13 +119,12 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
         max_sub_losses = max_sub_losses.unsqueeze(-1)
         sub_losses -= max_sub_losses
         sub_losses = torch.exp(sub_losses)
+
         # Sum the sub losses up with their respective probabilities
         loss = torch.sum(probabilities * sub_losses, dim=1)
-        # Undo that we subtracted a constant
-        final_loss = torch.log(loss + 1e-10)
-        if torch.isnan(final_loss).any():
-            # Oops we encountered a NaN loss
-            print('Second loss', loss)
+        # To avoid log(0)
+        loss = self._unzero_tensor(loss)
+        final_loss = torch.log(loss)
         # Sum over all decisions (i.e. subnets)
         summed_loss = torch.sum(final_loss) + torch.sum(max_sub_losses)
         return -summed_loss
@@ -272,9 +276,10 @@ class PixelProbabilisticUNet(ProbabilisticUNet):
         # Sum over subnet dimension
         loss = torch.sum(loss, 1)
         loss = mask * loss
-        loss = torch.log(loss + 1e-10)
+        loss = self._unzero_tensor(loss)
+        final_loss = torch.log(loss)
         # Mean instead of sum is only a factor
-        return -torch.mean(loss)
+        return -torch.mean(final_loss)
 
     def training_predict(self, sample):
         raw, ground_truth, mask = sample['raw'], sample['gt'], sample['mask']
