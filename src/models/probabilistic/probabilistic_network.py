@@ -28,9 +28,11 @@ class ProbabilisticUNet(AbstractUNet):
         super(ProbabilisticUNet, self).__init__(config)
 
     def _unzero_tensor(self, tensor):
-        zeros = torch.zeros(tensor.shape).to(self.device)
-        tensor[torch.isclose(tensor, zeros)] += 1e-10
-        return tensor
+        to_add = torch.zeros(tensor.shape).to(self.device)
+        to_add[torch.isclose(tensor, to_add)] = 1e-10
+        # To avoid Pytorch error tensor has been modified in-place
+        to_add = to_add.detach()
+        return tensor + to_add
 
 class ImageProbabilisticUNet(ProbabilisticUNet):
 
