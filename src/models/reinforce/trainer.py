@@ -31,7 +31,7 @@ class Trainer(AbstractTrainer):
         bins = np.zeros((self.dataset.num_datasets, self.config['NUM_SUBNETS']))
         # Indices of which subnetwork was used
         indices = result['actions']
-        for i, dataset_index in enumerate(sample['dataset_index']):
+        for i, dataset_index in enumerate(sample['dataset']):
             bins[dataset_index][indices[i]] += 1
         bins /= np.sum(bins, axis=1)
         for i, bin_ in enumerate(bins):
