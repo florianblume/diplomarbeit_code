@@ -334,7 +334,7 @@ class AbstractTrainer():
                                 self.config['MAX_VALIDATION_SIZE']))
                     break
             result = self.net.training_predict(sample)
-            self._post_process_eval_sample(sample, result)
+            self._store_parts_of_eval_sample(sample, result)
             # Needed by subclasses that's why we store val_loss on self
             self.val_loss = self.net.loss_function(result)
             self.val_losses.append(self.val_loss.item())
@@ -345,6 +345,8 @@ class AbstractTrainer():
                 output = result['output'].cpu().detach().numpy()
                 psnr = util.PSNR(ground_truth, output, self.dataset.range())
                 psnrs.append(psnr)
+
+        self._post_process_eval_samples()
 
         if self._train_mode == 'clean':
             mean_psnr = np.mean(psnrs)
@@ -379,7 +381,19 @@ class AbstractTrainer():
 
         self.scheduler.step(self.avg_val_loss)
 
-    def _post_process_eval_sample(self, sample, result):
+    def _store_parts_of_eval_sample(self, sample, result):
+        """This method can be used by subclasses to store important parts of
+        the evaluation samples and results so that it can be used in the 
+        _post_process_eval_samples method. This class can't store all samples
+        due to memory constraints but doesn't know what parts are important
+        and need to be store so the subclasses have to take care of it.
+        
+        Arguments:
+            sample {dict} -- the sample that was used for evlauation
+            result {dict} -- the result of running the network on the sample
+        """
+
+    def _post_process_eval_samples(self):
         """This method can be implemented by subclasses to perform some post
         processing on the evaluation samples, like logging additional metrics.
         

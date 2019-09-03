@@ -1,7 +1,7 @@
 DATA_BASE_DIR: "data/processed/"
 
-DATA_TRAIN_RAW_DIRS: ["fish/cropped/raw/train", "simsim/all/raw/train", "simsim/all/raw/train", "simsim/all/raw/train"]
-DATA_TRAIN_GT_DIRS: ["fish/cropped/gt/train", "simsim/all/gt/train", "simsim/all/gt/train", "simsim/all/gt/train"]
+DATA_TRAIN_RAW_DIRS: ["fish/cropped/raw/train", "simsim/all_3_times/raw/train"]
+DATA_TRAIN_GT_DIRS: ["fish/cropped/gt/train", "simsim/all_3_times/gt/train"]
 
 DATA_PRED_RAW_DIRS: ["fish/cropped/raw/test", "simsim/all/raw/test", "simsim/all/raw/test", "simsim/all/raw/test"]
 DATA_PRED_GT_DIRS: ["fish/cropped/gt/test", "simsim/all/gt/test", "simsim/all/gt/test", "simsim/all/gt/test"]

@@ -9,6 +9,8 @@ class Trainer(AbstractTrainer):
         self.train_loss = 0.0
         self.train_losses = []
         self.val_loss = 0.0
+        self.samples = []
+        self.results = []
         # Network expects key EPSILON
         config['EPSILON'] = config['EPSILON_START']
         super(Trainer, self).__init__(config, config_path)
@@ -29,18 +31,30 @@ class Trainer(AbstractTrainer):
         self.config['STD'] = self.dataset.std
         return QUNet(self.config)
 
-    def _post_process_eval_sample(self, sample, result):
+    def _store_parts_of_eval_sample(self, sample, result):
+        self.samples.extend(sample['dataset'].cpu().detach().numpy())
+        self.results.extend(result['indices'].cpu().detach().numpy())
+
+    def _post_process_eval_samples(self):
         bins = np.zeros((self.dataset.num_datasets, self.config['NUM_SUBNETS']))
-        # Indices of which subnetwork was used
-        indices = result['indices']
-        for i, dataset_index in enumerate(sample['dataset']):
-            bins[dataset_index][indices[i]] += 1
-        bins /= np.sum(bins, axis=1)
+
+        for i, dataset_index in enumerate(self.samples):
+            # Indices of which subnetwork was used
+            subnetwork_index = self.results[i]
+            bins[dataset_index][subnetwork_index] += 1
+
+        summed_bins = np.expand_dims(np.sum(bins, axis=1), -1)
+        bins = np.divide(bins, summed_bins, out=bins, where=summed_bins != 0)
+
+        # Only log for present datasets
         for i, bin_ in enumerate(bins):
-            for subnet_percentage in bin_:
-                self.writer.add_scalar('q_learning.dataset_{}.subnetwork_{}'
-                                       .format(i, subnet_percentage),
+            for j, subnet_percentage in enumerate(bin_):
+                self.writer.add_scalar('eval.q_learning.dataset_{}.subnetwork_{}'
+                                       .format(i, j),
                                        subnet_percentage, self.current_epoch)
+        # Need to reset for next eval run
+        self.samples = []
+        self.results = []
 
     def _write_custom_tensorboard_data_for_example(self,
                                                    example_result,

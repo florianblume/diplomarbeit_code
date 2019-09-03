@@ -164,6 +164,16 @@ def expand_simsim_dataset(base_dir):
     os.makedirs(out_dir_all_gt_train)
     os.makedirs(out_dir_all_gt_test)
 
+    # And store as triple
+    out_dir_all_3_times_raw_train = os.path.join(out_dir, 'all_3_times/raw/train')
+    out_dir_all_3_times_raw_test = os.path.join(out_dir, 'all_3_times/raw/test')
+    out_dir_all_3_times_gt_train = os.path.join(out_dir, 'all_3_times/gt/train')
+    out_dir_all_3_times_gt_test = os.path.join(out_dir, 'all_3_times/gt/test')
+    os.makedirs(out_dir_all_3_times_raw_train)
+    os.makedirs(out_dir_all_3_times_raw_test)
+    os.makedirs(out_dir_all_3_times_gt_train)
+    os.makedirs(out_dir_all_3_times_gt_test)
+
     for i, part_dir in enumerate(part_dirs):
         out_dir_raw_train = os.path.join(out_dir, part_dir, 'raw/train')
         out_dir_raw_test = os.path.join(out_dir, part_dir, 'raw/test')
@@ -190,6 +200,7 @@ def expand_simsim_dataset(base_dir):
             # data is actually only float 32
             tif.imsave(os.path.join(out_dir_raw_train, filename), raw.astype(np.float32))
             tif.imsave(os.path.join(out_dir_raw_test, filename), test_raw_part[j].astype(np.float32))
+
             # To store all together
             pretty_index = str(j).zfill(len(str(abs(train_raw_part.shape[0]))))
             filename = '{}_{}_{}_{}_{}.tif'.format('simsim',
@@ -199,6 +210,19 @@ def expand_simsim_dataset(base_dir):
                                                    pretty_index)
             tif.imsave(os.path.join(out_dir_all_raw_train, filename), raw.astype(np.float32))
             tif.imsave(os.path.join(out_dir_all_raw_test, filename), test_raw_part[j].astype(np.float32))
+
+            for k in range(3):
+                # To store three copies of all
+                pretty_index = str(j).zfill(len(str(abs(train_raw_part.shape[0]))))
+                filename = '{}_{}_{}_{}_{}_{}.tif'.format('simsim',
+                                                          (k + 1),
+                                                          'part',
+                                                          (i + 1),
+                                                          'raw',
+                                                          pretty_index)
+                tif.imsave(os.path.join(out_dir_all_3_times_raw_train, filename), raw.astype(np.float32))
+                tif.imsave(os.path.join(out_dir_all_3_times_raw_test, filename), test_raw_part[j].astype(np.float32))
+
         for j, gt in enumerate(train_gt_part):
             pretty_index = str(j).zfill(len(str(abs(train_gt_part.shape[0]))))
             filename = '{}_{}_{}.tif'.format('simsim',
@@ -215,6 +239,17 @@ def expand_simsim_dataset(base_dir):
                                                    pretty_index)
             tif.imsave(os.path.join(out_dir_all_gt_train, filename), gt.astype(np.float32))
             tif.imsave(os.path.join(out_dir_all_gt_test, filename), test_gt_part[j].astype(np.float32))
+
+            for k in range(3):
+                pretty_index = str(j).zfill(len(str(abs(train_raw_part.shape[0]))))
+                filename = '{}+{}_{}_{}_{}_{}.tif'.format('simsim',
+                                                          (k + 1),
+                                                          'part',
+                                                          (i + 1),
+                                                          'raw',
+                                                          pretty_index)
+                tif.imsave(os.path.join(out_dir_all_3_times_gt_train, filename), gt.astype(np.float32))
+                tif.imsave(os.path.join(out_dir_all_3_times_gt_test, filename), test_gt_part[j].astype(np.float32))
 
 def zero_mean(data):
     return data - np.mean(data)

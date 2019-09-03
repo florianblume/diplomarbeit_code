@@ -8,6 +8,8 @@ from models.probabilistic import PixelProbabilisticUNet
 class Trainer(AbstractTrainer):
 
     def _load_network(self):
+        self.samples = []
+        self.results = []
         self.config['IS_INTEGRATED'] = True
         self.config['MEAN'] = self.dataset.mean
         self.config['STD'] = self.dataset.std
@@ -15,6 +17,34 @@ class Trainer(AbstractTrainer):
         if self.weight_mode == 'image':
             return ImageProbabilisticUNet(self.config)
         return PixelProbabilisticUNet(self.config)
+
+    def _store_parts_of_eval_sample(self, sample, result):
+        if self.weight_mode == 'image':
+            self.samples.extend(sample['dataset'].cpu().detach().numpy())
+            self.results.extend(result['probabilities'].cpu().detach().numpy())
+
+    def _post_process_eval_samples(self):
+        if self.weight_mode == 'image':
+            avg_probabilities = {}
+
+            for i, dataset in enumerate(self.samples):
+                for j in range(self.config['NUM_SUBNETS']):
+                    if dataset not in avg_probabilities:
+                        avg_probabilities[dataset] = {}
+                    if j not in avg_probabilities[dataset]:
+                        avg_probabilities[dataset][j] = []
+                    avg_probabilities[dataset][j].append(self.results[i][j])
+
+            for dataset_key in avg_probabilities:
+                dataset = avg_probabilities[dataset_key]
+                for subnetwork_key in dataset:
+                    subnetwork_probabilities = dataset[subnetwork_key]
+                    self.writer.add_scalar('eval.probabilities.dataset_{}.subnetwork_{}'
+                                        .format(dataset_key, subnetwork_key),
+                                        np.mean(subnetwork_probabilities), self.current_epoch)
+            # Need to reset for next eval run
+            self.samples = []
+            self.results = []
 
     def _write_custom_tensorboard_data_for_example(self, example_result,
                                                    example_index):

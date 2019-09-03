@@ -1,16 +1,15 @@
-DATA_BASE_DIR: "data/processed/"
+DATA_BASE_DIR: "data/processed/simsim/part1"
 
-DATA_TRAIN_RAW_DIRS: ["fish/cropped/raw/train", "simsim/all_3_times/raw/train"]
-DATA_TRAIN_GT_DIRS: ["fish/cropped/gt/train", "simsim/all_3_times/gt/train"]
+DATA_TRAIN_RAW_DIRS: ["raw/train"]
+DATA_TRAIN_GT_DIRS: ["gt/train"]
 
-DATA_PRED_RAW_DIRS: ["fish/cropped/raw/test"]
-DATA_PRED_GT_DIRS: ["fish/cropped/gt/test"]
+DATA_PRED_RAW_DIRS: ["raw/test"]
+DATA_PRED_GT_DIRS: ["gt/test"]
 
-# Even is not actually used any more, we need to replicate the dataset manually
-DISTRIBUTION_MODE: "even"
+DISTRIBUTION_MODE: "proportional"
 
 MODEL: "baseline"
-DEPTH: 3
+DEPTH: 2
 NUM_CLASSES: 1
 IN_CHANNELS: 1
 START_FILTS: 64
@@ -22,7 +21,7 @@ EPOCHS: 1000
 STEPS_PER_EPOCH: 5
 VALIDATION_RATIO: 0.1
 BATCH_SIZE: 24
-AUGMENT_DATA: True
+AUGMENT_DATA: False
 TRAIN_PATCH_SIZE: 128
 PRED_PATCH_SIZE: 128
 VIRTUAL_BATCH_SIZE: 20
