@@ -69,8 +69,6 @@ class ReinforceUNet(AbstractUNet):
 
     def loss_function(self, result):
         sub_outputs = result['sub_outputs']
-        actions = result['actions']
-        log_probs = result['log_probs']
         probs = result['probs']
         ground_truth = result['gt']
         mask = result['mask']
@@ -84,7 +82,7 @@ class ReinforceUNet(AbstractUNet):
         # shape[0] is batch size
         # Prevent 0 loss because the network chooses a subnetwork with 100% prob
         probs = probs.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
-        loss = sub_losses.detach() * torch.log(probs) * probs.detach() + sub_losses
+        loss = sub_losses.detach() * torch.log(probs) * probs.detach() + sub_losses * probs.detach()
         return loss.mean()
 
     def training_predict(self, sample):
