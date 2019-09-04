@@ -54,9 +54,10 @@ class SubUNet(AbstractUNet):
         #loss = torch.sum(masks * (c * exp)/torch.sum(masks)
         # Return the Gaussian
         if torch.isnan(c).any():
-            print(c)
+            print('c', c)
+            print('divisor', (torch.sqrt(2.0 * math.pi * (std**2))))
         if torch.isnan(exp).any():
-            print(exp)
+            print('exp', exp)
         return c * exp
 
     def forward(self, x):
