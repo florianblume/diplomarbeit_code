@@ -1,17 +1,16 @@
 import os
 import time
+import yaml
 import logging
 import datetime
+import subprocess
 import numpy as np
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 
-import tifffile as tif
-
 import util
-import constants
 
 from data import TrainingDataset
 from data import SequentialSampler
@@ -59,6 +58,7 @@ class AbstractTrainer():
         self.config = config
         self.config_path = config_path
         self._load_config_params()
+        self._log_config()
         self._construct_dataset()
         self.net = self._load_network()
         # Optimizer is needed to load network weights
@@ -109,6 +109,23 @@ class AbstractTrainer():
         self.patch_size = self.config['PRED_PATCH_SIZE']
         self.overlap = self.config['OVERLAP']
         self.write_tensorboard_data = self.config['WRITE_TENSORBOARD_DATA']
+
+    def _log_config(self):
+        log_dir = os.path.join(self.experiment_base_path, 'logs')
+        if not os.path.exists(log_dir):
+            os.mkdir(log_dir)
+        now = datetime.datetime.now()
+        log_file_name = 'config_{}_{}_{}-{}_{}_{}.log'.format(now.year,
+                                                              now.month,
+                                                              now.day,
+                                                              now.hour,
+                                                              now.minute,
+                                                              now.second)
+        with open(os.path.join(log_dir, log_file_name), 'w') as log_file:
+            config = self.config
+            commit = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'])
+            config['COMMIT'] = commit
+            yaml.dump(config, log_file, default_flow_style=False)
 
     def _construct_dataset(self):
         print('Constructing dataset...')
