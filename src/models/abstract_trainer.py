@@ -124,7 +124,7 @@ class AbstractTrainer():
         with open(os.path.join(log_dir, log_file_name), 'w') as log_file:
             config = self.config
             commit = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'])
-            config['COMMIT'] = commit
+            config['COMMIT'] = commit.decode('ascii').strip()
             yaml.dump(config, log_file, default_flow_style=False)
 
     def _construct_dataset(self):
@@ -145,6 +145,7 @@ class AbstractTrainer():
                                 ToTensor()]
 
         is_with_simsim = False
+        is_with_cropped = False
         data_base_dir = self.config['DATA_BASE_DIR']
         data_train_raw_dirs = []
         for data_train_raw_dir in self.config['DATA_TRAIN_RAW_DIRS']:
@@ -152,6 +153,8 @@ class AbstractTrainer():
             data_train_raw_dirs.append(data_train_raw_dir)
             if 'simsim' in data_train_raw_dir:
                 is_with_simsim = True
+            if 'cropped' in data_train_raw_dir:
+                is_with_cropped = True
         if 'DATA_TRAIN_GT_DIRS' in self.config:
             self._train_mode = 'clean'
             data_train_gt_dirs = []
@@ -165,6 +168,7 @@ class AbstractTrainer():
         # If SimSim is part of the data we can only crop with 128 offset as the
         # images are 256 x 256
         offset = 78 if is_with_simsim else 206
+        offset = 0 if is_with_cropped else offset
         # 128 x 128 fits in memory for the batch sizes we use
         eval_transforms = [Crop(offset, offset, 100, 100), ToTensor()]
 
