@@ -79,11 +79,9 @@ class ReinforceUNet(AbstractUNet):
                                   for i, subnet in enumerate(self.subnets)])
         # Put batch first
         sub_losses = sub_losses.transpose(1, 0)
-        # shape[0] is batch size
-        # Prevent 0 loss because the network chooses a subnetwork with 100% prob
-        probs = probs.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
-        loss = sub_losses.detach() * torch.log(probs) * probs.detach() + sub_losses * probs.detach()
-        return loss.mean()
+        loss = sub_losses * probs
+        loss = loss.mean()
+        return loss
 
     def training_predict(self, sample):
         raw, ground_truth, mask = sample['raw'], sample['gt'], sample['mask']

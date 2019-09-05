@@ -63,7 +63,7 @@ class AbstractTrainer():
         self.net = self._load_network()
         # Optimizer is needed to load network weights
         # that's why we create it first
-        self.optimizer = optim.Adam(self.net.parameters(), lr=0.0001)
+        self.optimizer = optim.Adam(self.net.parameters(), lr=self.config['LEARNING_RATE'])
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer, 'min', patience=10, factor=0.5, verbose=True)
         self._load_state_from_checkpoint()
