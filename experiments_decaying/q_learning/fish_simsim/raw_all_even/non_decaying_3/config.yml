@@ -1,0 +1,45 @@
+DATA_BASE_DIR: "data/processed/"
+
+DATA_TRAIN_RAW_DIRS: ["fish/cropped/raw/train", "simsim/all_3_times/raw/train"]
+DATA_TRAIN_GT_DIRS: ["fish/cropped/gt/train", "simsim/all_3_times/gt/train"]
+
+DATA_PRED_RAW_DIRS: ["fish/cropped/raw/test"]
+DATA_PRED_GT_DIRS: ["fish/cropped/gt/test"]
+
+# Simsim is float32, i.e. do not convert it
+# Even is not actually used any more, we need to replicate the dataset manually
+DISTRIBUTION_MODE: "even"
+
+MODEL: "q_learning"
+EPSILON_START: 0.1
+EPSILON_MIN: 0.0
+EPSILON_DECAY: 1.0
+MAIN_NET_DEPTH: 3
+NUM_SUBNETS: 2
+SUB_NET_DEPTH: 3
+NUM_CLASSES: 1
+IN_CHANNELS: 1
+START_FILTS: 64
+UP_MODE: "transpose"
+MERGE_MODE: "add"
+DEVICE: "cuda:0"
+
+EPOCHS: 1000
+STEPS_PER_EPOCH: 5
+VALIDATION_RATIO: 0.1
+BATCH_SIZE: 24
+AUGMENT_DATA: True
+TRAIN_PATCH_SIZE: 100
+PRED_PATCH_SIZE: 128
+VIRTUAL_BATCH_SIZE: 20
+OVERLAP: 48
+
+#TRAIN_NETWORK_PATH: "best.net"
+WRITE_TENSORBOARD_DATA: yes
+WRITE_EXAMPLE_IMAGE: yes
+
+PRED_NETWORK_PATH: "best.net"
+PRED_OUTPUT_PATH: "prediction"
+OUTPUT_IMAGE_FORMATS: ["tif"]
+WRITE_SUBNETWORK_IMAGES: yes
+WRITE_SUBNETWORK_WEIGHTS: yes
