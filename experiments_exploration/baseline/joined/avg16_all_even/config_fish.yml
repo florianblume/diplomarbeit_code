@@ -1,9 +1,9 @@
 EXTENDS_CONFIG: "config.yml"
 
-DATA_BASE_DIR: "data/processed/fish"
+DATA_BASE_DIR: "data/processed/"
 
-DATA_PRED_RAW_DIRS: ["avg16/test"]
-DATA_PRED_GT_DIRS: ["gt/test"]
+DATA_PRED_RAW_DIRS: ["fish/raw/test"]
+DATA_PRED_GT_DIRS: ["fish/gt/test"]
 
 PRED_NETWORK_PATH: "best.net"
 PRED_OUTPUT_PATH: "prediction_fish"
