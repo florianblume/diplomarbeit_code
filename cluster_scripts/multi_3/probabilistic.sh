@@ -8,7 +8,7 @@
 #SBATCH --mem 64G
 #SBATCH --mail-type=END,FAIL,TIME_LIMIT_90
 #SBATCH --mail-user=florian.blume@mailbox.tu-dresden.de
-#SBATCH -o logs/multi-3-probabilistic.log
+#SBATCH -o logs/multi-3-probabilistic-%A-%a.log
 #SBATCH -c 6
 #SBATCH --gres=gpu:1
 #SBATCH --partition=hpdlf
