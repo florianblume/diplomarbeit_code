@@ -1,0 +1,1 @@
+avg16,depth6,gauss30,gauss60,raw are in iterative

@@ -1,7 +1,6 @@
 #!/bin/sh
 #SBATCH --job-name=stuff-probabilistic-remainder
 #SBATCH -A p_biomedicalmodel
-#SBATCH --array=0-4
 #SBATCH -n 1
 #SBATCH -N 1
 #SBATCH --time 0-08:00:00
@@ -14,4 +13,4 @@
 #SBATCH --partition=hpdlf
 
 #python src/train_model.py experiments_stuff/probabilistic/two_subnets/fish_only/image_${SLURM_ARRAY_TASK_ID}/config.yml
-python src/train_model.py experiments_stuff/probabilistic/two_subnets/fish_only/pixel_${SLURM_ARRAY_TASK_ID}/config.yml
+python src/train_model.py experiments_stuff/probabilistic/two_subnets/fish_only/pixel_4/config.yml
