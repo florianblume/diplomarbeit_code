@@ -132,6 +132,9 @@ class AbstractTrainer():
         crop_width = self.config['TRAIN_PATCH_SIZE']
         crop_height = self.config['TRAIN_PATCH_SIZE']
 
+        assert crop_width > 0
+        assert crop_height > 0
+
         train_transforms = []
         if self.config['AUGMENT_DATA']:
             train_transforms = [RandomCrop(crop_width, crop_height),
@@ -144,17 +147,11 @@ class AbstractTrainer():
             train_transforms = [RandomCrop(crop_width, crop_height),
                                 ToTensor()]
 
-        is_with_simsim = False
-        is_with_cropped = False
         data_base_dir = self.config['DATA_BASE_DIR']
         data_train_raw_dirs = []
         for data_train_raw_dir in self.config['DATA_TRAIN_RAW_DIRS']:
             data_train_raw_dir = os.path.join(data_base_dir, data_train_raw_dir)
             data_train_raw_dirs.append(data_train_raw_dir)
-            if 'simsim' in data_train_raw_dir:
-                is_with_simsim = True
-            if 'cropped' in data_train_raw_dir:
-                is_with_cropped = True
         if 'DATA_TRAIN_GT_DIRS' in self.config:
             self._train_mode = 'clean'
             data_train_gt_dirs = []
@@ -165,12 +162,12 @@ class AbstractTrainer():
             data_train_gt_dirs = None
             self._train_mode = 'void'
 
-        # If SimSim is part of the data we can only crop with 128 offset as the
-        # images are 256 x 256
-        offset = 78 if is_with_simsim else 206
-        offset = 0 if is_with_cropped else offset
-        # 128 x 128 fits in memory for the batch sizes we use
-        eval_transforms = [Crop(offset, offset, 100, 100), ToTensor()]
+        min_shape = util.min_image_shape_of_datasets(data_train_raw_dirs)
+        assert min_shape[1] > crop_width
+        assert min_shape[0] > crop_height
+        offset_x = (min_shape[1] - crop_width) // 2
+        offset_y = (min_shape[0] - crop_height) // 2
+        eval_transforms = [Crop(offset_x, offset_y, crop_width, crop_height), ToTensor()]
 
         # We let the dataset automatically add a normalization term with the
         # mean and std computed of the data
@@ -293,6 +290,8 @@ class AbstractTrainer():
             if step % self.steps_per_epoch == self.steps_per_epoch - 1:
                 start = time.clock()
                 self.current_epoch = (step + 1) // self.steps_per_epoch
+                # Important to free CUDA memory
+                del sample
                 self._on_epoch_end()
                 logging.debug('Validation took {:.4f}s'
                               .format(time.clock() - start))
@@ -357,8 +356,8 @@ class AbstractTrainer():
             result = self.net.training_predict(sample)
             self._store_parts_of_eval_sample(sample, result)
             # Needed by subclasses that's why we store val_loss on self
-            self.val_loss = self.net.loss_function(result)
-            self.val_losses.append(self.val_loss.item())
+            self.val_loss = self.net.loss_function(result).item()
+            self.val_losses.append(self.val_loss)
             i += self.val_dataloader.batch_size
 
             if self._train_mode == 'clean':
@@ -366,6 +365,7 @@ class AbstractTrainer():
                 output = result['output'].cpu().detach().numpy()
                 psnr = util.PSNR(ground_truth, output, self.dataset.range())
                 psnrs.append(psnr)
+            del sample
 
         self._post_process_eval_samples()
 
@@ -375,7 +375,7 @@ class AbstractTrainer():
                 mean_psnr)
             self.writer.add_scalar('mean_psnr', mean_psnr, self.current_epoch + 1)
 
-        print("Validation loss: {}".format(self.val_loss.item()))
+        print("Validation loss: {}".format(self.val_loss))
         logging.debug('Validation on {} images took {:.4f}s.'
                         .format(i, time.clock() - val_start_time))
 
