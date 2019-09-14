@@ -423,3 +423,61 @@ def psnr_of_dataset(raw_path, gt_path, range_=None):
 
     gt_images = np.repeat(gt_images, factor, axis=0)
     print('Avg. PSNR', PSNR(gt_images, raw_images, range_))
+
+def compute_RF_numerical(net, img_shape):
+    '''
+    @param net: Pytorch network
+    @param img_np: numpy array to use as input to the networks, it must be full of ones and with the correct
+    shape.
+    '''
+    from torch.autograd import Variable
+    import torch.functional as nn
+    def weights_init(m):
+        classname = m.__class__.__name__
+        if classname.find('Conv') != -1:
+            if hasattr(m, 'weight'):
+                m.weight.data.fill_(1)
+                if m.bias is not None:
+                    m.bias.data.fill_(0)
+    net.apply(weights_init)
+    img_np = np.ones(img_shape)
+    img_ = Variable(torch.from_numpy(img_np).float(), requires_grad=True)
+    out_cnn = net(img_)
+    out_shape = out_cnn.size()
+    ndims = len(out_cnn.size())
+    grad = torch.zeros(out_cnn.size())
+    l_tmp = []
+    for i in range(ndims):
+        if i==0 or i ==1:#batch or channel
+            l_tmp.append(0)
+        else:
+            l_tmp.append(out_shape[i]/2)
+    l_tmp = (int(l) for l in l_tmp)
+    grad[tuple(l_tmp)]=1
+    out_cnn.backward(gradient=grad)
+    grad_np = img_.grad[0,0].data.numpy()
+    idx_nonzeros = np.where(grad_np!=0)
+    RF = [np.max(idx)-np.min(idx)+1 for idx in idx_nonzeros]
+
+    return RF
+
+def min_image_shape_of_datasets(datasets):
+    import tifffile as tif
+    import glob
+
+    loaded_images = []
+
+    for dataset in datasets:
+        images = glob.glob(os.path.join(dataset, "*.tif"))
+        if images:
+            loaded_images.append(tif.imread(images[0]))
+
+    shape = None
+    # Each dataset has one training sample so we can use those to infer
+    # the minimum image size
+    for image in loaded_images:
+        if shape == None:
+            shape = list(image.shape[:2])
+        shape[0] = min(shape[0], image.shape[0])
+        shape[1] = min(shape[1], image.shape[1])
+    return shape
