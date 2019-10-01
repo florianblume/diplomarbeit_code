@@ -1,5 +1,6 @@
 import math
 import torch
+import datetime
 import numpy as np
 
 import util
@@ -19,6 +20,11 @@ class SubUNet(AbstractUNet):
     def _build_network_head(self, outs):
         # Mean and std as for each input channel
         self.conv_final = conv1x1(outs, self.in_channels * 2)
+
+    def params_for_key(self, key):
+        if key != "LEARNING_RATE":
+            raise ValueError("Unrecognized learning rate.")
+        return self.parameters()
 
     def loss_function(self, result):
         if self.is_integrated:
@@ -56,8 +62,10 @@ class SubUNet(AbstractUNet):
         if torch.isnan(c).any():
             print('c', c)
             print('divisor', (torch.sqrt(2.0 * math.pi * (std**2))))
+            np.save('std_' + datetime.datetime.now(), std.cpu().detach().numpy())
         if torch.isnan(exp).any():
             print('exp', exp)
+            print('exp divisor', (2.0 * (std**2)))
         return c * exp
 
     def forward(self, x):

@@ -108,6 +108,8 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
         # Add a small factor to avoid log(0)
         sub_losses = self._unzero_tensor(sub_losses)
         log_sub_losses = torch.log(sub_losses)
+        if torch.isnan(log_sub_losses).any():
+            print('log_sub_losses nan', sub_losses)
         sub_losses = log_sub_losses
 
         # To enable broadcasting
@@ -121,6 +123,8 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
         max_sub_losses = max_sub_losses.unsqueeze(-1)
         sub_losses -= max_sub_losses
         sub_losses = torch.exp(sub_losses)
+        if torch.isnan(sub_losses).any():
+            print('sub_losses nan after exp', sub_losses)
 
         # Sum the sub losses up with their respective probabilities
         loss = torch.sum(probabilities * sub_losses, dim=1)

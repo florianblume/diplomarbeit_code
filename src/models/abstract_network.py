@@ -222,6 +222,27 @@ class AbstractUNet(nn.Module):
             init.xavier_normal_(m.weight)
             init.constant_(m.bias, 0)
 
+    def reset_params(self):
+        for _, m in enumerate(self.modules()):
+            self.weight_init(m)
+
+    def params_for_key(self, key):
+        """This function returns the parameters of this network corresponding to
+        the specified key. This is to enable different learning rates throughout
+        the network. For example, a network could return its subnetwork's parameters
+        for the key "LEARNING_RATE_SUBNETWORK_1". The appropriate learning rate
+        gets automatically set by the trainer.
+
+        Can be overwritten by subclasses to return custom parameters for custom
+        param keys.
+        
+        Arguments:
+            key {string} -- the key of the parameters
+        """
+        if key != "LEARNING_RATE":
+            raise ValueError("Unrecognized learning rate.")
+        return self.parameters()
+
     def loss_function(self, result):
         """The loss function of this network.
         
@@ -231,10 +252,6 @@ class AbstractUNet(nn.Module):
                              one the implementation of the subclass.
         """
         raise NotImplementedError
-
-    def reset_params(self):
-        for _, m in enumerate(self.modules()):
-            self.weight_init(m)
 
     def forward(self, x):
         """Runs this network on the given input x.

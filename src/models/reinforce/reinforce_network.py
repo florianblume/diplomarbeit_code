@@ -25,6 +25,14 @@ class ReinforceUNet(AbstractUNet):
             self.subnets.append(SubUNet(self.subnet_config))
         self.final_conv = conv1x1(outs, self.num_subnets)
 
+    def params_for_key(self, key):
+        if key == "LEARNING_RATE_MAIN_NET":
+            # Filter out params of subnets
+            return [param for name, param in self.named_parameters() if 'subnets' not in name]
+        if key == "LEARNING_RATE_SUB_NETS":
+            return [param for name, param in self.named_parameters() if 'subnets' in name]
+        raise ValueError("Unrecognized learning rate.")
+
     def forward(self, x):
         encoder_outs = []
 
@@ -125,6 +133,9 @@ class ReinforceUNet(AbstractUNet):
     def _post_process_predict(self, result):
         image = result['image']
         reinforce = np.mean(result['reinforce'], axis=0)[0]
+        # This is the max trick for softmax, we do not change probabilities
+        # by subtracting the max
+        reinforce -= np.max(reinforce)
         action_probs = np.exp(reinforce) / np.sum(np.exp(reinforce), axis=0)
         action = np.random.choice(self.num_subnets, 1, p=action_probs)
         output = self.subnets[action[0]](image.to(self.device))

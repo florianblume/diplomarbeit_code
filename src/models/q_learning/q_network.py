@@ -23,9 +23,16 @@ class QUNet(AbstractUNet):
         self.subnets = nn.ModuleList()
         for _ in range(self.num_subnets):
             # We create each requested subnet
-            # TODO Make main and subnets individually configurable
             self.subnets.append(SubUNet(self.subnet_config))
         self.final_conv = conv1x1(outs, self.num_subnets)
+
+    def params_for_key(self, key):
+        if key == "LEARNING_RATE_MAIN_NET":
+            # Filter out params of subnets
+            return [param for name, param in self.named_parameters() if 'subnets' not in name]
+        if key == "LEARNING_RATE_SUB_NETS":
+            return [param for name, param in self.named_parameters() if 'subnets' in name]
+        raise ValueError("Unrecognized learning rate.")
 
     def forward(self, x):
         encoder_outs = []
