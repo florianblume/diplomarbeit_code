@@ -221,18 +221,28 @@ class AbstractTrainer():
                                               self.config.get(
                                                   'TRAIN_NETWORK_PATH', None))
             checkpoint = torch.load(train_network_path)
-            self.net.load_state_dict(checkpoint['model_state_dict'])
-            self.optimizer.load_state_dict(checkpoint['optimizier_state_dict'])
-            self.current_epoch = checkpoint['epoch']
-            self.current_step = checkpoint['current_step']
-            self.mean = checkpoint['mean']
-            self.std = checkpoint['std']
-            self.running_loss = checkpoint['running_loss']
-            self.train_loss = checkpoint['train_loss']
-            self.train_hist = checkpoint['train_hist']
-            self.val_loss = checkpoint['val_loss']
-            self.val_hist = checkpoint['val_hist']
-            self._load_custom_data_from_checkpoint(checkpoint)
+            # The model parameter should be there, the rest below does not
+            # necessarily have to
+            self.net.load_state_dict(checkpoint['model_state_dict'], strict=False)
+
+            # If there is no epoch there also shouldn't be any of the other keys.
+            # The reason is that the user either wants to load a whole checkpoint
+            # i.e. continue training where they have left off (maybe crash or so)
+            # or load e.g. the subnetworks of the network which have been
+            # previously trained.
+            if 'epoch' in checkpoint:
+                # If epoch is in the dict we just assume that the rest is, too.
+                self.optimizer.load_state_dict(checkpoint['optimizier_state_dict'])
+                self.current_epoch = checkpoint['epoch']
+                self.current_step = checkpoint['current_step']
+                self.mean = checkpoint['mean']
+                self.std = checkpoint['std']
+                self.running_loss = checkpoint['running_loss']
+                self.train_loss = checkpoint['train_loss']
+                self.train_hist = checkpoint['train_hist']
+                self.val_loss = checkpoint['val_loss']
+                self.val_hist = checkpoint['val_hist']
+                self._load_custom_data_from_checkpoint(checkpoint)
 
     def _custom_checkpoint_data(self):
         # Can be overwritten by subclasses

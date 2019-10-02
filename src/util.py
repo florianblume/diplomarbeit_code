@@ -1,4 +1,5 @@
 import os
+import glob
 import numpy as np
 import torch
 
@@ -42,20 +43,6 @@ def tile_tensor(a, dim, n_tile, device='cuda:0'):
     order_index = order_index.to(device)
     return torch.index_select(a, dim, order_index)
 
-def get_stratified_coords2D(box_size, shape):
-    coords = []
-    box_count_y = int(np.ceil(shape[0] / box_size))
-    box_count_x = int(np.ceil(shape[1] / box_size))
-    for i in range(box_count_y):
-        for j in range(box_count_x):
-            y = np.random.randint(0, box_size)
-            x = np.random.randint(0, box_size)
-            y = int(i * box_size + y)
-            x = int(j * box_size + x)
-            if (y < shape[0] and x < shape[1]):
-                coords.append((y, x))
-    return coords
-
 def seed_numpy(seed):
     print('Seeding numpy with {}.'.format(seed))
     np.random.seed(seed)
@@ -98,88 +85,6 @@ def shuffle(inA, seed=None):
     indices = np.arange(inA.shape[0])
     np.random.shuffle(indices)
     return inA[indices]
-
-def random_crop_fri(data, width, height, box_size, dataClean=None, counter=None,
-                    augment_data=True):
-
-    if counter is None or counter >= data.shape[0]:
-        counter = 0
-        if dataClean is not None:
-            data, dataClean = joint_shuffle(data, dataClean)
-        else:
-            np.random.shuffle(data)
-    index = counter
-    counter += 1
-
-    img = data[index]
-    if dataClean is not None:
-        imgClean = dataClean[index]
-    else:
-        imgClean = None
-    imgOut, imgOutC, mask = random_crop(
-        img, width, height, box_size, imgClean=imgClean, augment_data=augment_data)
-    return imgOut, imgOutC, mask, counter
-
-
-def random_crop(img, width, height, box_size, imgClean=None,
-                hotPixels=64, augment_data=True):
-    assert img.shape[0] >= height
-    assert img.shape[1] >= width
-
-    n2v = False
-    if imgClean is None:
-        imgClean = img.copy()
-        n2v = True
-
-    x = np.random.randint(0, img.shape[1] - width)
-    y = np.random.randint(0, img.shape[0] - height)
-
-    imgOut = img[y:y+height, x:x+width].copy()
-    imgOutC = imgClean[y:y+height, x:x+width].copy()
-    mask = np.zeros(imgOut.shape)
-    maxA = imgOut.shape[1]-1
-    maxB = imgOut.shape[0]-1
-
-    if n2v:
-        # Noise2Void training, i.e. no clean targets
-        hotPixels = get_stratified_coords2D(box_size, imgOut.shape)
-
-        for p in hotPixels:
-            a, b = p[1], p[0]
-
-            roiMinA = max(a-2, 0)
-            roiMaxA = min(a+3, maxA)
-            roiMinB = max(b-2, 0)
-            roiMaxB = min(b+3, maxB)
-            roi = imgOut[roiMinB:roiMaxB, roiMinA:roiMaxA]
-            #print(roi.shape,b ,a)
-            #print(b-2,b+3 ,a-2,a+3)
-            a_ = 2
-            b_ = 2
-            while a_ == 2 and b_ == 2:
-                a_ = np.random.randint(0, roi.shape[1])
-                b_ = np.random.randint(0, roi.shape[0])
-
-            repl = roi[b_, a_]
-            imgOut[b, a] = repl
-            mask[b, a] = 1.0
-    else:
-        # Noise2Clean
-        mask[:] = 1.0
-
-    rot = 0
-    if augment_data:
-        rot = np.random.randint(0, 4)
-    imgOut = np.array(np.rot90(imgOut, rot))
-    imgOutC = np.array(np.rot90(imgOutC, rot))
-    mask = np.array(np.rot90(mask, rot))
-    if augment_data and np.random.choice((True, False)):
-        imgOut = np.array(np.flip(imgOut))
-        imgOutC = np.array(np.flip(imgOutC))
-        mask = np.array(np.flip(mask))
-
-    return imgOut, imgOutC, mask
-
 
 def PSNR(gt, pred, range_=255.0):
     mse = MSE(gt, pred)
@@ -252,60 +157,6 @@ def add_gauss_noise_to_images(images, mean, std):
     return np.array(result)
 
 
-def merge_two_npy_datasets(dataset_path_1, dataset_path_2, output_path):
-    """Merges two datasets stored as numpy arrays. Only matching entries are
-    matched. E.g. if at both paths there is a ./gt/gt_0.npy then this will be
-    concatenated.
-
-    Arguments:
-        dataset_path_1 {str} -- path to first dataset
-        dataset_path_2 {str} -- path to second dataset
-        output_path {str} -- where to store the results, same folder structure
-                             as the original datasets
-    """
-    import glob
-
-    wd = os.getcwd()
-    os.chdir(dataset_path_1)
-    files_1 = glob.glob('**/*.npy', recursive=True)
-    os.chdir(wd)
-    os.chdir(dataset_path_1)
-    files_2 = glob.glob('**/*.npy', recursive=True)
-    os.chdir(wd)
-    differences = set(files_1).symmetric_difference(set(files_2))
-    if len(differences) > 0:
-        print('There were unmatched entries in the dataset. Only processing similarities.')
-        print(differences)
-    files_1 = set(files_1)
-    files_1 -= differences
-    files_1 = list(files_1)
-    for _file in files_1:
-        #print('Processing {}.'.format(_file))
-        first = np.load(os.path.join(dataset_path_1, _file))
-        second = np.load(os.path.join(dataset_path_2, _file))
-        result = np.concatenate([first, second], axis=0)
-        output_file = os.path.join(output_path, _file)
-        output_dir = os.path.dirname(output_file)
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-        np.save(os.path.join(output_path, _file), result)
-
-
-def compute_variance_in_existing_experiments():
-    import glob
-    import json
-    results_files = glob.glob('**/results.json', recursive=True)
-    for results_file in results_files:
-        with open(results_file, 'r') as loaded_results_file:
-            results = json.load(loaded_results_file)
-            psnr_values = []
-            for key in results:
-                if 'average' not in key:
-                    psnr_values.append(results[key])
-            psnr_std = np.std(psnr_values) / float(np.sqrt(len(psnr_values)))
-            results['std'] = psnr_std
-
-
 def load_trainer_or_predictor(type_, config, config_path):
     """Loads the trainer or predictor class specified in the config.
     
@@ -328,21 +179,86 @@ def load_trainer_or_predictor(type_, config, config_path):
     result = type_class(config, os.path.dirname(config_path))
     return result
 
+def fuse_trained_networks_as_subnetworks(trained_networks: list, output_path: str):
+    """This method fuses the subnetworks specified in the list and stores the
+    result at the output_path.
+    
+    Arguments:
+        trained_networks {list} -- the list of paths to the trained networks
+        output_path {str} -- the path where to store the result
+    """
+    model_state_dict = {}
+    for i, trained_network in enumerate(trained_networks):
+        assert os.path.exists(trained_network)
+        existing_state_dict = torch.load(trained_network)['model_state_dict']
+        existing_state_dict = {f'subnets.{i}.{k}': v for k, v in existing_state_dict.items()}
+        model_state_dict.update(existing_state_dict)
+    checkpoint = {'model_state_dict': model_state_dict}
+    torch.save(checkpoint, output_path)
+
+def fuse_all_trained_networks_at_path_as_subnetworks(base_paths: list,
+                                                     network_identifier: str,
+                                                     output_path: str):
+    """This function fuses all networks found at the specified path. This is
+    useful for example if multiple runs were conducted. The individual paths can
+    be of the form 'experiments/network/fish_' and this function will find the
+    runs 'experiments/network/fish_0', 'experiments/network/fish_1' and so on.
+    The networks will be fused along axis 0, i.e. the first network of the first
+    provided path will be fused with the first network of the second path and
+    the first network of the third path, etc.
+    
+    Arguments:
+        base_paths {list}        -- the list of paths to the stem of the folders
+                                    containing the networks
+        network_identifier {str} -- e.g. best.net
+        output_path {str}        -- where to store the results, new folders will
+                                    be created
+    """
+    import natsort
+
+    found_subnetworks = {}
+    count = -1
+    for base_path in base_paths:
+        paths = glob.glob(base_path + '**', recursive=True)
+        paths = natsort.natsorted(paths)
+        networks = [os.path.join(path, network_identifier) for path in paths]
+        found_subnetworks[base_path] = networks
+        if count == -1:
+            count = len(networks)
+        else:
+            assert count == len(networks), 'The number of found subnetworks needs to match.'
+    for i in range(count):
+        paths_to_fuse = []
+        for path in found_subnetworks:
+            paths_to_fuse.append(found_subnetworks[path][i])
+        temp_output_path = output_path + f'_{i}'
+        if not os.path.exists(temp_output_path):
+            os.makedirs(temp_output_path)
+        fuse_trained_networks_as_subnetworks(paths_to_fuse, os.path.join(temp_output_path, 'fused.net'))
+
 def pretty_string_with_percentages(weights, percentages):
     # Print it in a nice format like 15.6754 (3.1203%)
     string = ', '.join('{:.4f} ({:.4f}%)'.format(*t) for
                         t in zip(weights, percentages))
-    formatted_weights = string.format(weights, percentages)
-    return formatted_weights
+    return string
 
 def pretty_string(weights):
-    # Print it in a nice format like 15.6754 (3.1203%)
+    # Print it in a nice format like 15.6754
     string = ', '.join('{:.4f}'.format(w) for w in weights)
-    formatted_weights = string.format(weights)
-    return formatted_weights
+    return string
+
+def pretty_string_percentage(weights):
+    # Print it in a nice format like 15.6754%
+    string = ', '.join('{:.4f}%'.format(w) for w in weights)
+    return string
+
+def pretty_string_percentage_with_std(weights, stds):
+    # Print it in a nice format like 15.6754% (0.0134)
+    string = ', '.join('{:.4f}% ({:.4f})'.format(*t) for
+                        t in zip(weights, stds))
+    return string
 
 def _psnrs_of_multiple_runs(path):
-    import glob
     import json
 
     psnrs = {}
@@ -400,7 +316,6 @@ def compute_mean_std_multiple_runs_fuse_internal(path, fuse1, fuse2):
     print('{} (mean) - {} (std) - {} (std err)'.format(np.mean(fused_psnrs), np.std(fused_psnrs), np.std(fused_psnrs)/np.sqrt(fused_psnrs.shape[0])))
 
 def psnr_of_dataset(raw_path, gt_path, range_=None):
-    import glob
     import tifffile as tif
     raw_image_files = glob.glob(raw_path + '/*.tif')
     gt_image_files = glob.glob(gt_path + '/*.tif')
@@ -463,7 +378,6 @@ def compute_RF_numerical(net, img_shape):
 
 def min_image_shape_of_datasets(datasets):
     import tifffile as tif
-    import glob
 
     loaded_images = []
 
@@ -481,3 +395,69 @@ def min_image_shape_of_datasets(datasets):
         shape[0] = min(shape[0], image.shape[0])
         shape[1] = min(shape[1], image.shape[1])
     return shape
+
+def compute_subnetwork_utilization(path, identifier, key, with_std=False, std_key=None):
+    """This function searches for all 'identifier' folders within the given path
+    and loads the results files contained in folders which it finds by looking
+    for configs conforming to the name scheme 'config_' as those indicate
+    inference configs for individual datasets.
+    
+    Arguments:
+        path {str}       -- the path to look for 'identifier' folders within
+        identifier {str} -- the identifier, e.g. q_learning or reinforce
+        key {str}        -- the key used in the results file to store average weights
+    """
+    import json
+    import natsort
+
+    assert with_std == (std_key != None), '\"std_key\" must not be none if \"with_std\" is set to True.'
+
+    assert os.path.exists(path)
+    sub_folders = glob.glob(os.path.join(path, '**', identifier), recursive=True)
+    sub_folders = natsort.natsorted(sub_folders)
+
+    print('')
+    print('Found {} folder(s) by identifier \"{}\" in folder {}'
+                    .format(len(sub_folders), identifier, path))
+
+    configs = {}
+    count = 0
+    for sub_folder in sub_folders:
+        _configs = glob.glob(os.path.join(sub_folder, '**', 'config_*.yml'), recursive=True)
+        _configs = natsort.natsorted(_configs)
+        for config in _configs:
+            dirname = os.path.dirname(config)
+            if dirname not in configs:
+                configs[dirname] = []
+            configs[dirname].append(config)
+        count += len(_configs)
+    
+    print('Found {} configs for individual inference.'.format(count))
+    print('')
+
+    for folder in configs:
+        _configs = configs[folder]
+        output_paths = []
+        print(folder + ':')
+        for config in _configs:
+            loaded_config = load_config(config)
+            output_path = os.path.join(os.path.dirname(config), loaded_config['PRED_OUTPUT_PATH'])
+            output_paths.append(output_path)
+        for output_path in output_paths:
+            results_path = os.path.join(output_path, 'results.json')
+            if not os.path.exists(results_path):
+                print('No \"results.json\" found at path {}.'.format(output_path))
+                continue
+            with open(results_path, 'r') as result_file:
+                results = json.load(result_file)
+            assert key in results, 'The specified key {} is not contained in the results file.'.format(key)
+            average_weights = results[key]
+            average_weights = np.array(average_weights)
+            average_weights /= np.sum(average_weights)
+            if with_std:
+                assert std_key in results, 'The specified std key {} is not contained in the results file.'.format(std_key)
+                stds = results[std_key]
+                print('\t' + os.path.basename(output_path) + ':\t' + pretty_string_percentage_with_std(average_weights, stds))
+            else:
+                print('\t' + os.path.basename(output_path) + ':\t' + pretty_string_percentage(average_weights))
+        print('')

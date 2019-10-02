@@ -1,1 +1,0 @@
-Why different patch sizes for training and prediction?
