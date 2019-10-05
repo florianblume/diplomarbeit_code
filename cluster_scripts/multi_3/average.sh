@@ -4,7 +4,7 @@
 #SBATCH --array=0-4
 #SBATCH -n 1
 #SBATCH -N 1
-#SBATCH --time 0-08:00:00
+#SBATCH --time 0-10:00:00
 #SBATCH --mem 64G
 #SBATCH --mail-type=END,FAIL,TIME_LIMIT_90
 #SBATCH --mail-user=florian.blume@mailbox.tu-dresden.de
