@@ -26,6 +26,8 @@ class AbstractWeightNetwork(AbstractUNet):
 
         self.subnet_config = copy.deepcopy(config)
         self.subnet_config['DEPTH'] = config['SUB_NET_DEPTH']
+        if config.get('FREEZE_SUBNETS', False):
+            self.subnet_config['FREEZE_WEIGHTS'] = True
 
         config['DEPTH'] = config['MAIN_NET_DEPTH']
         super(AbstractWeightNetwork, self).__init__(config)
@@ -34,7 +36,6 @@ class AbstractWeightNetwork(AbstractUNet):
         self.subnets = nn.ModuleList()
         for _ in range(self.num_subnets):
             # We create each requested subnet
-            # TODO Make main and subnets individually configurable
             self.subnets.append(SubUNet(self.subnet_config))
         self.final_conv = conv1x1(outs, self.num_subnets)
 
@@ -199,11 +200,13 @@ class ImageWeightUNet(AbstractWeightNetwork):
 
     def _post_process_predict(self, result):
         # [subnet, batch, C, H, W]
-        weights = result['stored_weights']
+        weights = np.array(result['stored_weights'])
         sub_images = result['sub_images']
+
+        print('Patch weight std ', np.std(weights, axis=0))
         
         # [subnet] = weights for the whole image for each subnet
-        weights = np.mean(np.array(weights), axis=0)
+        weights = np.mean(weights, axis=0)
         # NOTE: we do exp here since this normally happens in training but
         # we "undid" it above taking the log to be able to average the weights
         # across the patches.

@@ -23,6 +23,8 @@ class ProbabilisticUNet(AbstractUNet):
         self.subnet_config = copy.deepcopy(config)
         self.subnet_config['DEPTH'] = config['SUB_NET_DEPTH']
         self.subnet_config['IS_INTEGRATED'] = True
+        if config.get('FREEZE_SUBNETS', False):
+            self.subnet_config['FREEZE_WEIGHTS'] = True
 
         config['DEPTH'] = config['MAIN_NET_DEPTH']
         super(ProbabilisticUNet, self).__init__(config)
@@ -191,7 +193,8 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
 
     def _post_process_predict(self, result):
         # [batch, subnet]
-        probabilities = result['probabilities']
+        probabilities = np.array(result['probabilities'])
+        print('Patch weight std', np.std(probabilities, axis=0))
         mean = result['mean']
         std = result['std']
         # We do [0] because we only have one batch

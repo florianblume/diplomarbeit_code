@@ -204,6 +204,10 @@ class AbstractUNet(nn.Module):
         # Push network to respective device
         self.to(self.device)
 
+        if config.get('FREEZE_WEIGHTS', False):
+            for param in self.parameters():
+                param.requires_grad = False
+
     def _build_network_head(self, outs):
         raise NotImplementedError
 

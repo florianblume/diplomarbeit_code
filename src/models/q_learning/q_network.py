@@ -15,13 +15,15 @@ class QUNet(AbstractUNet):
         self.epsilon = config['EPSILON']
         self.subnet_config = copy.deepcopy(config)
         self.subnet_config['DEPTH'] = config['SUB_NET_DEPTH']
+        if config.get('FREEZE_SUBNETS', False):
+            self.subnet_config['FREEZE_WEIGHTS'] = True
 
         config['DEPTH'] = config['MAIN_NET_DEPTH']
         super(QUNet, self).__init__(config)
 
     def _build_network_head(self, outs):
         self.subnets = nn.ModuleList()
-        for _ in range(self.num_subnets):
+        for i in range(self.num_subnets):
             # We create each requested subnet
             self.subnets.append(SubUNet(self.subnet_config))
         self.final_conv = conv1x1(outs, self.num_subnets)
@@ -130,7 +132,8 @@ class QUNet(AbstractUNet):
 
     def _post_process_predict(self, result):
         image = result['image']
-        q_values = result['q_values']
+        q_values = np.array(result['q_values'])
+        print('Patch weight std', np.std(q_values, axis=0))
         q_values = np.mean(q_values, axis=0)
         index = np.where(q_values == np.min(q_values))
         # Somehow np.where produces a tuple with an array inside

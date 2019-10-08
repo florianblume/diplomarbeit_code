@@ -15,6 +15,8 @@ class ReinforceUNet(AbstractUNet):
         self.sub_net_depth = config['SUB_NET_DEPTH']
         self.subnet_config = copy.deepcopy(config)
         self.subnet_config['DEPTH'] = config['SUB_NET_DEPTH']
+        if config.get('FREEZE_SUBNETS', False):
+            self.subnet_config['FREEZE_WEIGHTS'] = True
 
         config['DEPTH'] = config['MAIN_NET_DEPTH']
         super(ReinforceUNet, self).__init__(config)
@@ -132,7 +134,9 @@ class ReinforceUNet(AbstractUNet):
 
     def _post_process_predict(self, result):
         image = result['image']
-        reinforce = np.mean(result['reinforce'], axis=0)[0]
+        reinforce = np.array(result['reinforce'])
+        print('Patch weight std', np.std(reinforce, axis=0))
+        reinforce = np.mean(reinforce, axis=0)[0]
         # This is the max trick for softmax, we do not change probabilities
         # by subtracting the max
         reinforce -= np.max(reinforce)

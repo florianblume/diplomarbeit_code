@@ -461,3 +461,46 @@ def compute_subnetwork_utilization(path, identifier, key, with_std=False, std_ke
             else:
                 print('\t' + os.path.basename(output_path) + ':\t' + pretty_string_percentage(average_weights))
         print('')
+
+def find_psnr_extremes_in_comparison(joint, individual, output_path=None):
+    import json
+    import csv
+    with open(joint, 'r') as joint_file:
+        joint_data = json.load(joint_file)
+    with open(individual, 'r') as individual_file:
+        individual_data = json.load(individual_file)
+    psnrs = {}
+    for key in joint_data.keys():
+        if type(joint_data[key]) == dict:
+            if key in individual_data.keys():
+                psnrs[key] = individual_data[key]['psnr'] - joint_data[key]['psnr']
+    minimum = min(psnrs, key=psnrs.get)
+    maximum = max(psnrs, key=psnrs.get)
+    print('Minimum:', minimum, psnrs[minimum])
+    print('Maximum', maximum, psnrs[maximum])
+    if output_path is not None:
+        with open(output_path, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=',',
+                                    quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            for k,v in sorted(psnrs.items(), key=lambda p:p[1]):
+                print('\t', v,k)
+                writer.writerow([0, v])
+    else:
+        for k,v in sorted(psnrs.items(), key=lambda p:p[1]):
+                print('\t', v,k)
+    
+
+def find_psnr_extremes_in_one_training(path):
+    import json
+    psnrs = {}
+    with open(path, 'r') as results_file:
+        results_data = json.load(results_file)
+        average_psnr = results_data['psnr_average']
+        for key in results_data.keys():
+            if type(results_data[key]) == dict:
+                image = results_data[key]
+                psnrs[key] = average_psnr - results_data[key]['psnr']
+    minimum = min(psnrs, key=psnrs.get)
+    maximum = min(psnrs, key=psnrs.get)
+    print(minimum, psnrs[minimum])
+    print(maximum, psnrs[maximum])
