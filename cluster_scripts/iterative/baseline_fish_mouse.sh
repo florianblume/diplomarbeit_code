@@ -4,7 +4,7 @@
 #SBATCH -A p_biomedicalmodel
 #SBATCH -n 1
 #SBATCH -N 1
-#SBATCH --time 0-03:00:00
+#SBATCH --time 0-06:00:00
 #SBATCH --mem 64G
 #SBATCH --mail-type=END,FAIL,TIME_LIMIT_90
 #SBATCH --mail-user=florian.blume@mailbox.tu-dresden.de
@@ -14,3 +14,4 @@
 #SBATCH --partition=hpdlf
 
 python src/train_model.py experiments_it/baseline/joined/fish_mouse/avg16_gauss30_${SLURM_ARRAY_TASK_ID}/config.yml
+python src/train_model.py experiments_it/baseline/joined/fish_mouse/gauss60_gauss60_${SLURM_ARRAY_TASK_ID}/config.yml

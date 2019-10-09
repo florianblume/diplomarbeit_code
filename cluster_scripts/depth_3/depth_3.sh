@@ -3,7 +3,7 @@
 #SBATCH -A p_biomedicalmodel
 #SBATCH -n 1
 #SBATCH -N 1
-#SBATCH --time 0-24:00:00
+#SBATCH --time 0-46:00:00
 #SBATCH --mem 64G
 #SBATCH --mail-type=END,FAIL,TIME_LIMIT_90
 #SBATCH --mail-user=florian.blume@mailbox.tu-dresden.de
