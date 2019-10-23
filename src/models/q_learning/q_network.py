@@ -133,11 +133,13 @@ class QUNet(AbstractUNet):
     def _post_process_predict(self, result):
         image = result['image']
         q_values = np.array(result['q_values'])
-        print('Patch weight std', np.std(q_values, axis=0))
+        patch_std = np.std(q_values, axis=0)
+        print('Patch weight std', patch_std)
         q_values = np.mean(q_values, axis=0)
         index = np.where(q_values == np.min(q_values))
         # Somehow np.where produces a tuple with an array inside
         index = index[0][0]
         output = self.subnets[index].predict(image)
         return {'output'      : output['output'],
-                'q_values'    : q_values}
+                'q_values'    : q_values,
+                'patch_std'   : patch_std}

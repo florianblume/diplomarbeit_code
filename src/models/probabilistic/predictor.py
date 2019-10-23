@@ -92,7 +92,11 @@ class Predictor(AbstractPredictor):
         probabilities = raw_results['probabilities']
 
         if self.weight_mode == 'pixel':
+            probabilities_std = np.std(probabilities, axis=(1, 2))
             probabilities = np.mean(probabilities, axis=(1, 2))
+            processed_results['probabilities_std'] = probabilities_std.tolist()
+        else:
+            processed_results[image_name]['patch_std'] = raw_results['patch_std'].tolist()
         processed_results[image_name]['probabilities'] = probabilities.tolist()
         
         print("Probabilities of subnetworks: {}".format(util.pretty_string(probabilities)))

@@ -194,7 +194,8 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
     def _post_process_predict(self, result):
         # [batch, subnet]
         probabilities = np.array(result['probabilities'])
-        print('Patch weight std', np.std(probabilities, axis=0))
+        patch_std = np.std(probabilities, axis=0)
+        print('Patch weight std', patch_std)
         mean = result['mean']
         std = result['std']
         # We do [0] because we only have one batch
@@ -210,7 +211,8 @@ class ImageProbabilisticUNet(ProbabilisticUNet):
         return {'output'        : amalgamted_image,
                 'probabilities' : probabilities.squeeze(),
                 'mean'          : mean,
-                'std'           : std}
+                'std'           : std,
+                'patch_std'     : patch_std}
 
 class PixelProbabilisticUNet(ProbabilisticUNet):
 

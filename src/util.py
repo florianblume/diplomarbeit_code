@@ -500,7 +500,57 @@ def find_psnr_extremes_in_one_training(path):
             if type(results_data[key]) == dict:
                 image = results_data[key]
                 psnrs[key] = average_psnr - results_data[key]['psnr']
+                print(key, average_psnr, results_data[key]['psnr'])
     minimum = min(psnrs, key=psnrs.get)
-    maximum = min(psnrs, key=psnrs.get)
+    maximum = max(psnrs, key=psnrs.get)
     print(minimum, psnrs[minimum])
     print(maximum, psnrs[maximum])
+
+def store_runs_psnr_as_csv(path, dataset, output_file):
+    import csv
+    import json
+    with open(output_file, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile, delimiter=',',
+                                    quotechar='|', quoting=csv.QUOTE_MINIMAL)
+        for i in range(5):
+            if dataset == '':
+                prediction_dataset = 'prediction'
+            else:
+                prediction_dataset = 'prediction_' + dataset
+            results_path = os.path.join(path + '_' + str(i), prediction_dataset, 'results.json')
+            with open(results_path, 'r') as results_file:
+                results_data = json.load(results_file)
+                writer.writerow([0, results_data['psnr_average']])
+
+def average_inference_runtime_of_runs(base_path):
+    import json
+    runtimes = []
+    for i in range(5):
+        results_file = os.path.join(base_path + '_' + str(i), 'prediction', 'results.json')
+        with open(results_file, 'r') as results:
+            data = json.load(results)
+            runtimes.append(data['average_runtime'])
+    print(np.mean(runtimes))
+
+def percent_std_of_std_of_weights_of_runs(base_path, dataset):
+    import json
+    percentages = []
+    for i in range(5):
+        results_file = os.path.join(base_path + '_' + str(i), 'prediction_' + dataset, 'results.json')
+        with open(results_file, 'r') as results:
+            data = json.load(results)
+            for key in data:
+                if type(data[key]) == dict:
+                    image_data = data[key]
+                    weights = np.array(image_data['weights'])
+                    patch_std = np.array(image_data['patch_std'])
+                    print('patch_std', patch_std)
+                    print('weights', weights)
+                    percent = (patch_std / weights) * 100.0
+                    print('percent', percent)
+                    if i > len(percentages) - 1:
+                        percentages.append([])
+                    percentages[i].append(percent)
+    percentages = np.array(percentages)
+    average_percentages = np.mean(percentages, axis=0)
+    print(average_percentages)

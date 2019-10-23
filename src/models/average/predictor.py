@@ -80,14 +80,18 @@ class Predictor(AbstractPredictor):
                                                         weights_percentages)
             print("Weights of subnetworks: {}".format(formatted_weights))
             processed_results[image_name]['weights'] = weights.tolist()
+            processed_results[image_name]['patch_std'] = raw_results['patch_std'].tolist()
         else:
             # No use in printing the whole image-dimensioned weights
             # Instead we just print the mean of each weight "image"
             weights_mean = np.mean(weights, axis=(1, 2))
-            string = ', '.join('{:.4f}'.format(w) for w in weights_mean)
-            formatted_string = string.format(weights)
-            print("Mean of weights of subnetworks: {}".format(formatted_string))
+            weights_std = np.std(weights, axis=(1, 2))
+            formatted_mean_string = ', '.join('{:.4f}'.format(w) for w in weights_mean)
+            formatted_std_string = ', '.join('{:.4f}'.format(w) for w in weights_std)
+            print("Mean of weights of subnetworks: {}".format(formatted_mean_string))
+            print("Std of mean of weights of subnetworks: {}".format(formatted_std_string))
             processed_results[image_name]['mean_weights'] = weights_mean.tolist()
+            processed_results[image_name]['std_mean_weights'] = weights_std.tolist()
 
     def _post_process_final_results(self, processed_results):
         self.weights_list = np.array(self.weights_list)

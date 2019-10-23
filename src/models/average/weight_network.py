@@ -203,7 +203,8 @@ class ImageWeightUNet(AbstractWeightNetwork):
         weights = np.array(result['stored_weights'])
         sub_images = result['sub_images']
 
-        print('Patch weight std ', np.std(weights, axis=0))
+        patch_std = np.std(np.exp(weights), axis=0)
+        print('Patch weight std ', patch_std)
         
         # [subnet] = weights for the whole image for each subnet
         weights = np.mean(weights, axis=0)
@@ -238,7 +239,8 @@ class ImageWeightUNet(AbstractWeightNetwork):
 
         return {'output'     : output,
                 'weights'    : weights,
-                'sub_outputs': weighted_sub_outputs}
+                'sub_outputs': weighted_sub_outputs,
+                'patch_std'  : patch_std}
 
 class PixelWeightUNet(AbstractWeightNetwork):
     """This network computes weights for each subnetwork on a per-pixel basis.

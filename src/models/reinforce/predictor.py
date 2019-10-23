@@ -45,6 +45,7 @@ class Predictor(AbstractPredictor):
                                                     weights_percentages)
         print("Weights of subnetworks: {}".format(formatted_weights))
         processed_results[image_name]['weights'] = weights.tolist()
+        processed_results[image_name]['patch_std'] = raw_results['patch_std'].tolist()
 
     def _post_process_final_results(self, processed_results):
         weights_list = np.array(self.weights_list)

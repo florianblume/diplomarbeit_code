@@ -135,7 +135,8 @@ class ReinforceUNet(AbstractUNet):
     def _post_process_predict(self, result):
         image = result['image']
         reinforce = np.array(result['reinforce'])
-        print('Patch weight std', np.std(reinforce, axis=0))
+        patch_std = np.std(reinforce, axis=0)
+        print('Patch weight std', patch_std)
         reinforce = np.mean(reinforce, axis=0)[0]
         # This is the max trick for softmax, we do not change probabilities
         # by subtracting the max
@@ -147,4 +148,5 @@ class ReinforceUNet(AbstractUNet):
         # We only have one batch and want channels as last dim
         output = output[0].transpose((1, 2, 0))
         return {'output'       : output,
-                'action_probs' : action_probs}
+                'action_probs' : action_probs,
+                'patch_std'    : patch_std}
