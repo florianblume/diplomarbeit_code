@@ -11,7 +11,7 @@
 #SBATCH -o logs/probabilistic-it-subnetwork-%A-%a.log
 #SBATCH -c 6
 #SBATCH --gres=gpu:1
-#SBATCH --partition=hpdlf
+#SBATCH --partition=ml
 
 python src/train_model.py experiments_it/probabilistic/subnetwork/fish/avg16_${SLURM_ARRAY_TASK_ID}/config.yml
 python src/train_model.py experiments_it/probabilistic/subnetwork/fish/raw_${SLURM_ARRAY_TASK_ID}/config.yml
