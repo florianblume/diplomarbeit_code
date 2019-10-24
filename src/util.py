@@ -21,6 +21,14 @@ def normal_dense(x, m_=0.0, std_=None):
     return tmp
 
 def img_to_tensor(img):
+    """Converts the given image (numpy array) to a torch tensor.
+    
+    Arguments:
+        img {np.array} -- the image
+    
+    Returns:
+        torch.tensor -- the image converted to a tensor
+    """
     import torchvision
     if len(img.shape) == 2:
         img.shape = img.shape + (1,)
@@ -34,6 +42,20 @@ def img_to_tensor(img):
     return imgOut
 
 def tile_tensor(a, dim, n_tile, device='cuda:0'):
+    """Tiles the given torch tensor a along the specified dimension dim n_tile
+    times.
+    
+    Arguments:
+        a {np.array} -- the tensor to tile
+        dim {int} -- the dimension to tile the tensor along
+        n_tile {int} -- the amount of tiles
+    
+    Keyword Arguments:
+        device {str} -- the device to move the tensor to (default: {'cuda:0'})
+    
+    Returns:
+        torch.tensor -- the tiled tensor
+    """
     init_dim = a.size(dim)
     repeat_idx = [1] * a.dim()
     repeat_idx[dim] = n_tile
@@ -44,6 +66,12 @@ def tile_tensor(a, dim, n_tile, device='cuda:0'):
     return torch.index_select(a, dim, order_index)
 
 def seed_numpy(seed):
+    """Helper function to seed numpy. This way this can be turned on or of
+    globally and it is clear where numpy is seeded.
+    
+    Arguments:
+        seed {int} -- the seed
+    """
     print('Seeding numpy with {}.'.format(seed))
     np.random.seed(seed)
 
@@ -87,15 +115,46 @@ def shuffle(inA, seed=None):
     return inA[indices]
 
 def PSNR(gt, pred, range_=255.0):
+    """Computes the PSNR for the given gt and pred image with the given range.
+    
+    Arguments:
+        gt {np.array} -- the ground-truth image
+        pred {np.array} -- the predicted image
+    
+    Keyword Arguments:
+        range_ {float} -- the range of the data (default: {255.0})
+    
+    Returns:
+        float -- the PSNR
+    """
     mse = MSE(gt, pred)
     return 20 * np.log10((range_)/np.sqrt(mse))
 
 
 def MSE(gt, pred):
+    """Returns the mean squeared error between gt and pred.
+    
+    Arguments:
+        gt {np.array} -- the ground-truth image
+        pred {np.array} -- the predicted image
+    
+    Returns:
+        float -- the mean squared error
+    """
     return np.mean((gt - pred)**2)
 
 
 def average_PSNR_of_stored_numpy_array(path_to_array, path_to_gt_array):
+    """Computes the average PSNR of all images in the specified numpy arrays.
+    The arrays are loaded from the given paths.
+    
+    Arguments:
+        path_to_array {str} -- path to the raw array
+        path_to_gt_array {str} -- path to the ground-truth array
+    
+    Returns:
+        float -- the average PSNR
+    """
     data = np.load(path_to_array)
     gt = np.load(path_to_gt_array)
     img_factor = int(data.shape[0]/gt.shape[0])
@@ -108,15 +167,44 @@ def average_PSNR_of_stored_numpy_array(path_to_array, path_to_gt_array):
 
 
 def normalize(img, mean, std):
+    """Normalizes the given images with the specified mean and standard deviation.
+    
+    Arguments:
+        img {np.array} -- the images to normalize
+        mean {float} -- the mean to use for normalization
+        std {float} -- the standard deviation to use for normalization
+    
+    Returns:
+        np.array -- the normalized images
+    """
     zero_mean = img - mean
     return zero_mean/std
 
 
 def denormalize(x, mean, std):
+    """Denormalizes the given images with the specified mean and standard deviation.
+    
+    Arguments:
+        x {np.array} -- the images to normalize
+        mean {float} -- the mean to use for normalization
+        std {float} -- the standard deviation to use for normalization
+    
+    Returns:
+        np.array -- the denormalized images
+    """
     return x*std + mean
 
 
 def load_config(config_path):
+    """Loads the config at the specified path resolving all dependencies. A
+    config can depend on other configs.
+    
+    Arguments:
+        config_path {str} -- the path to the config
+    
+    Returns:
+        dict -- the loaded config
+    """
     import yaml
     with open(config_path, 'r') as config_file:
         config = yaml.safe_load(config_file)
@@ -136,19 +224,18 @@ def load_config(config_path):
     raise "Config could not be loaded."
 
 
-def add_shot_noise_to_images(images, defect_ratio):
-    result = []
-    for image in images:
-        out = np.copy(image)
-        num_salt = np.ceil(image.size * defect_ratio)
-        coords = [np.random.randint(0, i - 1, int(num_salt))
-                  for i in image.shape]
-        out[coords] = np.random.randint(255, size=len(coords[0]))
-        result.append(out)
-    return np.array(result)
-
-
 def add_gauss_noise_to_images(images, mean, std):
+    """Adds Gaussian noise to the images with the specified mean and std. It is
+    assumed that the images contain values from 0 to 255.
+    
+    Arguments:
+        images {np.array} -- the images to add noise to
+        mean {float} -- the mean of the noise
+        std {float} -- the standard deviation of the noise
+    
+    Returns:
+        np.array -- the noisy images
+    """
     result = []
     for image in images:
         noisy = image + np.random.normal(mean, std, image.shape)
@@ -279,6 +366,13 @@ def _psnrs_of_multiple_runs(path):
     return psnrs
 
 def compute_mean_std_multiple_runs(path):
+    """Computes the average PSNR over multiple runs. To this end, the user needs
+    to specify the base path and this function automatically appends an incremented
+    number from 0 to 5. E.g. /experiments/exp_1/...
+    
+    Arguments:
+        path {str} -- the base path
+    """
     psnrs = _psnrs_of_multiple_runs(path)
     for key in psnrs:
         psnr_values = psnrs[key]
@@ -286,6 +380,14 @@ def compute_mean_std_multiple_runs(path):
                     .format(key, np.mean(psnr_values), np.std(psnr_values), np.std(psnr_values) / np.sqrt(len(psnr_values))))
 
 def compute_mean_std_multiple_runs_fuse_external(path1, path2):
+    """Computes the average PSNR and mean and std between two repeated runs.
+    E.g. five runs on fish and five runs on mouse data. The paths automatically
+    get an increment appended, e.g. /experiments/exp/fish_1 and /experiments/exp/mouse_1
+    
+    Arguments:
+        path1 {str} -- the first base path
+        path2 {str} -- the second base path
+    """
     psnrs1 = _psnrs_of_multiple_runs(path1)
     psnrs2 = _psnrs_of_multiple_runs(path2)
 
@@ -310,12 +412,31 @@ def _psnrs_for_fuse(path, fuse):
     return psnrs
 
 def compute_mean_std_multiple_runs_fuse_internal(path, fuse1, fuse2):
+    """Computes the average PSNR and mean and std for multiple runs in the same
+    folder. If the base path is the same for both and they only append e.g.
+    a fish and a mouse folder, this function can be used to print the resulting
+    average PSNR.
+    
+    Arguments:
+        path {str} -- the base path
+        fuse1 {str} -- the first specific subpath
+        fuse2 {str} -- the second specific subpath
+    """
     psnrs1 = _psnrs_for_fuse(path, fuse1)
     psnrs2 = _psnrs_for_fuse(path, fuse2)
     fused_psnrs = (np.array(psnrs1) + np.array(psnrs2)) / 2
     print('{} (mean) - {} (std) - {} (std err)'.format(np.mean(fused_psnrs), np.std(fused_psnrs), np.std(fused_psnrs)/np.sqrt(fused_psnrs.shape[0])))
 
 def psnr_of_dataset(raw_path, gt_path, range_=None):
+    """Computes the PSNR of a whole dataset.
+    
+    Arguments:
+        raw_path {str} -- the path to the raw data
+        gt_path {str} -- the path to the ground-truth data
+    
+    Keyword Arguments:
+        range_ {float} -- the range of the data of the dataset (default: {None})
+    """
     import tifffile as tif
     raw_image_files = glob.glob(raw_path + '/*.tif')
     gt_image_files = glob.glob(gt_path + '/*.tif')
@@ -340,11 +461,16 @@ def psnr_of_dataset(raw_path, gt_path, range_=None):
     print('Avg. PSNR', PSNR(gt_images, raw_images, range_))
 
 def compute_RF_numerical(net, img_shape):
-    '''
-    @param net: Pytorch network
-    @param img_np: numpy array to use as input to the networks, it must be full of ones and with the correct
-    shape.
-    '''
+    """Computes the receptive field-size of the provided network using the
+    given image shape
+    
+    Arguments:
+        net {torch.module} -- an executable torch module
+        img_shape {tuple} -- the input image shape
+    
+    Returns:
+        int -- the receptive field-size of the network
+    """
     from torch.autograd import Variable
     import torch.functional as nn
     def weights_init(m):
@@ -377,6 +503,14 @@ def compute_RF_numerical(net, img_shape):
     return RF
 
 def min_image_shape_of_datasets(datasets):
+    """Compute the minimum image size occuring in the specified datasets.
+    
+    Arguments:
+        datasets {list of str} -- the paths to the datasets
+    
+    Returns:
+        tuple of int -- the minimum occuring image shape
+    """
     import tifffile as tif
 
     loaded_images = []
@@ -463,6 +597,17 @@ def compute_subnetwork_utilization(path, identifier, key, with_std=False, std_ke
         print('')
 
 def find_psnr_extremes_in_comparison(joint, individual, output_path=None):
+    """This function outputs the extremes in PSNR difference between a jointly
+    and individually traind network. Of course, this function can be used for
+    any  combination of networks but this was the original intention.
+    
+    Arguments:
+        joint {str} -- path to results.json of the joint network
+        individual {str} -- path to results.json of the second network
+    
+    Keyword Arguments:
+        output_path {str} -- output csv file to results at (default: {None})
+    """
     import json
     import csv
     with open(joint, 'r') as joint_file:
@@ -491,6 +636,11 @@ def find_psnr_extremes_in_comparison(joint, individual, output_path=None):
     
 
 def find_psnr_extremes_in_one_training(path):
+    """Prints the PSNR extremes of a single training run.
+    
+    Arguments:
+        path {str} -- the path to the results.json where to take the PSNRs from
+    """
     import json
     psnrs = {}
     with open(path, 'r') as results_file:
@@ -507,6 +657,14 @@ def find_psnr_extremes_in_one_training(path):
     print(maximum, psnrs[maximum])
 
 def store_runs_psnr_as_csv(path, dataset, output_file):
+    """Stores the PSNR values of multiple runs in the specified output file.
+    
+    Arguments:
+        path {str} -- the base path
+        dataset {str} -- the name of the dataset to look for, make empty string
+                         if you want it to look for 'prediction' only
+        output_file {str} -- the location of the output file
+    """
     import csv
     import json
     with open(output_file, 'w', newline='') as csvfile:
@@ -523,6 +681,11 @@ def store_runs_psnr_as_csv(path, dataset, output_file):
                 writer.writerow([0, results_data['psnr_average']])
 
 def average_inference_runtime_of_runs(base_path):
+    """Prints the average inference runtime of multiple runs.
+    
+    Arguments:
+        base_path {str} -- the base path of the experiments
+    """
     import json
     runtimes = []
     for i in range(5):
@@ -531,26 +694,3 @@ def average_inference_runtime_of_runs(base_path):
             data = json.load(results)
             runtimes.append(data['average_runtime'])
     print(np.mean(runtimes))
-
-def percent_std_of_std_of_weights_of_runs(base_path, dataset):
-    import json
-    percentages = []
-    for i in range(5):
-        results_file = os.path.join(base_path + '_' + str(i), 'prediction_' + dataset, 'results.json')
-        with open(results_file, 'r') as results:
-            data = json.load(results)
-            for key in data:
-                if type(data[key]) == dict:
-                    image_data = data[key]
-                    weights = np.array(image_data['weights'])
-                    patch_std = np.array(image_data['patch_std'])
-                    print('patch_std', patch_std)
-                    print('weights', weights)
-                    percent = (patch_std / weights) * 100.0
-                    print('percent', percent)
-                    if i > len(percentages) - 1:
-                        percentages.append([])
-                    percentages[i].append(percent)
-    percentages = np.array(percentages)
-    average_percentages = np.mean(percentages, axis=0)
-    print(average_percentages)
